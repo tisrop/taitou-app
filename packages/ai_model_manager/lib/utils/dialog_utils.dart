@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -26,10 +25,26 @@ final ColorFilter _saturationFilter = () {
   const sg = (1 - s) * 0.7152;
   const sb = (1 - s) * 0.0722;
   return ColorFilter.matrix(<double>[
-    sr + s, sg,     sb,     0, 0,
-    sr,     sg + s, sb,     0, 0,
-    sr,     sg,     sb + s, 0, 0,
-    0,      0,      0,      1, 0,
+    sr + s,
+    sg,
+    sb,
+    0,
+    0,
+    sr,
+    sg + s,
+    sb,
+    0,
+    0,
+    sr,
+    sg,
+    sb + s,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
   ]);
 }();
 
@@ -52,16 +67,11 @@ ImageFilter _createBlurFilter(double sigma) {
   );
 }
 
-/// 构建带动画模糊效果的遮罩层
-///
-/// macOS/Windows acrylic 模式下 NavigationRail 背景透明，
-/// BackdropFilter 对其模糊效果异常，因此跳过该区域并补 surface 底色。
+/// 构建带动画模糊效果的遮罩层。
 Widget _buildAnimatedBlurBarrier({
   required Widget barrier,
   required Animation<double> animation,
 }) {
-  final hasAcrylicRail = Platform.isMacOS || Platform.isWindows;
-
   return AnimatedBuilder(
     animation: animation,
     builder: (context, child) {
@@ -70,34 +80,6 @@ Widget _buildAnimatedBlurBarrier({
 
       final sigma = (_blurSigma * t).clamp(0.01, _blurSigma);
       final filter = _createBlurFilter(sigma);
-
-      // acrylic 模式下 NavigationRail 背景透明，需跳过并补底
-      final showRail =
-          hasAcrylicRail && MediaQuery.sizeOf(context).width > 600;
-      if (showRail) {
-        const railWidth = 72.0;
-        return Stack(
-          children: [
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: railWidth,
-              child: ColoredBox(
-                color: Theme.of(context).colorScheme.surfaceDim,
-              ),
-            ),
-            Positioned.fill(
-              left: railWidth,
-              child: BackdropFilter(
-                filter: filter,
-                child: const SizedBox.expand(),
-              ),
-            ),
-            child!,
-          ],
-        );
-      }
 
       return BackdropFilter(filter: filter, child: child);
     },
@@ -134,8 +116,7 @@ Future<T?> showAppDialog<T>({
           (enableBlur
               ? _blurBarrierColor(Theme.of(context).brightness)
               : Colors.black54),
-      barrierLabel:
-          barrierLabel ??
+      barrierLabel: barrierLabel ??
           MaterialLocalizations.of(context).modalBarrierDismissLabel,
       transitionDuration: const Duration(milliseconds: 150),
       transitionBuilder: _buildMaterialDialogTransitions,
@@ -193,8 +174,7 @@ Future<T?> showAppBottomSheet<T>({
         to: navigator.context,
       ),
       isScrollControlled: isScrollControlled,
-      barrierLabel:
-          barrierLabel ??
+      barrierLabel: barrierLabel ??
           MaterialLocalizations.of(context).modalBarrierDismissLabel,
       modalBarrierColor: barrierColor ??
           (enableBlur

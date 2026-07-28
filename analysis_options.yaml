@@ -1,8 +1,1 @@
 include: package:flutter_lints/flutter.yaml
-
-analyzer:
-  exclude:
-    # 独立 Flutter Web 工程，不参与根 workspace；在自身目录单独解析依赖和分析。
-    - devtools_extension/**
-    # 上游插件示例不是主应用或 workspace 的一部分，且不参与发布前检查。
-    - packages/flutter_inappwebview_linux/example/**

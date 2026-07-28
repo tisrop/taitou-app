@@ -48,8 +48,10 @@ class DownloadNotifier extends StateNotifier<List<DownloadItem>> {
     int? contentLength,
   }) async {
     // 快速解析初始文件名（不等待网络），立即反馈用户
-    final initialFileName =
-        DownloadService.resolveFileName(url, suggestedFilename: suggestedFilename);
+    final initialFileName = DownloadService.resolveFileName(
+      url,
+      suggestedFilename: suggestedFilename,
+    );
 
     // 获取下载目录，处理重名
     final dir = await _getDownloadDir();
@@ -77,8 +79,9 @@ class DownloadNotifier extends StateNotifier<List<DownloadItem>> {
 
     // 没有建议文件名时，通过 HEAD 请求获取更准确的文件名（作为下载 loading 的一部分）
     if (suggestedFilename == null || suggestedFilename.isEmpty) {
-      final headerName =
-          await DownloadService.instance.fetchFileNameFromHeader(url);
+      final headerName = await DownloadService.instance.fetchFileNameFromHeader(
+        url,
+      );
       if (headerName != null && headerName.isNotEmpty) {
         final betterPath = _uniquePath(dir.path, headerName);
         final betterActualName = betterPath.split('/').last;
@@ -103,13 +106,14 @@ class DownloadNotifier extends StateNotifier<List<DownloadItem>> {
         onProgress: (received, total) {
           final progress = total > 0 ? received / total : -1.0;
           toastHandle.updateProgress(progress);
-          _updateItem(id,
-              progress: total > 0 ? received / total : 0.0,
-              fileSize: total > 0 ? total : null);
+          _updateItem(
+            id,
+            progress: total > 0 ? received / total : 0.0,
+            fileSize: total > 0 ? total : null,
+          );
         },
       );
-      _updateItem(id,
-          status: DownloadItemStatus.completed, progress: 1.0);
+      _updateItem(id, status: DownloadItemStatus.completed, progress: 1.0);
       toastHandle.dismiss();
       // 显示完成 Toast，带"查看"按钮跳转下载列表
       ToastService.show(
@@ -188,21 +192,24 @@ class DownloadNotifier extends StateNotifier<List<DownloadItem>> {
     _save();
   }
 
-  void _updateItem(String id,
-      {String? fileName,
-      String? savePath,
-      DownloadItemStatus? status,
-      double? progress,
-      int? fileSize}) {
+  void _updateItem(
+    String id, {
+    String? fileName,
+    String? savePath,
+    DownloadItemStatus? status,
+    double? progress,
+    int? fileSize,
+  }) {
     state = [
       for (final item in state)
         if (item.id == id)
           item.copyWith(
-              fileName: fileName,
-              savePath: savePath,
-              status: status,
-              progress: progress,
-              fileSize: fileSize)
+            fileName: fileName,
+            savePath: savePath,
+            status: status,
+            progress: progress,
+            fileSize: fileSize,
+          )
         else
           item,
     ];
@@ -233,8 +240,7 @@ class DownloadNotifier extends StateNotifier<List<DownloadItem>> {
   }
 
   /// 获取下载目录
-  /// Android → 公共 Downloads，macOS/Linux/Windows → ~/Downloads
-  /// iOS → 应用 Documents（沙盒限制，但通过 Files app 可见）
+  /// 返回 Android 公共 Downloads 目录。
   Future<Directory> _getDownloadDir() async {
     // 优先使用系统下载目录（Android 公共 Downloads / 桌面 ~/Downloads）
     final downloadsDir = await getDownloadsDirectory();
@@ -251,6 +257,6 @@ class DownloadNotifier extends StateNotifier<List<DownloadItem>> {
 
 final downloadProvider =
     StateNotifierProvider<DownloadNotifier, List<DownloadItem>>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return DownloadNotifier(prefs);
-});
+      final prefs = ref.watch(sharedPreferencesProvider);
+      return DownloadNotifier(prefs);
+    });

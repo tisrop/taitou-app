@@ -21,7 +21,7 @@ Future<void> main(List<String> args) async {
       executable: Platform.resolvedExecutable,
       arguments: const ['tool/project_prep.dart', 'app'],
     );
-    await _runNativePrepIfNeeded(command, args);
+    await _prepareAndroidNativeIfNeeded(command, args);
   } else if (command != null && _commandsRequiringTestPrep.contains(command)) {
     await runOrExit(
       title: '执行测试预处理',
@@ -36,34 +36,30 @@ Future<void> main(List<String> args) async {
   );
 }
 
-Future<void> _runNativePrepIfNeeded(String command, List<String> args) async {
-  final target = await _detectNativeTarget(command, args);
-  if (target == null) {
+Future<void> _prepareAndroidNativeIfNeeded(
+  String command,
+  List<String> args,
+) async {
+  final targetPlatform = await _detectAndroidTargetPlatform(command, args);
+  if (targetPlatform == null && command != 'build') {
     return;
   }
 
-  final buildMode = _detectBuildMode(command, args);
   final nativeArgs = <String>[
     'tool/project_tasks.dart',
     'native:prepare',
-    target.platform,
-    buildMode,
+    'android',
+    _detectBuildMode(command, args),
   ];
-  if (target.platform == 'android') {
-    final targetPlatform =
-        _extractOptionValue(args, '--target-platform', '--target-platform') ??
-        target.androidTargetPlatform;
-    if (targetPlatform != null && targetPlatform.isNotEmpty) {
-      nativeArgs.add('--target-platform=$targetPlatform');
-    }
-  } else if (target.platform == 'macos') {
-    final macOsArch = target.macOsArch;
-    if (macOsArch != null && macOsArch.isNotEmpty) {
-      nativeArgs.add('--arch=$macOsArch');
-    }
+  final requestedTargetPlatform =
+      _extractOptionValue(args, '--target-platform', '--target-platform') ??
+      targetPlatform;
+  if (requestedTargetPlatform != null && requestedTargetPlatform.isNotEmpty) {
+    nativeArgs.add('--target-platform=$requestedTargetPlatform');
   }
+
   await runOrExit(
-    title: '准备 ${target.platform} 原生产物',
+    title: '准备 Android 原生产物',
     executable: Platform.resolvedExecutable,
     arguments: nativeArgs,
   );
@@ -78,50 +74,46 @@ String? _firstFlutterCommand(List<String> args) {
   return null;
 }
 
-String? _macOsArchFromEnv() {
-  final value = Platform.environment['FLUXDO_MACOS_ARCH']?.trim();
-  return (value == null || value.isEmpty) ? null : value;
-}
-
-Future<_NativeTarget?> _detectNativeTarget(String command, List<String> args) async {
-  switch (command) {
-    case 'build':
-      final buildTarget = _firstPositionalAfter(args, 'build');
-      return switch (buildTarget) {
-        'windows' => const _NativeTarget('windows'),
-        'macos' => _NativeTarget('macos', macOsArch: _macOsArchFromEnv()),
-        'linux' => const _NativeTarget('linux'),
-        'ios' || 'ipa' => const _NativeTarget('ios'),
-        'apk' || 'appbundle' || 'aar' => const _NativeTarget('android'),
-        _ => null,
-      };
-    case 'run':
-    case 'drive':
-      final deviceId = _extractOptionValue(args, '-d', '--device-id');
-      final directTarget = switch (deviceId) {
-        'windows' => const _NativeTarget('windows'),
-        'macos' => _NativeTarget('macos', macOsArch: _macOsArchFromEnv()),
-        'linux' => const _NativeTarget('linux'),
-        'android' => const _NativeTarget('android'),
-        'ios' => const _NativeTarget('ios'),
-        _ => null,
-      };
-      if (directTarget != null) {
-        return directTarget;
-      }
-
-      final devices = await _loadFlutterDevices();
-      final resolvedDevice = switch (deviceId) {
-        null => devices.length == 1 ? devices.single : null,
-        _ => devices.where((device) => device.id == deviceId).firstOrNull,
-      };
-      if (resolvedDevice == null) {
-        return null;
-      }
-      return _nativeTargetFromDevice(resolvedDevice);
-    default:
+Future<String?> _detectAndroidTargetPlatform(
+  String command,
+  List<String> args,
+) async {
+  if (command == 'build') {
+    final buildTarget = _firstPositionalAfter(args, 'build');
+    if (buildTarget == 'apk' ||
+        buildTarget == 'appbundle' ||
+        buildTarget == 'aar') {
       return null;
+    }
+    stderr.writeln('本仓库仅支持 Android 构建，请使用 apk、appbundle 或 aar。');
+    exit(64);
   }
+
+  if (command != 'run' && command != 'drive') {
+    return null;
+  }
+
+  final deviceId = _extractOptionValue(args, '-d', '--device-id');
+  if (deviceId == 'android') {
+    return null;
+  }
+
+  final devices = await _loadFlutterDevices();
+  final resolvedDevice = switch (deviceId) {
+    null =>
+      devices.where((device) => device.isAndroid).length == 1
+          ? devices.where((device) => device.isAndroid).single
+          : null,
+    _ => devices.where((device) => device.id == deviceId).firstOrNull,
+  };
+  if (resolvedDevice == null) {
+    return null;
+  }
+  if (!resolvedDevice.isAndroid) {
+    stderr.writeln('本仓库仅支持 Android 设备: ${resolvedDevice.id}');
+    exit(64);
+  }
+  return resolvedDevice.targetPlatform;
 }
 
 String _detectBuildMode(String command, List<String> args) {
@@ -152,7 +144,11 @@ String? _firstPositionalAfter(List<String> args, String command) {
   return null;
 }
 
-String? _extractOptionValue(List<String> args, String shortOption, String longOption) {
+String? _extractOptionValue(
+  List<String> args,
+  String shortOption,
+  String longOption,
+) {
   for (var index = 0; index < args.length; index++) {
     final value = args[index];
     if (value == shortOption || value == longOption) {
@@ -196,46 +192,21 @@ Future<List<_FlutterDevice>> _loadFlutterDevices() async {
   }
 }
 
-_NativeTarget? _nativeTargetFromDevice(_FlutterDevice device) {  final targetPlatform = device.targetPlatform;
-  if (targetPlatform.startsWith('android')) {
-    return _NativeTarget('android', androidTargetPlatform: targetPlatform);
-  }
-  if (targetPlatform == 'ios') {
-    return const _NativeTarget('ios');
-  }
-  if (targetPlatform.startsWith('darwin')) {
-    return _NativeTarget('macos', macOsArch: _macOsArchFromEnv());
-  }
-  if (targetPlatform.startsWith('windows')) {
-    return const _NativeTarget('windows');
-  }
-  if (targetPlatform.startsWith('linux')) {
-    return const _NativeTarget('linux');
-  }
-  return null;
-}
-
-class _NativeTarget {
-  const _NativeTarget(this.platform, {this.androidTargetPlatform, this.macOsArch});
-
-  final String platform;
-  final String? androidTargetPlatform;
-  final String? macOsArch;
-}
-
 class _FlutterDevice {
-  const _FlutterDevice({
-    required this.id,
-    required this.targetPlatform,
-  });
+  const _FlutterDevice({required this.id, required this.targetPlatform});
 
   final String id;
   final String targetPlatform;
 
+  bool get isAndroid => targetPlatform.startsWith('android');
+
   static _FlutterDevice? fromJson(Map<String, dynamic> json) {
     final id = json['id']?.toString().trim();
     final targetPlatform = json['targetPlatform']?.toString().trim();
-    if (id == null || id.isEmpty || targetPlatform == null || targetPlatform.isEmpty) {
+    if (id == null ||
+        id.isEmpty ||
+        targetPlatform == null ||
+        targetPlatform.isEmpty) {
       return null;
     }
     return _FlutterDevice(id: id, targetPlatform: targetPlatform);

@@ -31,20 +31,19 @@ class AppLinkInfo {
 
 /// 应用链接服务
 ///
-/// 通过原生 MethodChannel 解析和启动应用链接。
-/// - Android：使用 PackageManager 获取目标应用名称和图标
-/// - iOS：使用 UIApplication.open 启动链接（无法获取图标）
-/// - 桌面平台：无原生实现，回退到 url_launcher
+/// 通过 Android MethodChannel 解析和启动应用链接。
+/// 使用 PackageManager 获取目标应用名称、包名和图标。
 class AppLinkService {
-  static const _channel =
-      MethodChannel('com.github.lingyan000.fluxdo/browser');
+  static const _channel = MethodChannel('com.github.lingyan000.fluxdo/browser');
 
   /// 解析应用链接，获取目标应用信息
   static Future<AppLinkInfo> resolveAppLink(String url) async {
     debugPrint('[AppLink] resolveAppLink: $url');
     try {
-      final result = await _channel
-          .invokeMapMethod<String, dynamic>('resolveAppLink', {'url': url});
+      final result = await _channel.invokeMapMethod<String, dynamic>(
+        'resolveAppLink',
+        {'url': url},
+      );
       debugPrint('[AppLink] native result: $result');
       if (result != null) {
         final info = AppLinkInfo(
@@ -64,16 +63,16 @@ class AppLinkService {
 
   /// 启动应用链接
   ///
-  /// 优先通过原生 MethodChannel 启动（Android/iOS），
-  /// 失败时回退到 url_launcher（桌面平台兜底）。
+  /// 优先通过 Android MethodChannel 启动，失败时回退到 url_launcher。
   static Future<bool> launchAppLink(String url) async {
     // 1. 尝试原生 MethodChannel
     try {
-      final result =
-          await _channel.invokeMethod<bool>('launchAppLink', {'url': url});
+      final result = await _channel.invokeMethod<bool>('launchAppLink', {
+        'url': url,
+      });
       if (result == true) return true;
     } catch (_) {
-      // 原生 channel 不可用（桌面平台）
+      // 原生 channel 调用失败，继续使用 Android 外部应用启动兜底。
     }
 
     // 2. 回退到 url_launcher

@@ -571,7 +571,8 @@ class _SubmenuRowTile extends StatelessWidget {
                 ],
               ),
             ),
-            if (selected) Icon(Symbols.check_rounded, size: 18, color: cs.primary),
+            if (selected)
+              Icon(Symbols.check_rounded, size: 18, color: cs.primary),
           ],
         ),
       ),
@@ -1324,16 +1325,7 @@ Future<T?> showSwipeDismissibleMenu<T>({
 }) {
   assert(items.isNotEmpty);
 
-  switch (Theme.of(context).platform) {
-    case TargetPlatform.iOS:
-    case TargetPlatform.macOS:
-      break;
-    case TargetPlatform.android:
-    case TargetPlatform.fuchsia:
-    case TargetPlatform.linux:
-    case TargetPlatform.windows:
-      semanticLabel ??= MaterialLocalizations.of(context).popupMenuLabel;
-  }
+  semanticLabel ??= MaterialLocalizations.of(context).popupMenuLabel;
 
   final List<GlobalKey> menuItemKeys = List<GlobalKey>.generate(
     items.length,
@@ -1497,15 +1489,17 @@ class _SwipeDismissiblePopupMenuButtonState<T>
 
     final Rect buttonRect = Rect.fromPoints(
       overlay.globalToLocal(button.localToGlobal(Offset.zero)),
-      overlay.globalToLocal(button.localToGlobal(button.size.bottomRight(Offset.zero))),
+      overlay.globalToLocal(
+        button.localToGlobal(button.size.bottomRight(Offset.zero)),
+      ),
     );
 
     final RelativeRect position = RelativeRect.fromRect(
       Rect.fromPoints(
         overlay.globalToLocal(button.localToGlobal(offset)),
-        overlay.globalToLocal(button.localToGlobal(
-          button.size.bottomRight(Offset.zero) + offset,
-        )),
+        overlay.globalToLocal(
+          button.localToGlobal(button.size.bottomRight(Offset.zero) + offset),
+        ),
       ),
       Offset.zero & overlay.size,
     );

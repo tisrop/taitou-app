@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:catcher_2/catcher_2.dart';
 import 'package:chinese_font_library/chinese_font_library.dart';
-import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,8 +9,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:native_animated_image/native_animated_image.dart'
     show NativeAnimatedImageProvider;
-import 'package:window_manager/window_manager.dart';
-import 'package:flutter_acrylic/flutter_acrylic.dart' as acrylic;
 import 'pages/topics_page.dart';
 import 'pages/data_management_page.dart';
 import 'providers/discourse_providers.dart';
@@ -28,7 +24,6 @@ import 'widgets/common/predictive_back_cupertino_transitions.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'services/network/cookie/csrf_token_service.dart';
-import 'services/network/cookie/cookie_devtools_extension.dart';
 import 'services/network/cookie/cookie_jar_service.dart';
 import 'services/network/cookie/cookie_store_observer.dart';
 import 'services/network/adapters/cronet_fallback_service.dart';
@@ -56,8 +51,6 @@ import 'package:fluxdo_render/fluxdo_render.dart'
 
 import 'services/clipboard_topic_link_service.dart';
 import 'services/deep_link_service.dart';
-import 'services/windows_protocol_registrar_stub.dart'
-    if (dart.library.ffi) 'services/windows_protocol_registrar_io.dart';
 import 'services/background/background_notification_service.dart';
 import 'services/message_bus_service.dart';
 import 'services/connectivity_service.dart';
@@ -67,9 +60,7 @@ import 'services/log/log_writer.dart';
 import 'services/download_service.dart';
 import 'services/migration_service.dart';
 import 'services/navigation/app_route_observer.dart';
-import 'services/window_state_service.dart';
 import 'services/webview_settings.dart';
-import 'services/windows_webview_environment_service.dart';
 import 'services/user_presence_service.dart';
 import 'models/user.dart';
 import 'constants.dart';
@@ -217,10 +208,8 @@ Future<void> main() async {
   // 初始化本地通知服务（请求权限）
   LocalNotificationService().initialize(); // 不需要 await，后台初始化
 
-  // Android：临时关闭 WebView DevTools 调试，停用原生 CDP 链路
-  if (Platform.isAndroid) {
-    InAppWebViewController.setWebContentsDebuggingEnabled(false);
-  }
+  // 临时关闭 WebView DevTools 调试，停用原生 CDP 链路。
+  InAppWebViewController.setWebContentsDebuggingEnabled(false);
 
   // 阶段 1：并行执行所有不相互依赖的初始化
   final futures = <Future<dynamic>>[
@@ -228,11 +217,6 @@ Future<void> main() async {
     AppConstants.initUserAgent(),
     LogWriter.init(),
     ProxyCertificate.initialize(),
-    if (Platform.isWindows)
-      WindowsWebViewEnvironmentService.instance.initialize(),
-    // Windows 深链协议注册(discourse:// / taitou://):写 HKCU 免管理员,
-    // 幂等,失败不阻塞启动。其他平台由清单/plist 声明,此调用为 no-op。
-    if (Platform.isWindows) ensureWindowsProtocolsRegistered(),
     CookieJarService().initialize(),
     CsrfTokenService().init(),
     BackgroundNotificationService().initialize(),
@@ -241,11 +225,6 @@ Future<void> main() async {
     // 失败不阻塞启动，仅影响老 WebView 兼容性。
     WebViewSettings.preloadPolyfill(),
   ];
-  // 桌面平台初始化 window_manager 和 flutter_acrylic
-  if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-    futures.add(windowManager.ensureInitialized());
-    futures.add(acrylic.Window.initialize());
-  }
   final results = await Future.wait(futures);
   final prefs = results[0] as SharedPreferences;
   await AuthIssueNoticeService.instance.initialize(prefs);
@@ -255,58 +234,16 @@ Future<void> main() async {
     FrameJankMonitor.start();
   }
 
-  // v0.4.0: 注册 Cookie 引擎 DevTools service extensions (仅 debug/profile 模式)
-  // 设计依据: docs/cookie-sync-design-v0.4.0.md §11.4
-  CookieDevtoolsExtension.instance.register();
-
   // v0.4.0 Phase B: 启动 WV cookie store 外部变化观察
-  // Apple 平台依赖 native WKHTTPCookieStoreObserver 自动触发,
-  // Android 由 WV onLoadStop 等 hook 主动调 notifyExternalChange()。
+  // Android 由 WebView onLoadStop 等 hook 主动调用 notifyExternalChange()。
   CookieStoreObserver.instance.attach();
-
-  // 桌面平台：恢复窗口状态后再显示，避免默认位置闪烁
-  if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-    await acrylic.Window.setEffect(
-      effect: Platform.isMacOS
-          ? acrylic.WindowEffect.sidebar
-          : Platform.isWindows
-          ? acrylic.WindowEffect.mica
-          : acrylic.WindowEffect.disabled,
-    );
-    final isVisible = await windowManager.isVisible();
-    await windowManager.setPreventClose(true);
-    // 立即开始监听窗口事件，确保在 OnboardingPage/PreheatGate 等
-    // MainPage 尚未挂载的阶段也能正常响应窗口关闭
-    WindowStateService.instance.startListening();
-    if (isVisible) {
-      await WindowStateService.instance.attach(prefs);
-      if (Platform.isLinux) {
-        await windowManager.focus();
-      }
-    } else {
-      // 冷启动：窗口保持隐藏，推迟到 Flutter 首帧光栅化后再恢复位置并显示，
-      // 避免 main() 后续初始化（迁移/网络栈/rhttp 等）期间露出空白窗口。
-      // Future.any 兜底：极端情况下首帧迟迟未到时也要把窗口显示出来。
-      unawaited(() async {
-        await Future.any([
-          WidgetsBinding.instance.waitUntilFirstFrameRasterized,
-          Future.delayed(const Duration(seconds: 3)),
-        ]);
-        await windowManager.waitUntilReadyToShow(null, () async {
-          await WindowStateService.instance.restore(prefs);
-          if (Platform.isLinux) {
-            await windowManager.focus();
-          }
-        });
-      }());
-    }
-  }
 
   // 数据迁移：在所有依赖 prefs 的网络相关服务启动之前执行
   await MigrationService.runAll(prefs);
 
   // 阶段 2：依赖 prefs 的步骤并行
-  final crashlyticsEnabled = AppConstants.enableCrashReporting &&
+  final crashlyticsEnabled =
+      AppConstants.enableCrashReporting &&
       (prefs.getBool('pref_crashlytics') ?? true);
   final developerMode = prefs.getBool('developer_mode') ?? false;
   CfChallengeLogger.setEnabled(developerMode);
@@ -315,10 +252,9 @@ Future<void> main() async {
   await Future.wait([
     CronetFallbackService.instance.initialize(prefs),
     ProxySettingsService.instance.initialize(prefs),
-    if (Platform.isAndroid)
-      MethodChannel(
-        'com.github.lingyan000.fluxdo/crashlytics',
-      ).invokeMethod('setCrashlyticsEnabled', {'enabled': crashlyticsEnabled}),
+    MethodChannel(
+      'com.github.lingyan000.fluxdo/crashlytics',
+    ).invokeMethod('setCrashlyticsEnabled', {'enabled': crashlyticsEnabled}),
   ]);
   // rhttp (Rust reqwest) 初始化：在 ProxySettingsService 之后、NetworkSettingsService 之前
   await RhttpSettingsService.instance.initialize(prefs);
@@ -362,22 +298,18 @@ Future<void> main() async {
         .ignore();
   }
 
-  // 应用竖屏锁定设置（仅移动端）
-  if (Platform.isIOS || Platform.isAndroid) {
-    final portraitLock = prefs.getBool('pref_portrait_lock') ?? false;
-    if (portraitLock) {
-      PreferencesNotifier.isPortraitLocked = true;
-      await SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-      ]);
-    }
+  // 应用竖屏锁定设置。
+  final portraitLock = prefs.getBool('pref_portrait_lock') ?? false;
+  if (portraitLock) {
+    PreferencesNotifier.isPortraitLocked = true;
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
   }
 
-  // 应用 Android 屏幕刷新率偏好（不阻塞启动）
-  if (Platform.isAndroid) {
-    unawaited(_applyAndroidDisplayMode(prefs));
-  }
+  // 应用屏幕刷新率偏好（不阻塞启动）。
+  unawaited(_applyAndroidDisplayMode(prefs));
 
   // 提前触发预加载数据请求，与 runApp 并行执行。
   // PreheatGate 中的 ensurePreloaded() 会复用这个已在进行的请求。
@@ -543,10 +475,6 @@ IconThemeData _appIconTheme(Color color) => IconThemeData(
 const _pageTransitionsTheme = PageTransitionsTheme(
   builders: <TargetPlatform, PageTransitionsBuilder>{
     TargetPlatform.android: PredictiveBackCupertinoPageTransitionsBuilder(),
-    TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-    TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
-    TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
-    TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
   },
 );
 
@@ -700,23 +628,6 @@ class MainApp extends ConsumerWidget {
                 final iconBrightness = brightness == Brightness.light
                     ? Brightness.dark
                     : Brightness.light;
-                // 桌面平台：跟随应用主题明暗切换窗口效果
-                if (Platform.isMacOS ||
-                    Platform.isWindows ||
-                    Platform.isLinux) {
-                  final isDark = brightness == Brightness.dark;
-                  acrylic.Window.setEffect(
-                    effect: Platform.isMacOS
-                        ? acrylic.WindowEffect.sidebar
-                        : Platform.isWindows
-                        ? acrylic.WindowEffect.mica
-                        : acrylic.WindowEffect.disabled,
-                    dark: isDark,
-                  );
-                  if (Platform.isMacOS) {
-                    acrylic.Window.overrideMacOSBrightness(dark: isDark);
-                  }
-                }
                 Widget result = AnnotatedRegion<SystemUiOverlayStyle>(
                   value: SystemUiOverlayStyle(
                     statusBarColor: Colors.transparent,
@@ -830,10 +741,6 @@ class _MainPageState extends ConsumerState<MainPage>
     WidgetsBinding.instance.addObserver(this);
     UserPresenceService().setForeground(true, countAsActivity: true);
     HardwareKeyboard.instance.addHandler(_handlePresenceKeyEvent);
-    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-      WindowStateService.instance.startListening();
-    }
-
     // 设置导航 context（用于 CF 验证弹窗）
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // 标记应用已就绪（MainPage 在 PreheatGate 之后才挂载）
@@ -941,7 +848,7 @@ class _MainPageState extends ConsumerState<MainPage>
     if (!mounted) return;
 
     // 一次性数据收集告知（仅 Android，且确实开了崩溃上报时才告知）
-    if (Platform.isAndroid && AppConstants.enableCrashReporting) {
+    if (AppConstants.enableCrashReporting) {
       await _showCrashlyticsNotice();
       if (!mounted) return;
     }
@@ -1073,9 +980,6 @@ class _MainPageState extends ConsumerState<MainPage>
 
   @override
   void dispose() {
-    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-      WindowStateService.instance.stopListening();
-    }
     HardwareKeyboard.instance.removeHandler(_handlePresenceKeyEvent);
     WidgetsBinding.instance.removeObserver(this);
     _resumeDebounceTimer?.cancel();
@@ -1146,11 +1050,6 @@ class _MainPageState extends ConsumerState<MainPage>
     try {
       await BackgroundNotificationService().disable();
       MessageBusService().exitBackgroundMode();
-      if (Platform.isIOS) {
-        // iOS 后台轮询任务在独立 isolate 写 cookie 文件，回前台时重载
-        // 磁盘值，避免主 isolate 用旧缓存覆盖后台轮换的 token
-        CookieJarService().reloadPersistedCookies();
-      }
       if (!mounted) return;
       ref.invalidate(notificationListProvider);
       // 检查 DOH 代理是否在后台期间失效，若失效则自动重启

@@ -271,7 +271,7 @@ HTML cooked
 | CalloutNode | `1:1` | note/tip/warning/error 类型 + 边框图标 |
 | TableNode | `1:1` | >30 行虚拟化、列宽自适应、嵌套渲染、screenshotMode |
 | MathBlockNode + InlineMathRun | `1:1` | flutter_math_fork |
-| IframeNode | `1:1` | 嵌入式 WebView、全屏 LayoutLock、macOS 滚轮 |
+| IframeNode | `1:1` | 嵌入式 WebView、全屏 LayoutLock |
 | LazyVideoNode | `1:1` | YouTube/Vimeo/TikTok 缩略图 + 点击展开 |
 
 **阶段 2 退出标准**:
@@ -508,7 +508,7 @@ HTML cooked
 
 - WYSIWYG 编辑模式(后续独立项目)
 - Markdown 编辑模式(同上)
-- 其他论坛系统支持(本次仅 Discourse / linux.do)
+- 其他论坛系统支持（当前仅维护开源心声社区）
 - 主题/换肤系统(独立项目)
 
 ## 附录 C:相关文档

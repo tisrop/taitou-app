@@ -2,7 +2,9 @@
 
 > [开源心声社区](https://openxinsheng.com/) 的第三方 Android 客户端
 
-抬头是为 [开源心声社区](https://openxinsheng.com/)（openxinsheng.com）打造的移动客户端，基于 Flutter 开发。
+抬头是为 [开源心声社区](https://openxinsheng.com/)（openxinsheng.com）打造的 Android 客户端，基于 Flutter 开发。
+
+**本项目仅维护 Android 平台，构建产物为 APK 或 AAB。**
 
 ## 这个项目是什么
 
@@ -119,7 +121,7 @@ keyPassword=<口令>
 ## 开发
 
 - [开发环境与日常命令](docs/development.md)
-- [发版与 iOS IPA](docs/release.md)
+- [Android 发版说明](docs/release.md)
 
 ## 项目结构
 

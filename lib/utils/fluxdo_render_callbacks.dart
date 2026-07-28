@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:archive/archive.dart' show ZLibEncoder;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,7 +27,6 @@ import '../services/discourse/discourse_service.dart';
 import '../services/discourse_cache_manager.dart';
 import '../services/emoji_handler.dart';
 import '../services/highlighter_service.dart';
-import '../services/media_compat_service.dart';
 import '../services/toast_service.dart';
 import '../utils/discourse_url_parser.dart';
 import '../utils/link_launcher.dart';
@@ -464,9 +462,7 @@ class FluxdoRenderCallbacks {
           errorBuilder: (c, failedUrl, error) =>
               _VideoErrorFallback(url: failedUrl, error: error),
           loadingBuilder: (c, _, child) => Center(
-            child: posterUrl != null
-                ? child
-                : const LoadingSpinner(size: 24),
+            child: posterUrl != null ? child : const LoadingSpinner(size: 24),
           ),
         ),
       ),
@@ -533,26 +529,11 @@ class FluxdoRenderCallbacks {
     );
   };
 
-  /// 媒体 URL 过 MediaCompatService 的通用包装:无需处理(绝大多数)
-  /// 时同步直出 [builder];需要嗅探/本地化时先出 [placeholder],完成后
-  /// 换可播放地址(失败回退原 URL,交给播放器错误链路)。
   static Widget _withPlayableUrl(
     String url,
     Widget Function(String url) builder,
     Widget placeholder,
-  ) {
-    final compat = MediaCompatService.instance;
-    if (!compat.needsProbe(url)) return builder(url);
-    final cached = compat.cachedPlayableUrl(url);
-    if (cached != null) return builder(cached);
-    return FutureBuilder<String>(
-      future: compat.resolvePlayableUrl(url),
-      builder: (c, snap) {
-        if (snap.connectionState != ConnectionState.done) return placeholder;
-        return builder(snap.data ?? url);
-      },
-    );
-  }
+  ) => builder(url);
 
   /// 附件下载:复用 legacy launchContentLink 的下载链路(_isUploadLink 判附件
   /// 后回调 startDownload);文件名用 parser 抓到的锚点文件名。
@@ -573,9 +554,8 @@ class FluxdoRenderCallbacks {
       };
 
   /// 嵌入 iframe:用 IframeNode 结构化字段直接构造 IframeWidget(webview),
-  /// 不再反构造 DOM。web 平台无 InAppWebView,返回 null 走子包内置占位卡。
+  /// 不再反构造 DOM。Android 端直接使用 InAppWebView。
   static IframeBuilder get _iframeBuilder => (ctx, node) {
-    if (kIsWeb) return null; // web 走子包内置占位卡
     if (node.src.isEmpty) return null;
     return IframeWidget(
       attributes: IframeAttributes(
@@ -732,7 +712,8 @@ class FluxdoRenderCallbacks {
   /// 端渲染等价;解码纹理量不变(ResizeImage 仍按显示宽 × dpr cap)。
   static String? _pickSrcsetUrl(ImageRun image, double dpr) {
     if (image.srcset.isEmpty) return null;
-    final sorted = [...image.srcset]..sort((a, b) => a.scale.compareTo(b.scale));
+    final sorted = [...image.srcset]
+      ..sort((a, b) => a.scale.compareTo(b.scale));
     for (final c in sorted) {
       if (c.scale >= dpr - 0.01) return c.url;
     }
@@ -1181,8 +1162,7 @@ class FluxdoRenderCallbacks {
               // 档位影响。
               final srcsetUrl = DiscourseImageUtils.isUploadUrl(image.src)
                   ? null
-                  : _pickSrcsetUrl(
-                      image, MediaQuery.devicePixelRatioOf(ctx));
+                  : _pickSrcsetUrl(image, MediaQuery.devicePixelRatioOf(ctx));
               final displayUrl = srcsetUrl == null
                   ? resolvedUrl
                   : UrlHelper.resolveUrlWithCdn(srcsetUrl);
@@ -1215,14 +1195,14 @@ class FluxdoRenderCallbacks {
                   // 风险,能不用就不用)。
                   final hasLightbox = image.lightboxUrl != null;
                   final fullUrl = image.lightboxUrl ?? resolvedUrl;
-                  var resolvedFullUrl =
-                      DiscourseImageUtils.isUploadUrl(fullUrl)
+                  var resolvedFullUrl = DiscourseImageUtils.isUploadUrl(fullUrl)
                       ? (DiscourseImageUtils.getCachedUploadUrl(fullUrl) ??
                             fullUrl)
                       : UrlHelper.resolveUrlWithCdn(fullUrl);
                   if (!hasLightbox) {
-                    resolvedFullUrl =
-                        DiscourseImageUtils.getOriginalUrl(resolvedFullUrl);
+                    resolvedFullUrl = DiscourseImageUtils.getOriginalUrl(
+                      resolvedFullUrl,
+                    );
                   }
                   // 画廊数据在点击时才解析(长帖懒解析场景首次点图会触发
                   // 全 chunk parse,离散动作可接受;之后命中缓存)。

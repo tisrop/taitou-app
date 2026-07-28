@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -13,7 +12,6 @@ import 'network/cookie/boundary_sync_service.dart';
 import 'network/cookie/cookie_jar_service.dart';
 import 'network/cookie/webview_cookie_priming.dart';
 import 'webview_settings.dart';
-import 'windows_webview_environment_service.dart';
 
 /// cf_clearance 自动续期服务。
 ///
@@ -251,12 +249,8 @@ class CfClearanceRefreshService {
     }
     if (!_canStartGeneration(gen)) return;
 
-    final originLoadCompleter = Completer<void>();
     final html = _buildTurnstileHtml(sitekey);
     final webView = HeadlessInAppWebView(
-      webViewEnvironment: io.Platform.isWindows
-          ? WindowsWebViewEnvironmentService.instance.environment
-          : null,
       initialSettings: WebViewSettings.headlessCf,
       initialUserScripts: WebViewSettings.compatPolyfillScripts,
       onReceivedServerTrustAuthRequest: (_, challenge) =>
@@ -269,14 +263,10 @@ class CfClearanceRefreshService {
           return;
         }
         _webViewController = controller;
-        WebViewSettings.applyWindowsHeadlessMemoryTarget(controller);
         WebViewSettings.registerJsErrorReporter(controller);
         _registerJavaScriptHandlers(controller, gen);
       },
       onLoadStop: (_, url) {
-        if (!originLoadCompleter.isCompleted) {
-          originLoadCompleter.complete();
-        }
         if (_canHandleGeneration(gen)) {
           _lastSignalAt = DateTime.now();
           unawaited(_syncAndCheckCookies('load_stop', gen));
@@ -307,25 +297,12 @@ class CfClearanceRefreshService {
         throw StateError('Headless WebView controller is null');
       }
 
-      if (io.Platform.isWindows) {
-        await controller.loadUrl(
-          urlRequest: URLRequest(url: WebUri(_windowsBootstrapUrl)),
-        );
-        try {
-          await originLoadCompleter.future.timeout(const Duration(seconds: 8));
-        } on TimeoutException {
-          debugPrint('[CfRefresh] Windows origin bootstrap load timeout');
-        }
-        if (!_canHandleGeneration(gen)) return;
-        await _writeTurnstileHtml(controller, html);
-      } else {
-        await controller.loadData(
-          data: html,
-          baseUrl: WebUri(AppConstants.baseUrl),
-          mimeType: 'text/html',
-          encoding: 'utf-8',
-        );
-      }
+      await controller.loadData(
+        data: html,
+        baseUrl: WebUri(AppConstants.baseUrl),
+        mimeType: 'text/html',
+        encoding: 'utf-8',
+      );
 
       if (!_canHandleGeneration(gen)) return;
       _startTimers(gen);
@@ -411,27 +388,12 @@ class CfClearanceRefreshService {
     }
   }
 
-  Future<void> _writeTurnstileHtml(
-    InAppWebViewController controller,
-    String html,
-  ) async {
-    final encodedHtml = jsonEncode(html);
-    await controller.evaluateJavascript(
-      source:
-          '''
-document.open();
-document.write($encodedHtml);
-document.close();
-''',
-    );
-  }
-
   /// stale_refresh 的轻量恢复:**原地重载** Turnstile 页面,不销毁重建
   /// WebView 实例。
   ///
   /// 旧路径(dispose → priming 逐 cookie 三段式 → HeadlessInAppWebView.run
   /// → loadData)每一步都是平台主线程的重活,滚动中撞上 = vsyncOverhead
-  /// 型掉帧(诊断实测 ov 50~97ms)。重载只有一次 loadData/loadUrl 调用,
+  /// 型掉帧(诊断实测 ov 50~97ms)。重载只有一次 loadData 调用,
   /// 平台线程占用降一个量级;cookie 环境未变,无需重新 priming。
   ///
   /// 连续多次重载仍无 cookie 更新(说明不是页面卡死而是环境问题)才
@@ -458,16 +420,12 @@ document.close();
 
     try {
       final html = _buildTurnstileHtml(sitekey);
-      if (io.Platform.isWindows) {
-        await _writeTurnstileHtml(controller, html);
-      } else {
-        await controller.loadData(
-          data: html,
-          baseUrl: WebUri(AppConstants.baseUrl),
-          mimeType: 'text/html',
-          encoding: 'utf-8',
-        );
-      }
+      await controller.loadData(
+        data: html,
+        baseUrl: WebUri(AppConstants.baseUrl),
+        mimeType: 'text/html',
+        encoding: 'utf-8',
+      );
       // 重载视为一次活动,把 stale 窗口锚点前移,避免下个 health tick
       // 立即再次触发
       _lastCookieAdvanceAt = DateTime.now();
@@ -596,17 +554,13 @@ document.close();
     // 线程。滚动繁忙即挂起、静默 ~1s 后恢复,JS 信号与刷新逻辑 resume
     // 后自然补上。初始 Turnstile 运行期(_initialTimer 未清)只恢复不
     // 挂起,避免把首次验证拖到超时误判重建。
-    if (io.Platform.isAndroid) {
-      _scrollPauseTicker = Timer.periodic(const Duration(milliseconds: 500), (
-        _,
-      ) {
-        if (!_canHandleGeneration(gen)) {
-          _scrollPauseTicker?.cancel();
-          return;
-        }
-        unawaited(_updateScrollPause());
-      });
-    }
+    _scrollPauseTicker = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (!_canHandleGeneration(gen)) {
+        _scrollPauseTicker?.cancel();
+        return;
+      }
+      unawaited(_updateScrollPause());
+    });
   }
 
   /// 滚动繁忙 ↔ 静默的 WebView 挂起切换(仅 Android,由
@@ -838,8 +792,6 @@ document.close();
     if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '') ?? 0;
   }
-
-  String get _windowsBootstrapUrl => '${AppConstants.baseUrl}/robots.txt';
 
   // ---------------------------------------------------------------------------
   // HTML 模板

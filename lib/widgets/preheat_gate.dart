@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -213,10 +211,8 @@ class _PreheatLoadingState extends State<_PreheatLoading>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final hasAcrylic = Platform.isMacOS || Platform.isWindows;
-
     return Scaffold(
-      backgroundColor: hasAcrylic ? Colors.transparent : colorScheme.surface,
+      backgroundColor: colorScheme.surface,
       body: Stack(
         fit: StackFit.expand,
         children: [
@@ -386,10 +382,8 @@ class _PreheatFailed extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final hasAcrylic = Platform.isMacOS || Platform.isWindows;
-
     return Scaffold(
-      backgroundColor: hasAcrylic ? Colors.transparent : colorScheme.surface,
+      backgroundColor: colorScheme.surface,
       body: SafeArea(
         child: Stack(
           children: [

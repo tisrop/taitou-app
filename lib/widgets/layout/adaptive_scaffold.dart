@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,8 +54,7 @@ class AdaptiveScaffold extends ConsumerWidget {
         ? -1
         : selectedIndex;
 
-    final hasAcrylic = Platform.isMacOS || Platform.isWindows;
-    final useAcrylicRail = showRail && hasAcrylic;
+    const useAcrylicRail = false;
     final railWidth = extendedRail ? 180.0 : 72.0;
     final overlayLeftInset = showRail
         ? railWidth + (useAcrylicRail ? 0.0 : 1.0)

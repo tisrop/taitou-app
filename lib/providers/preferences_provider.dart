@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:collection/collection.dart';
 import 'package:flutter/services.dart';
 // ignore: depend_on_referenced_packages
@@ -619,11 +617,9 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
   Future<void> setCrashlytics(bool enabled) async {
     state = state.copyWith(crashlytics: enabled);
     await _prefs.setBool(_crashlyticsKey, enabled);
-    if (Platform.isAndroid) {
-      await _crashlyticsChannel.invokeMethod('setCrashlyticsEnabled', {
-        'enabled': enabled,
-      });
-    }
+    await _crashlyticsChannel.invokeMethod('setCrashlyticsEnabled', {
+      'enabled': enabled,
+    });
   }
 
   Future<void> setPortraitLock(bool enabled) async {

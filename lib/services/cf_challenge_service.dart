@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:collection' show UnmodifiableListView;
-import 'dart:io' as io;
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
@@ -16,14 +15,12 @@ import 'cf_challenge_logger.dart';
 import 'cf_clearance_refresh_service.dart';
 import 'toast_service.dart';
 import 'webview_settings.dart';
-import 'windows_webview_environment_service.dart';
 import '../l10n/s.dart';
 import '../providers/preferences_provider.dart';
 import '../utils/blur_config.dart';
 import '../widgets/draggable_floating_pill.dart';
 
-CookieManager get _cfCookieManager =>
-    WindowsWebViewEnvironmentService.instance.cookieManager;
+CookieManager get _cfCookieManager => CookieManager.instance();
 
 /// CF 验证服务
 /// 处理 Cloudflare Turnstile 验证（仅手动模式）
@@ -546,14 +543,10 @@ class _CfChallengePageState extends State<CfChallengePage> {
   int _checkCount = 0;
   Timer? _timeoutTimer;
   Timer? _noChallengeCheckTimer;
-  Timer? _loadStopFallbackTimer;
-  Timer? _pageReadyFallbackTimer;
   static const _backgroundMaxCheckCount = 10;
   static const _foregroundMaxCheckCount = 60;
   static const _noChallengeCheckDelay = Duration(milliseconds: 1200);
   static const _revealStateWatchInterval = Duration(milliseconds: 150);
-  static const _loadStopFallbackDelay = Duration(milliseconds: 1200);
-  static const _pageReadyFallbackDelay = Duration(seconds: 4);
   static const _completionProbeTimeout = Duration(seconds: 8);
   static const _noChallengeProbeTimeout = Duration(milliseconds: 1800);
 
@@ -607,13 +600,11 @@ class _CfChallengePageState extends State<CfChallengePage> {
   void dispose() {
     _timeoutTimer?.cancel();
     _noChallengeCheckTimer?.cancel();
-    _loadStopFallbackTimer?.cancel();
-    _pageReadyFallbackTimer?.cancel();
     _controller?.dispose();
     super.dispose();
   }
 
-  /// 读取 cookie 值：先尝试 CookieManager，Windows 上 fallback 到 DevTools
+  /// 从 Android CookieManager 读取 cookie 值。
   Future<String?> _readCookieValue(String name) async {
     try {
       final cookie = await _cfCookieManager.getCookie(
@@ -626,41 +617,6 @@ class _CfChallengePageState extends State<CfChallengePage> {
     } catch (e) {
       debugPrint('[CfChallenge] CookieManager 读取 $name 失败: $e');
     }
-
-    // Windows：通过当前页面 controller 读取实时 cookie，再回退到 CookieJar
-    if (io.Platform.isWindows && _controller != null) {
-      final liveValue = await CookieJarService().readCookieValueFromController(
-        _controller!,
-        name,
-        currentUrl: widget.verifyUrl,
-      );
-      if (liveValue != null && liveValue.isNotEmpty) {
-        return liveValue;
-      }
-      return CookieJarService().getCookieValue(name);
-    }
-
-    if (io.Platform.isWindows) {
-      return CookieJarService().getCookieValue(name);
-    }
-
-    // Linux WPE: getCookie() 内部已调 getCookies(url) 做 URL 过滤，
-    // 若 URL 匹配有问题，改用 getAllCookies() 绕过 URL 过滤
-    if (io.Platform.isLinux) {
-      try {
-        final allCookies = await _cfCookieManager.getAllCookies();
-        for (final c in allCookies) {
-          if (c.name == name && c.value.isNotEmpty) {
-            return c.value;
-          }
-        }
-      } catch (e) {
-        debugPrint(
-          '[CfChallenge] Linux getAllCookies fallback 读取 $name 失败: $e',
-        );
-      }
-    }
-
     return null;
   }
 
@@ -1220,8 +1176,6 @@ class _CfChallengePageState extends State<CfChallengePage> {
   void _refresh() {
     _timeoutTimer?.cancel();
     _noChallengeCheckTimer?.cancel();
-    _loadStopFallbackTimer?.cancel();
-    _pageReadyFallbackTimer?.cancel();
     _challengeRevealProbeGeneration++;
     _hasMarkedPageReady = false;
     _checkCount = 0;
@@ -1428,8 +1382,6 @@ class _CfChallengePageState extends State<CfChallengePage> {
     _coverWebViewForOriginFallback();
     _timeoutTimer?.cancel();
     _noChallengeCheckTimer?.cancel();
-    _loadStopFallbackTimer?.cancel();
-    _pageReadyFallbackTimer?.cancel();
     _challengeRevealProbeGeneration++;
     _revealStateWatchGeneration++;
 
@@ -1692,8 +1644,6 @@ class _CfChallengePageState extends State<CfChallengePage> {
     }
     _hasMarkedPageReady = true;
     final generation = _loadGeneration;
-    _loadStopFallbackTimer?.cancel();
-    _pageReadyFallbackTimer?.cancel();
 
     if (mounted && _isLoading) {
       setState(() => _isLoading = false);
@@ -1751,188 +1701,142 @@ class _CfChallengePageState extends State<CfChallengePage> {
     }
   }
 
-  void _schedulePageReadyFallback(InAppWebViewController controller) {
-    if ((!io.Platform.isWindows && !io.Platform.isLinux) ||
-        _hasMarkedPageReady) {
-      return;
-    }
-    _pageReadyFallbackTimer?.cancel();
-    _pageReadyFallbackTimer = Timer(_pageReadyFallbackDelay, () {
-      _pageReadyFallbackTimer = null;
-      if (_hasMarkedPageReady || _hasPopped || _finishingFromVerifyResponse) {
-        return;
-      }
-      _handlePageReady(controller, reason: 'timed fallback');
-    });
-  }
-
-  void _scheduleLoadStopFallback(
-    InAppWebViewController controller,
-    int progress,
-  ) {
-    if ((!io.Platform.isWindows && !io.Platform.isLinux) ||
-        _hasMarkedPageReady ||
-        progress < 95) {
-      return;
-    }
-    _loadStopFallbackTimer ??= Timer(_loadStopFallbackDelay, () {
-      _loadStopFallbackTimer = null;
-      if (_hasMarkedPageReady ||
-          _hasPopped ||
-          _finishingFromVerifyResponse ||
-          _progress < 0.95) {
-        return;
-      }
-      _handlePageReady(controller, reason: 'progress fallback');
-    });
-  }
-
   Widget _buildChallengeWebView({required bool showUi}) {
     return IgnorePointer(
       ignoring: _isBackground,
-      child: WebViewSettings.wrapWithScrollFix(
-        InAppWebView(
-          key: _webViewKey,
-          webViewEnvironment:
-              WindowsWebViewEnvironmentService.instance.environment,
-          initialUrlRequest: URLRequest(url: WebUri(widget.verifyUrl)),
-          initialSettings: InAppWebViewSettings(
-            javaScriptEnabled: true,
-            userAgent: AppConstants.webViewUserAgentOverride,
-            mediaPlaybackRequiresUserGesture: false,
-            useShouldOverrideUrlLoading: true,
-            useOnNavigationResponse: true,
-          ),
-          initialUserScripts: _initialChallengeScripts(),
-          shouldOverrideUrlLoading: _shouldOverrideVerifyNavigation,
-          onNavigationResponse: _handleVerifyNavigationResponse,
-          onReceivedServerTrustAuthRequest: (_, challenge) =>
-              WebViewSettings.handleServerTrustAuthRequest(challenge),
-          onWebViewCreated: (controller) {
-            _controller = controller;
-            WebViewSettings.registerJsErrorReporter(controller);
-            // 注册 JS Handler，challenge-platform 响应到达时触发
-            controller.addJavaScriptHandler(
-              handlerName: 'onChallengeComplete',
-              callback: _onChallengeComplete,
-            );
-            // 注册 JS Handler，CF 验证完成后即将跳走时触发，立刻覆盖避免 404 露出
-            controller.addJavaScriptHandler(
-              handlerName: 'onChallengeNavigation',
-              callback: _onChallengeNavigation,
-            );
-          },
-          onLoadStart: (controller, url) {
-            if (_hasPopped || _finishingFromVerifyResponse) return;
-            final isCompletionNavigation = _hasSeenChallenge;
-            _loadGeneration++;
-            _challengeRevealProbeGeneration++;
-            _loadStopFallbackTimer?.cancel();
-            _pageReadyFallbackTimer?.cancel();
-            _hasMarkedPageReady = false;
-            _hasTimedOut = false;
-            _needsManualAttention = false;
-            _challengeWebViewVisible = false;
-            _hideOriginFallbackPage = isCompletionNavigation;
-            if (!isCompletionNavigation) {
-              _checkingOriginFallback = false;
-            }
-            _originFallbackNeedsAction = false;
-            _schedulePageReadyFallback(controller);
-            setState(() {
-              _isLoading = true;
-              _progress = 0;
-            });
-            if (isCompletionNavigation) {
-              unawaited(
-                _handleVerifyOriginFallback(
-                  _loadGeneration,
-                  reason: 'loadStart after challenge: ${url?.toString() ?? ''}',
-                  completionLikely: true,
-                ),
-              );
-            }
-          },
-          onPageCommitVisible: (controller, url) {
-            if (_finishingFromVerifyResponse) return;
-            _handlePageReady(controller, reason: 'onPageCommitVisible');
-          },
-          onProgressChanged: (controller, progress) {
-            if (_finishingFromVerifyResponse) return;
-            _progress = progress / 100;
-            _scheduleLoadStopFallback(controller, progress);
-            if (showUi) {
-              setState(() {});
-            }
-          },
-          onLoadStop: (controller, url) {
-            if (_finishingFromVerifyResponse) return;
-            WebViewSettings.injectScrollFix(controller);
-            _handlePageReady(controller, reason: 'onLoadStop');
-          },
-          onReceivedError: (controller, request, error) {
-            if (_finishingFromVerifyResponse) return;
-
-            final uri = Uri.tryParse(request.url.toString());
-            final isMainFrame = request.isForMainFrame == true;
-            CfChallengeLogger.log(
-              '[VERIFY] WebView load error: '
-              'mainFrame=$isMainFrame '
-              'host=${uri?.host ?? '-'} path=${uri?.path ?? '-'} '
-              'type=${error.type} description=${error.description}',
-              level: isMainFrame ? 'warning' : 'info',
-              fields: {
-                'isMainFrame': isMainFrame,
-                'host': uri?.host,
-                'path': uri?.path,
-                'errorType': error.type.toString(),
-                'description': error.description,
-              },
-            );
-
-            // WebView 会把脚本、图片、CF challenge-platform 等子资源错误也
-            // 上报到这里。子资源连接被刷新流程关闭时，主验证页通常仍可正常
-            // 使用；不要因此结束加载态或向用户显示整页加载失败。
-            if (!isMainFrame) return;
-
-            _pageReadyFallbackTimer?.cancel();
-            if (mounted) {
-              setState(() => _isLoading = false);
-            }
-            if (showUi) {
-              _showError(context.l10n.cf_loadFailed(error.description));
-            }
-          },
-          onReceivedHttpError: (controller, request, errorResponse) {
-            if (_hasPopped || _finishingFromVerifyResponse) return;
-            if (request.isForMainFrame == true && _isVerifyUrl(request.url)) {
-              CfChallengeLogger.log(
-                '[VERIFY] Main frame /challenge HTTP response: '
-                'status=${errorResponse.statusCode}, '
-                'headers=${errorResponse.headers}',
-              );
-            }
-            if (_isVerifyPassedResponse(request, errorResponse)) {
-              unawaited(
-                _finishVerifiedFromNetworkStatus(
-                  reason: 'main frame /challenge returned source 404',
-                  headers: errorResponse.headers,
-                ),
-              );
-              return;
-            }
-            if (_isVerifyOriginFallback(request, errorResponse)) {
-              unawaited(
-                _handleVerifyOriginFallback(
-                  _loadGeneration,
-                  reason: 'main frame /challenge returned 404',
-                  completionLikely: _hasSeenChallenge,
-                ),
-              );
-            }
-          },
+      child: InAppWebView(
+        key: _webViewKey,
+        webViewEnvironment: null,
+        initialUrlRequest: URLRequest(url: WebUri(widget.verifyUrl)),
+        initialSettings: InAppWebViewSettings(
+          javaScriptEnabled: true,
+          userAgent: AppConstants.webViewUserAgentOverride,
+          mediaPlaybackRequiresUserGesture: false,
+          useShouldOverrideUrlLoading: true,
+          useOnNavigationResponse: true,
         ),
-        getController: () => _controller,
+        initialUserScripts: _initialChallengeScripts(),
+        shouldOverrideUrlLoading: _shouldOverrideVerifyNavigation,
+        onNavigationResponse: _handleVerifyNavigationResponse,
+        onReceivedServerTrustAuthRequest: (_, challenge) =>
+            WebViewSettings.handleServerTrustAuthRequest(challenge),
+        onWebViewCreated: (controller) {
+          _controller = controller;
+          WebViewSettings.registerJsErrorReporter(controller);
+          // 注册 JS Handler，challenge-platform 响应到达时触发
+          controller.addJavaScriptHandler(
+            handlerName: 'onChallengeComplete',
+            callback: _onChallengeComplete,
+          );
+          // 注册 JS Handler，CF 验证完成后即将跳走时触发，立刻覆盖避免 404 露出
+          controller.addJavaScriptHandler(
+            handlerName: 'onChallengeNavigation',
+            callback: _onChallengeNavigation,
+          );
+        },
+        onLoadStart: (controller, url) {
+          if (_hasPopped || _finishingFromVerifyResponse) return;
+          final isCompletionNavigation = _hasSeenChallenge;
+          _loadGeneration++;
+          _challengeRevealProbeGeneration++;
+          _hasMarkedPageReady = false;
+          _hasTimedOut = false;
+          _needsManualAttention = false;
+          _challengeWebViewVisible = false;
+          _hideOriginFallbackPage = isCompletionNavigation;
+          if (!isCompletionNavigation) {
+            _checkingOriginFallback = false;
+          }
+          _originFallbackNeedsAction = false;
+          setState(() {
+            _isLoading = true;
+            _progress = 0;
+          });
+          if (isCompletionNavigation) {
+            unawaited(
+              _handleVerifyOriginFallback(
+                _loadGeneration,
+                reason: 'loadStart after challenge: ${url?.toString() ?? ''}',
+                completionLikely: true,
+              ),
+            );
+          }
+        },
+        onPageCommitVisible: (controller, url) {
+          if (_finishingFromVerifyResponse) return;
+          _handlePageReady(controller, reason: 'onPageCommitVisible');
+        },
+        onProgressChanged: (controller, progress) {
+          if (_finishingFromVerifyResponse) return;
+          _progress = progress / 100;
+          if (showUi) {
+            setState(() {});
+          }
+        },
+        onLoadStop: (controller, url) {
+          if (_finishingFromVerifyResponse) return;
+          _handlePageReady(controller, reason: 'onLoadStop');
+        },
+        onReceivedError: (controller, request, error) {
+          if (_finishingFromVerifyResponse) return;
+
+          final uri = Uri.tryParse(request.url.toString());
+          final isMainFrame = request.isForMainFrame == true;
+          CfChallengeLogger.log(
+            '[VERIFY] WebView load error: '
+            'mainFrame=$isMainFrame '
+            'host=${uri?.host ?? '-'} path=${uri?.path ?? '-'} '
+            'type=${error.type} description=${error.description}',
+            level: isMainFrame ? 'warning' : 'info',
+            fields: {
+              'isMainFrame': isMainFrame,
+              'host': uri?.host,
+              'path': uri?.path,
+              'errorType': error.type.toString(),
+              'description': error.description,
+            },
+          );
+
+          // WebView 会把脚本、图片、CF challenge-platform 等子资源错误也
+          // 上报到这里。子资源连接被刷新流程关闭时，主验证页通常仍可正常
+          // 使用；不要因此结束加载态或向用户显示整页加载失败。
+          if (!isMainFrame) return;
+
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
+          if (showUi) {
+            _showError(context.l10n.cf_loadFailed(error.description));
+          }
+        },
+        onReceivedHttpError: (controller, request, errorResponse) {
+          if (_hasPopped || _finishingFromVerifyResponse) return;
+          if (request.isForMainFrame == true && _isVerifyUrl(request.url)) {
+            CfChallengeLogger.log(
+              '[VERIFY] Main frame /challenge HTTP response: '
+              'status=${errorResponse.statusCode}, '
+              'headers=${errorResponse.headers}',
+            );
+          }
+          if (_isVerifyPassedResponse(request, errorResponse)) {
+            unawaited(
+              _finishVerifiedFromNetworkStatus(
+                reason: 'main frame /challenge returned source 404',
+                headers: errorResponse.headers,
+              ),
+            );
+            return;
+          }
+          if (_isVerifyOriginFallback(request, errorResponse)) {
+            unawaited(
+              _handleVerifyOriginFallback(
+                _loadGeneration,
+                reason: 'main frame /challenge returned 404',
+                completionLikely: _hasSeenChallenge,
+              ),
+            );
+          }
+        },
       ),
     );
   }

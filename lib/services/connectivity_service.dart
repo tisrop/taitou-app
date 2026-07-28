@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io';
-
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -50,27 +48,13 @@ class ConnectivityService {
     enableCfChallenge: false,
   );
 
-  static bool get _isFlatpakSandbox =>
-      Platform.isLinux && Platform.environment.containsKey('FLATPAK_ID');
-
-  static bool get _hasSystemBusSocket =>
-      File('/var/run/dbus/system_bus_socket').existsSync();
-
-  static bool get _canUseConnectivityPlugin =>
-      !_isFlatpakSandbox || _hasSystemBusSocket;
-
   static Future<List<ConnectivityResult>> safeCheckConnectivity() async {
-    if (!_canUseConnectivityPlugin) {
-      debugPrint(
-        '[Connectivity] Flatpak sandbox without system bus, fallback to connected state',
-      );
-      return const [ConnectivityResult.other];
-    }
-
     try {
       return await Connectivity().checkConnectivity();
     } catch (e) {
-      debugPrint('[Connectivity] checkConnectivity 失败，fallback to connected state: $e');
+      debugPrint(
+        '[Connectivity] checkConnectivity 失败，fallback to connected state: $e',
+      );
       return const [ConnectivityResult.other];
     }
   }
@@ -80,19 +64,13 @@ class ConnectivityService {
     if (_initialized) return;
     _initialized = true;
 
-    if (!_canUseConnectivityPlugin) {
-      debugPrint(
-        '[Connectivity] Flatpak sandbox missing system bus, skip connectivity_plus subscription',
-      );
-      _setConnected(true);
-      return;
-    }
-
     // 监听网络变化事件
     _connectivitySub = _connectivity.onConnectivityChanged.listen(
       _onConnectivityChanged,
       onError: (Object error, StackTrace stackTrace) {
-        debugPrint('[Connectivity] 监听网络状态失败，fallback to connected state: $error');
+        debugPrint(
+          '[Connectivity] 监听网络状态失败，fallback to connected state: $error',
+        );
         _setConnected(true);
       },
     );
@@ -113,7 +91,8 @@ class ConnectivityService {
   Future<void> _onConnectivityChanged(List<ConnectivityResult> results) async {
     debugPrint('[Connectivity] onConnectivityChanged: $results');
     VpnAutoToggleService.instance.handleConnectivityChanged(results);
-    final hasNetwork = results.isNotEmpty &&
+    final hasNetwork =
+        results.isNotEmpty &&
         !results.every((r) => r == ConnectivityResult.none);
 
     if (!hasNetwork) {
@@ -191,12 +170,14 @@ class ConnectivityService {
       _retryInFlight = true;
       try {
         final result = await safeCheckConnectivity();
-        final hasNetwork = result.isNotEmpty &&
+        final hasNetwork =
+            result.isNotEmpty &&
             !result.every((r) => r == ConnectivityResult.none);
         if (hasNetwork) {
           if (enableServerPing) {
             final reachable = await pingServer();
-            if (reachable) _setConnected(true); // _setConnected(true) 内部会调用 _stopRetry
+            if (reachable)
+              _setConnected(true); // _setConnected(true) 内部会调用 _stopRetry
           } else {
             _setConnected(true);
           }
@@ -208,7 +189,10 @@ class ConnectivityService {
       }
       // 仍未恢复，增大退避间隔并继续重试
       if (!_isConnected) {
-        _retryBackoffSeconds = (_retryBackoffSeconds * 2).clamp(1, _maxRetryBackoffSeconds);
+        _retryBackoffSeconds = (_retryBackoffSeconds * 2).clamp(
+          1,
+          _maxRetryBackoffSeconds,
+        );
         _scheduleNextRetry();
       }
     });
@@ -228,7 +212,8 @@ class ConnectivityService {
       _setConnected(reachable);
     } else {
       final result = await safeCheckConnectivity();
-      final hasNetwork = result.isNotEmpty &&
+      final hasNetwork =
+          result.isNotEmpty &&
           !result.every((r) => r == ConnectivityResult.none);
       _setConnected(hasNetwork);
     }

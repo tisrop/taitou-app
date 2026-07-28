@@ -1,21 +1,12 @@
-/// 媒体转码平台抽象(音视频压缩到站点 4MB 上限的执行层)。
+/// Android 媒体转码抽象（音视频压缩到站点 4MB 上限的执行层）。
 ///
-/// 三条实现腿(安装包零/近零增量,见 [[voice-media-upload-pipeline]]):
-/// - iOS/macOS:AVAssetReader/Writer(系统框架,H264 videotoolbox 硬编);
-/// - Android:media3 Transformer(Java 库 ~1-2MB,底层系统 MediaCodec);
-/// - Windows/Linux:进程 ffmpeg(Windows 首用时从 npmmirror 镜像下载
-///   缓存;Linux 用系统 ffmpeg)—— 见 ffmpeg_process_transcoder.dart。
+/// 原生实现使用 media3 Transformer，并由系统 MediaCodec 完成编解码。
 ///
 /// 单任务模型:同一时刻只允许一个转码任务(压缩是用户前台等待的模态
 /// 流程);progress 轮询,cancel 中断。
 library;
 
-import 'dart:io';
-
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
-
-import 'ffmpeg_process_transcoder.dart';
 
 /// 媒体探测结果。
 class MediaProbeInfo {
@@ -74,35 +65,24 @@ class TranscodeSpec {
   final int audioChannels;
 
   Map<String, Object?> toChannelMap() => {
-        'input': input,
-        'output': output,
-        'audioOnly': audioOnly,
-        'audioBitrate': audioBitrate,
-        'videoBitrate': videoBitrate,
-        'videoCodec': videoCodec,
-        'maxHeight': maxHeight,
-        'fps': fps,
-        'audioSampleRate': audioSampleRate,
-        'audioChannels': audioChannels,
-      };
+    'input': input,
+    'output': output,
+    'audioOnly': audioOnly,
+    'audioBitrate': audioBitrate,
+    'videoBitrate': videoBitrate,
+    'videoCodec': videoCodec,
+    'maxHeight': maxHeight,
+    'fps': fps,
+    'audioSampleRate': audioSampleRate,
+    'audioChannels': audioChannels,
+  };
 }
 
 abstract class MediaTranscoder {
-  /// 当前平台的转码器;null = 平台不支持(web)。桌面 ffmpeg 腿的
-  /// 可用性(Windows 未下载/Linux 未安装)由 [ensureReady] 惰性解决。
-  static MediaTranscoder? forCurrentPlatform() {
-    if (kIsWeb) return null;
-    if (Platform.isIOS || Platform.isMacOS || Platform.isAndroid) {
-      return _ChannelTranscoder.instance;
-    }
-    if (Platform.isWindows || Platform.isLinux) {
-      return FfmpegProcessTranscoder.instance;
-    }
-    return null;
-  }
+  /// 返回 Android 原生转码器。
+  static MediaTranscoder forCurrentPlatform() => _ChannelTranscoder.instance;
 
-  /// 转码前的环境准备(Windows:下载 ffmpeg;Linux:检测系统 ffmpeg;
-  /// 移动端恒 ready)。[onStatus] 回报准备进展(如下载百分比)。
+  /// Android 原生转码器无需额外准备。
   /// 返回 null = 就绪;非 null = 不可用原因(人话,直接展示)。
   Future<String?> ensureReady({void Function(String status)? onStatus}) async =>
       null;
@@ -118,7 +98,7 @@ abstract class MediaTranscoder {
   Future<void> cancel();
 }
 
-/// iOS/macOS/Android:MethodChannel 到原生实现。
+/// 通过 MethodChannel 调用 Android 原生实现。
 class _ChannelTranscoder extends MediaTranscoder {
   _ChannelTranscoder._();
   static final instance = _ChannelTranscoder._();
@@ -141,8 +121,7 @@ class _ChannelTranscoder extends MediaTranscoder {
 
   @override
   Future<bool> transcode(TranscodeSpec spec) async {
-    final res =
-        await _ch.invokeMethod<bool>('transcode', spec.toChannelMap());
+    final res = await _ch.invokeMethod<bool>('transcode', spec.toChannelMap());
     return res ?? false;
   }
 

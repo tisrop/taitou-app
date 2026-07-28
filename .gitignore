@@ -28,7 +28,6 @@ migrate_working_dir/
 
 # Flutter/Dart/Pub related
 **/doc/api/
-**/ios/Flutter/.last_build_id
 .dart_tool/
 .flutter-plugins-dependencies
 .pub-cache/
@@ -39,7 +38,6 @@ pubspec_overrides.yaml
 build/
 /coverage/
 .artifacts/
-flatpak/stage/
 
 # Symbolication related
 app.*.symbols
@@ -59,16 +57,6 @@ app.*.map.json
 # Android JNI libraries (generated from Rust)
 android/app/src/main/jniLibs/
 
-# Desktop native runtime artifacts (generated from Rust)
-windows/runner/native/*
-!windows/runner/native/.keep
-linux/runner/native/*
-!linux/runner/native/.keep
-macos/Runner/native/*
-!macos/Runner/native/.keep
-
-# iOS Rust static libraries (generated from Rust)
-ios/rust_libs/
 
 # FVM Version Cache
 .fvm/
@@ -91,21 +79,9 @@ android/app/google-services.json
 assets/certs/proxy_ca.pem
 android/app/src/main/res/raw/proxy_ca.der
 
-# Local Apple signing overrides
-apple/Local.xcconfig
-
 # L10n generated files
 lib/l10n/slang/
 lib/l10n/generated/app_localizations_compat.g.dart
-
-# DevTools extension 构建产物 (通过 tool/build_devtools_extension.sh 生成)
-extension/devtools/build/
-devtools_extension/.flutter-plugins
-devtools_extension/pubspec.lock
-
-# 桌面端随包 ffmpeg 的构建期下载缓存
-windows/.ffmpeg-cache/
-linux/.ffmpeg-cache/
 android/key.properties
 
 .codegraph

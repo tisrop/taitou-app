@@ -1,28 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' show sleep;
 import 'dart:isolate';
 import 'dart:typed_data';
 
-import 'package:path/path.dart' as p;
-
 import '../../network_logger.dart';
-import '../../../l10n/s.dart';
 import 'doh_proxy_ffi.dart';
 
-/// DOH (DNS over HTTPS) 代理服务
-/// 使用 Rust 实现的本地代理，通过 DOH 解析 DNS 并支持 ECH
+/// DOH (DNS over HTTPS) 代理服务。
 ///
-/// 在桌面平台（Windows/macOS/Linux）使用进程方式运行代理
-/// 在移动平台（Android/iOS）使用 FFI 直接调用 Rust 库
+/// Android 通过 FFI 直接调用 Rust 原生库，实现本地代理、DOH 解析与 ECH。
 class DohProxyService {
   DohProxyService._();
   static final DohProxyService instance = DohProxyService._();
-
-  // 桌面平台进程管理
-  Process? _process;
-  StreamSubscription<String>? _stdoutSubscription;
-  StreamSubscription<String>? _stderrSubscription;
 
   // 共享状态
   int? _port;
@@ -103,69 +93,27 @@ class DohProxyService {
 
     _lastError = null;
 
-    // 根据平台选择启动方式
-    if (DohProxyFfi.isAvailable) {
-      final result = await _startWithFfi(
-        preferredPort,
-        enableDoh,
-        gatewayMode,
-        preferIPv6,
-        dohServer,
-        dohServerEch,
-        serverIp,
-        upstreamProtocol,
-        upstreamHost,
-        upstreamPort,
-        upstreamUsername,
-        upstreamPassword,
-        upstreamCipher,
-        caCertPem,
-        caKeyPem,
-        h2Mitm,
-      );
-      // 桌面平台 FFI 加载失败时，回退到进程模式
-      if (!result && DohProxyFfi.canFallbackToProcess) {
-        NetworkLogger.log('[DOH] FFI 启动失败，尝试进程模式');
-        _lastError = null;
-        return _startWithProcess(
-          preferredPort,
-          enableDoh,
-          gatewayMode,
-          preferIPv6,
-          dohServer,
-          dohServerEch,
-          serverIp,
-          upstreamProtocol,
-          upstreamHost,
-          upstreamPort,
-          upstreamUsername,
-          upstreamPassword,
-          upstreamCipher,
-          h2Mitm,
-        );
-      }
-      return result;
-    } else {
-      return _startWithProcess(
-        preferredPort,
-        enableDoh,
-        gatewayMode,
-        preferIPv6,
-        dohServer,
-        dohServerEch,
-        serverIp,
-        upstreamProtocol,
-        upstreamHost,
-        upstreamPort,
-        upstreamUsername,
-        upstreamPassword,
-        upstreamCipher,
-        h2Mitm,
-      );
-    }
+    return _startWithFfi(
+      preferredPort,
+      enableDoh,
+      gatewayMode,
+      preferIPv6,
+      dohServer,
+      dohServerEch,
+      serverIp,
+      upstreamProtocol,
+      upstreamHost,
+      upstreamPort,
+      upstreamUsername,
+      upstreamPassword,
+      upstreamCipher,
+      caCertPem,
+      caKeyPem,
+      h2Mitm,
+    );
   }
 
-  /// 使用 FFI 启动代理（Android/iOS）
+  /// 使用 FFI 启动 Android 原生代理
   Future<bool> _startWithFfi(
     int port,
     bool enableDoh,
@@ -245,171 +193,9 @@ class DohProxyService {
     }
   }
 
-  /// 使用进程启动代理（桌面平台）
-  Future<bool> _startWithProcess(
-    int preferredPort,
-    bool enableDoh,
-    bool gatewayMode,
-    bool preferIPv6,
-    String? dohServer,
-    String? dohServerEch,
-    String? serverIp,
-    String? upstreamProtocol,
-    String? upstreamHost,
-    int? upstreamPort,
-    String? upstreamUsername,
-    String? upstreamPassword,
-    String? upstreamCipher,
-    bool h2Mitm,
-  ) async {
-    try {
-      final executablePath = await _getExecutablePath();
-      if (executablePath == null) {
-        _lastError = S.current.doh_executableNotFound;
-        NetworkLogger.log('[DOH] $_lastError');
-        return false;
-      }
-
-      NetworkLogger.log(
-        '[DOH] 启动代理进程: $executablePath, 模式: ${enableDoh ? "DoH 网关" : "纯上游代理"}',
-      );
-
-      // 构建命令行参数
-      final args = <String>[
-        preferredPort.toString(),
-        if (!enableDoh) '--no-doh',
-        if (gatewayMode) '--gateway',
-        if (h2Mitm) '--h2-mitm',
-        if (preferIPv6) '--ipv6',
-        if (dohServer != null && dohServer.isNotEmpty) ...['--doh', dohServer],
-        if (dohServerEch != null && dohServerEch.isNotEmpty) ...[
-          '--doh-server-ech',
-          dohServerEch,
-        ],
-        if (serverIp != null && serverIp.isNotEmpty) ...[
-          '--server-ip',
-          serverIp,
-        ],
-        if (upstreamHost != null && upstreamHost.isNotEmpty) ...[
-          '--upstream-protocol',
-          upstreamProtocol ?? 'http',
-          '--upstream-host',
-          upstreamHost,
-          if (upstreamPort != null) ...[
-            '--upstream-port',
-            upstreamPort.toString(),
-          ],
-          if (upstreamCipher != null && upstreamCipher.isNotEmpty) ...[
-            '--upstream-cipher',
-            upstreamCipher,
-          ],
-          if (upstreamUsername != null && upstreamUsername.isNotEmpty) ...[
-            '--upstream-user',
-            upstreamUsername,
-          ],
-          if (upstreamPassword != null && upstreamPassword.isNotEmpty) ...[
-            '--upstream-pass',
-            upstreamPassword,
-          ],
-        ],
-      ];
-
-      // 启动进程
-      _process = await Process.start(executablePath, args);
-
-      // 监听 stdout 获取端口信息
-      final stdoutLines = _process!.stdout
-          .transform(utf8.decoder)
-          .transform(const LineSplitter());
-
-      final completer = Completer<bool>();
-      var completed = false;
-
-      _stdoutSubscription = stdoutLines.listen((line) {
-        NetworkLogger.log('[DOH] $line');
-        // 解析端口: "DOH proxy server listening on 127.0.0.1:12345"
-        final match = RegExp(r'listening on [\d.]+:(\d+)').firstMatch(line);
-        if (match != null && !completed) {
-          _port = int.tryParse(match.group(1) ?? '');
-          _isRunning = true;
-          _currentEnableDoh = enableDoh;
-          _currentGatewayMode = gatewayMode;
-          _currentDohServer = dohServer;
-          _currentDohServerEch = dohServerEch;
-          _currentPreferIPv6 = preferIPv6;
-          _currentPreferredPort = preferredPort;
-          _currentServerIp = serverIp;
-          _currentH2Mitm = h2Mitm;
-          _currentUpstreamSignature = _buildUpstreamSignature(
-            protocol: upstreamProtocol,
-            host: upstreamHost,
-            port: upstreamPort,
-            username: upstreamUsername,
-            password: upstreamPassword,
-            cipher: upstreamCipher,
-          );
-          NetworkLogger.log('[DOH] 代理已启动，端口: $_port');
-          completed = true;
-          completer.complete(true);
-        }
-      });
-
-      // 监听 stderr
-      final stderrLines = _process!.stderr
-          .transform(utf8.decoder)
-          .transform(const LineSplitter());
-
-      _stderrSubscription = stderrLines.listen((line) {
-        NetworkLogger.log('[DOH][ERROR] $line');
-      });
-
-      // 监听进程退出
-      _process!.exitCode.then((code) {
-        NetworkLogger.log('[DOH] 进程退出，代码: $code');
-        if (!completed) {
-          _lastError = '代理进程异常退出，退出码: $code';
-          NetworkLogger.log('[DOH] $_lastError');
-        }
-        _cleanup();
-        if (!completed) {
-          completed = true;
-          completer.complete(false);
-        }
-      });
-
-      // 等待代理启动或超时
-      final result = await completer.future.timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          _lastError = S.current.doh_startTimeout;
-          NetworkLogger.log('[DOH] $_lastError');
-          return false;
-        },
-      );
-
-      if (!result) {
-        await stop();
-        return false;
-      }
-
-      return true;
-    } catch (e) {
-      _lastError = '启动失败: $e';
-      NetworkLogger.log('[DOH] $_lastError');
-      await stop();
-      return false;
-    }
-  }
-
   /// 停止 DOH 代理
   Future<void> stop() async {
-    if (DohProxyFfi.isAvailable) {
-      await _enqueueFfiOp(() async {
-        await _stopWithFfi();
-      });
-    } else {
-      await _stopWithProcess();
-    }
+    await _enqueueFfiOp(_stopWithFfi);
     _cleanup();
   }
 
@@ -423,24 +209,7 @@ class DohProxyService {
     }
   }
 
-  Future<void> _stopWithProcess() async {
-    if (_process != null) {
-      NetworkLogger.log('[DOH] 停止代理进程...');
-      _process!.kill();
-      await _process!.exitCode.timeout(
-        const Duration(seconds: 5),
-        onTimeout: () {
-          _process!.kill(ProcessSignal.sigkill);
-          return -1;
-        },
-      );
-    }
-  }
-
   void _cleanup() {
-    _stdoutSubscription?.cancel();
-    _stderrSubscription?.cancel();
-    _process = null;
     _port = null;
     _isRunning = false;
     _currentEnableDoh = null;
@@ -455,134 +224,9 @@ class DohProxyService {
     // 注意：不清除 _lastError，保留用于 UI 展示
   }
 
-  /// 获取 DOH 代理可执行文件路径（仅桌面平台）
-  Future<String?> _getExecutablePath() async {
-    // 根据平台确定可执行文件名
-    String executableName;
-    if (Platform.isWindows) {
-      executableName = 'doh_proxy_bin.exe';
-    } else if (Platform.isMacOS || Platform.isLinux) {
-      executableName = 'doh_proxy_bin';
-    } else {
-      // Android/iOS 使用 FFI，不需要可执行文件
-      return null;
-    }
-
-    // 查找可执行文件的可能位置
-    final execPath = Platform.resolvedExecutable;
-    final execDir = p.dirname(execPath);
-    final possiblePaths = <String>[
-      // 打包后：与应用程序同目录
-      p.join(execDir, executableName),
-      // 打包后：桌面平台统一收口到 native 子目录
-      p.join(execDir, 'native', executableName),
-      if (Platform.isMacOS)
-        p.join(execDir, '..', 'Resources', 'native', executableName),
-      // 打包后：assets 目录
-      p.join(execDir, 'data', 'flutter_assets', 'assets', executableName),
-      // 开发时：通过 app bundle 路径反推项目根目录
-      ...() {
-        final buildIdx = execPath.indexOf('${p.separator}build${p.separator}');
-        if (buildIdx > 0) {
-          final projectRoot = execPath.substring(0, buildIdx);
-          return [
-            if (Platform.isWindows)
-              p.join(
-                projectRoot,
-                'windows',
-                'runner',
-                'native',
-                executableName,
-              ),
-            if (Platform.isMacOS)
-              p.join(projectRoot, 'macos', 'Runner', 'native', executableName),
-            if (Platform.isLinux)
-              p.join(projectRoot, 'linux', 'runner', 'native', executableName),
-            p.join(
-              projectRoot,
-              'core',
-              'doh_proxy',
-              'target',
-              'release',
-              executableName,
-            ),
-            p.join(
-              projectRoot,
-              'core',
-              'doh_proxy',
-              'target',
-              'debug',
-              executableName,
-            ),
-          ];
-        }
-        return <String>[];
-      }(),
-      // 开发时：CWD 可能是项目根目录
-      if (Platform.isWindows)
-        p.join(
-          Directory.current.path,
-          'windows',
-          'runner',
-          'native',
-          executableName,
-        ),
-      if (Platform.isMacOS)
-        p.join(
-          Directory.current.path,
-          'macos',
-          'Runner',
-          'native',
-          executableName,
-        ),
-      if (Platform.isLinux)
-        p.join(
-          Directory.current.path,
-          'linux',
-          'runner',
-          'native',
-          executableName,
-        ),
-      p.join(
-        Directory.current.path,
-        'core',
-        'doh_proxy',
-        'target',
-        'release',
-        executableName,
-      ),
-      p.join(
-        Directory.current.path,
-        'core',
-        'doh_proxy',
-        'target',
-        'debug',
-        executableName,
-      ),
-    ];
-
-    for (final path in possiblePaths) {
-      if (File(path).existsSync()) {
-        return path;
-      }
-    }
-
-    return null;
-  }
-
-  /// 检查代理是否真正存活（通过 FFI 查询 Rust 侧状态）
-  ///
-  /// iOS 进入后台时系统会挂起进程，Rust 代理的 TCP listener 可能失效，
-  /// 但 Dart 侧的 [_isRunning] 标志位不会自动更新。
-  /// 此方法通过 FFI 查询 Rust 侧的实际运行状态来检测这种不一致。
-  ///
-  /// 返回 true 表示代理正常运行，false 表示已停止或状态不一致。
+  /// 检查代理是否真正存活（通过 FFI 查询 Rust 侧状态）。
   Future<bool> checkAlive() async {
     if (!_isRunning) return false;
-    if (!DohProxyFfi.isAvailable) {
-      // 进程模式：检查进程是否存活
-      return _process != null;
-    }
     try {
       final status = await _callFfiStatus();
       final running = status['running'] as bool? ?? false;
@@ -606,9 +250,8 @@ class DohProxyService {
     return null;
   }
 
-  /// 生成新的 CA 证书（仅 FFI 可用时）
+  /// 生成新的 CA 证书
   Future<({String certPem, String keyPem})?> generateCa() async {
-    if (!DohProxyFfi.isAvailable) return null;
     return _enqueueFfiOp(() async {
       final sendPort = await _ensureFfiIsolate();
       final response = ReceivePort();
@@ -626,9 +269,6 @@ class DohProxyService {
   }
 
   Future<Uint8List?> lookupEchConfig(String host, String dohServer) async {
-    if (!DohProxyFfi.isAvailable) {
-      return DohProxyFfi.instance.lookupEchConfig(host, dohServer);
-    }
     return _enqueueFfiOp(() => _callFfiLookupEchConfig(host, dohServer));
   }
 
@@ -637,14 +277,6 @@ class DohProxyService {
     String dohServer, {
     bool preferIpv6 = false,
   }) async {
-    if (!DohProxyFfi.isAvailable) {
-      return DohProxyFfi.instance.lookupIp(
-            host,
-            dohServer,
-            preferIpv6: preferIpv6,
-          ) ??
-          const [];
-    }
     return _enqueueFfiOp(
       () => _callFfiLookupIp(host, dohServer, preferIpv6: preferIpv6),
     );
@@ -657,15 +289,6 @@ class DohProxyService {
     bool preferIpv6 = false,
     bool forceRefresh = false,
   }) async {
-    if (!DohProxyFfi.isAvailable) {
-      return DohProxyFfi.instance.lookupHost(
-        host,
-        dohServer,
-        dohServerEch: dohServerEch,
-        preferIpv6: preferIpv6,
-        forceRefresh: forceRefresh,
-      );
-    }
     return _enqueueFfiOp(
       () => _callFfiLookupHost(
         host,
@@ -678,23 +301,14 @@ class DohProxyService {
   }
 
   Future<bool> clearDnsCache() async {
-    if (!DohProxyFfi.isAvailable) {
-      return DohProxyFfi.instance.clearDnsCache();
-    }
     return _enqueueFfiOp(_callFfiClearDnsCache);
   }
 
   Future<DohDnsCacheStats?> dnsCacheStats() async {
-    if (!DohProxyFfi.isAvailable) {
-      return DohProxyFfi.instance.dnsCacheStats();
-    }
     return _enqueueFfiOp(_callFfiDnsCacheStats);
   }
 
   Future<List<DohDnsCacheRecord>?> dnsCacheRecords() async {
-    if (!DohProxyFfi.isAvailable) {
-      return DohProxyFfi.instance.dnsCacheRecords();
-    }
     return _enqueueFfiOp(_callFfiDnsCacheRecords);
   }
 
@@ -705,15 +319,6 @@ class DohProxyService {
     bool preferIpv6 = false,
     required String ip,
   }) async {
-    if (!DohProxyFfi.isAvailable) {
-      return DohProxyFfi.instance.recordHostSuccess(
-        host,
-        dohServer,
-        dohServerEch: dohServerEch,
-        preferIpv6: preferIpv6,
-        ip: ip,
-      );
-    }
     return _enqueueFfiOp(
       () => _callFfiRecordHostSuccess(
         host,
@@ -731,14 +336,6 @@ class DohProxyService {
     String? dohServerEch,
     bool preferIpv6 = false,
   }) async {
-    if (!DohProxyFfi.isAvailable) {
-      return DohProxyFfi.instance.clearPreferredHostIp(
-        host,
-        dohServer,
-        dohServerEch: dohServerEch,
-        preferIpv6: preferIpv6,
-      );
-    }
     return _enqueueFfiOp(
       () => _callFfiClearPreferredHostIp(
         host,

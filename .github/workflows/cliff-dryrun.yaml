@@ -62,14 +62,3 @@ jobs:
           if [ -n "$PREV" ]; then RANGE="${PREV}..${TAG}"; else RANGE="$TAG"; fi
           echo "范围 = $RANGE"
           git cliff "$RANGE" --strip header --ignore-tags '.*-(alpha|beta|rc).*'
-
-      - name: Mode 3 - AltStore plain text (stable 模拟)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "============================================================"
-          echo "Mode 3: AltStore plain notes（仅 stable 跑，所以始终带 ignore-tags）"
-          echo "用途：AltStore source.json 的 localizedDescription"
-          echo "============================================================"
-          git cliff --current --strip all --ignore-tags '.*-(alpha|beta|rc).*' \
-            --body "$(cat .github/cliff-plain.tera)"

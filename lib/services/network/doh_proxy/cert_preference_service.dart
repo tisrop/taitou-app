@@ -1,36 +1,29 @@
-import 'dart:io';
-
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 证书偏好服务
 ///
-/// 管理是否使用 per-device CA 证书的偏好设置。
-/// iOS 强制使用 per-device CA（Network.framework 限制），
-/// 其他平台可选启用。
+/// 管理 Android 是否使用 per-device CA 证书的偏好设置。
 class CertPreferenceService {
   CertPreferenceService._();
 
   static const _usePerDeviceKey = 'cert_use_per_device';
 
-  /// iOS/macOS 必须使用 per-device CA
-  /// macOS: WKWebView CONNECT 代理需要系统钥匙串信任，per-device CA 避免每次更新都要重新信任
-  static bool get isPerDeviceRequired => Platform.isIOS || Platform.isMacOS;
+  /// Android 不强制使用 per-device CA。
+  static bool get isPerDeviceRequired => false;
 
-  /// 非 iOS/macOS 平台 per-device 为可选项
-  static bool get isPerDeviceOptional => !isPerDeviceRequired;
+  /// Android 可选使用 per-device CA。
+  static bool get isPerDeviceOptional => true;
 
   /// 是否使用 per-device CA
   ///
-  /// iOS/macOS 强制返回 true（平台要求），其他平台读取用户偏好
+  /// 从本地偏好读取 Android 的 per-device CA 开关。
   static Future<bool> usePerDevice() async {
-    if (isPerDeviceRequired) return true;
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_usePerDeviceKey) ?? false;
   }
 
-  /// 设置是否使用 per-device CA（仅对非 iOS/macOS 平台生效）
+  /// 设置 Android 是否使用 per-device CA。
   static Future<void> setUsePerDevice(bool value) async {
-    if (isPerDeviceRequired) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_usePerDeviceKey, value);
   }

@@ -1,11 +1,8 @@
-import 'dart:io' as io;
-
 import 'package:enhanced_cookie_jar/enhanced_cookie_jar.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'cookie_full_info.dart';
-import 'raw_cookie_writer_fallback.dart';
 
 /// 通过原生平台通道写入 / 读取 / 删除 WebView cookie store。
 ///
@@ -15,10 +12,7 @@ import 'raw_cookie_writer_fallback.dart';
 /// [getAllCookieInfos] / [countCookiesByName] 用于 Sentinel 内核（参见
 /// `docs/cookie-sync-design-v0.4.0.md` §5.4）。
 ///
-/// 平台支持矩阵:
-/// - Android / iOS / macOS: native method channel `com.fluxdo/raw_cookie`
-/// - Windows / Linux: Dart 层 [RawCookieWriterFallback] 包装
-///   flutter_inappwebview 的 CookieManager (无需 native)
+/// 通过 Android native method channel `com.fluxdo/raw_cookie` 实现。
 class RawCookieWriter {
   RawCookieWriter._();
   static final instance = RawCookieWriter._();
@@ -30,30 +24,14 @@ class RawCookieWriter {
     '_forum_session',
   };
 
-  /// 当前平台是否有 native method channel 实现。
-  bool get _hasNativeChannel =>
-      io.Platform.isAndroid || io.Platform.isIOS || io.Platform.isMacOS;
-
-  /// 当前平台是否走 Dart fallback (flutter_inappwebview CookieManager)。
-  bool get _hasDartFallback => io.Platform.isWindows || io.Platform.isLinux;
-
-  /// 是否支持当前平台 (native 或 Dart fallback 任一可用即支持)。
-  bool get isSupported => _hasNativeChannel || _hasDartFallback;
+  bool get isSupported => true;
 
   /// 通过原始 Set-Cookie 头字符串写入 cookie。
   ///
   /// [url] — cookie 所属的站点 URL
   /// [rawSetCookie] — 原始 Set-Cookie 头（如 `_t=xxx; path=/; secure; httponly`）
   ///
-  /// 各平台实现：
-  /// - Android: `CookieManager.setCookie(url, rawSetCookie)`
-  /// - iOS/macOS: `HTTPCookie.cookies(withResponseHeaderFields:for:)` → `WKHTTPCookieStore.setCookie`
-  ///   默认同时写入 `HTTPCookieStorage.shared`；[writeSharedStorage] 可关闭
-  ///   shared storage 写入，用于避免 Apple 平台对特定 HttpOnly domain cookie
-  ///   产生双份 WK 变体。
-  ///   `cf_clearance` 会强制 WK-only 写入，防止 shared storage 与 WK store
-  ///   双写后在 WebKit 中出现两个同名变体。
-  /// - Linux: `soup_cookie_jar_set_cookie(jar, uri, rawSetCookie)`
+  /// Android 原生实现调用 `CookieManager.setCookie(url, rawSetCookie)`。
   Future<bool> setRawCookie(
     String url,
     String rawSetCookie, {
@@ -64,13 +42,6 @@ class RawCookieWriter {
       rawSetCookie,
       requested: writeSharedStorage,
     );
-    if (_hasDartFallback) {
-      return RawCookieWriterFallback.instance.setRawCookie(
-        url,
-        rawSetCookie,
-        writeSharedStorage: effectiveWriteSharedStorage,
-      );
-    }
     try {
       final result = await _channel.invokeMethod<bool>('setRawCookie', {
         'url': url,
@@ -142,14 +113,6 @@ class RawCookieWriter {
     required List<String?> domainCandidates,
     required List<String> pathCandidates,
   }) async {
-    if (_hasDartFallback) {
-      return RawCookieWriterFallback.instance.nukeAllVariants(
-        url: url,
-        name: name,
-        domainCandidates: domainCandidates,
-        pathCandidates: pathCandidates,
-      );
-    }
     try {
       final result = await _channel.invokeMethod<int>('nukeAllVariants', {
         'url': url,
@@ -169,24 +132,13 @@ class RawCookieWriter {
 
   /// 精确删除指定 `(name, domain, path)` 的单条 cookie 变体。
   ///
-  /// iOS / macOS：`WKHTTPCookieStore.delete(HTTPCookie)` 精确匹配。
-  /// Android：退化为 `nukeAllVariants` 的单组合调用（domain/path 必须与设置时一致）。
-  ///
-  /// 验证项：V1（iOS HTTPCookie host-only 行为）。
+  /// Android 退化为 `nukeAllVariants` 的单组合调用，domain/path 必须与设置时一致。
   Future<bool> deleteExactCookie({
     required String url,
     required String name,
     required String? domain,
     required String path,
   }) async {
-    if (_hasDartFallback) {
-      return RawCookieWriterFallback.instance.deleteExactCookie(
-        url: url,
-        name: name,
-        domain: domain,
-        path: path,
-      );
-    }
     try {
       final result = await _channel.invokeMethod<bool>('deleteExactCookie', {
         'url': url,
@@ -206,16 +158,11 @@ class RawCookieWriter {
 
   /// 读取指定 url 下所有 cookie 的完整信息。
   ///
-  /// 平台差异：
-  /// - iOS / macOS：`WKHTTPCookieStore.getAllCookies()` 返回完整字段
-  /// - Android（新 WebView）：通过 `WebViewCompat.getCookieInfo` 返回完整字段
-  /// - Android（旧 WebView）：仅能拿到 name + value，其它字段为 null
+  /// 新版 Android WebView 通过 `WebViewCompat.getCookieInfo` 返回完整字段；
+  /// 旧版 WebView 只能返回 name + value。
   ///
   /// 验证项：V12（flutter_inappwebview Android getCookies 实际行为）。
   Future<List<CookieFullInfo>> getAllCookieInfos(String url) async {
-    if (_hasDartFallback) {
-      return RawCookieWriterFallback.instance.getAllCookieInfos(url);
-    }
     try {
       final raw = await _channel.invokeListMethod<Map<dynamic, dynamic>>(
         'getAllCookieInfos',
@@ -249,14 +196,10 @@ class RawCookieWriter {
 
   /// 统计指定 url 下 cookie name 的变体数量。
   ///
-  /// 在 Android 上基于 `CookieManager.getCookie(url)` 拼接字符串拆分计数。
-  /// 在 iOS 上基于 `getAllCookies` 过滤。
+  /// 基于 Android `CookieManager.getCookie(url)` 拼接字符串拆分计数。
   ///
   /// 比 [getAllCookieInfos] 更轻量，仅返回数量不返回内容。
   Future<int> countCookiesByName(String url, String name) async {
-    if (_hasDartFallback) {
-      return RawCookieWriterFallback.instance.countCookiesByName(url, name);
-    }
     try {
       final result = await _channel.invokeMethod<int>('countCookiesByName', {
         'url': url,

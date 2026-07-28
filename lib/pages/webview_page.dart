@@ -1,5 +1,3 @@
-import 'dart:io' as io;
-
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
@@ -13,7 +11,6 @@ import '../services/app_link_service.dart';
 import '../services/network/cookie/cookie_store_observer.dart';
 import '../services/network/cookie/webview_cookie_priming.dart';
 import '../services/webview_settings.dart';
-import '../services/windows_webview_environment_service.dart';
 import '../widgets/common/app_link_confirm_dialog.dart';
 import '../providers/web_bookmark_provider.dart';
 import '../providers/web_history_provider.dart';
@@ -63,7 +60,6 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
   /// hybrid composition（Android）/HWND（Windows）实时回读造成卡顿。
   Uint8List? _webViewSnapshot;
 
-
   @override
   void initState() {
     super.initState();
@@ -83,9 +79,6 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final windowsWebViewEnvironment =
-        WindowsWebViewEnvironmentService.instance.environment;
-
     final theme = Theme.of(context);
     final isBookmarked = ref.watch(
       webBookmarkProvider.select(
@@ -190,8 +183,7 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
                   value: 'toggle_bookmark',
                   child: Row(
                     children: [
-                      Icon(Symbols.star_rounded, fill: isBookmarked ? 1 : 0,
-                      ),
+                      Icon(Symbols.star_rounded, fill: isBookmarked ? 1 : 0),
                       const SizedBox(width: 8),
                       Text(
                         isBookmarked
@@ -226,143 +218,129 @@ class _WebViewPageState extends ConsumerState<WebViewPage> {
           ],
         ),
         body: Column(
-              children: [
-                if (_isLoading)
-                  M3eLinearProgress(
-                    value: _progress,
-                    trackColor: theme.colorScheme.surfaceContainerHighest,
-                  ),
-                Expanded(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Offstage(
-                        offstage: _webViewSnapshot != null,
-                        child: WebViewSettings.wrapWithScrollFix(
-                      InAppWebView(
-                            webViewEnvironment: windowsWebViewEnvironment,
-                            initialSettings: WebViewSettings.visible
-                              ..useShouldOverrideUrlLoading = true,
-                            initialUserScripts:
-                                WebViewSettings.compatPolyfillScripts,
-                            shouldOverrideUrlLoading:
-                                _shouldOverrideUrlLoading,
-                            onReceivedServerTrustAuthRequest: (_, challenge) =>
-                                WebViewSettings.handleServerTrustAuthRequest(
-                                  challenge,
-                                ),
-                            onWebViewCreated: (controller) async {
-                              _controller = controller;
-                              // 老 WKWebView 的 JS 运行时错误回传到 LogWriter。
-                              WebViewSettings.registerJsErrorReporter(controller);
-                              if (widget.url.isNotEmpty) {
-                                // v0.4.0: 取代 RawSetCookieQueue.flush
-                                await WebViewCookiePriming.instance
-                                    .prime(widget.url);
-                                await controller.loadUrl(
-                                  urlRequest:
-                                      URLRequest(url: WebUri(widget.url)),
-                                );
-                              }
-                              // Android: 启用 WebAuthn/PassKey 支持
-                              if (io.Platform.isAndroid) {
-                                WidgetsBinding.instance
-                                    .addPostFrameCallback((_) {
-                                  const MethodChannel('com.fluxdo/webauthn')
-                                      .invokeMethod('enableWebAuthentication');
-                                });
-                              }
-                            },
-                            onLoadStart: (controller, url) {
-                              setState(() {
-                                _isLoading = true;
-                                _currentUrl = url?.toString() ?? '';
-                              });
-                            },
-                            onProgressChanged: (controller, progress) {
-                              setState(() => _progress = progress / 100);
-                            },
-                            onLoadStop: (controller, url) async {
-                              setState(() => _isLoading = false);
-                              // 触发 cookie observer sweep (Android 主要触发点;
-                              // Apple 平台 native observer 已有覆盖, 此处与 debounce
-                              // 合并不会重复 sweep)
-                              CookieStoreObserver.instance.notifyExternalChange();
-                              await WebViewSettings.injectScrollFix(controller);
-                              final title = await controller.getTitle();
-                              final canGoBack = await controller.canGoBack();
-                              final canGoForward =
-                                  await controller.canGoForward();
-                              final urlString = url?.toString();
-                              setState(() {
-                                _currentUrl = urlString ?? '';
-                                _canGoBack = canGoBack;
-                                _canGoForward = canGoForward;
-                                if (title != null && title.isNotEmpty) {
-                                  _currentTitle = title;
-                                }
-                              });
-                              if (widget.injectCss != null) {
-                                await controller.injectCSSCode(
-                                  source: widget.injectCss!,
-                                );
-                              }
-                              // 记录浏览历史
-                              if (urlString != null && urlString.isNotEmpty) {
-                                ref
-                                    .read(webHistoryProvider.notifier)
-                                    .record(urlString, _currentTitle);
-                              }
-                            },
-                            onUpdateVisitedHistory:
-                                (controller, url, isReload) async {
-                                  final canGoBack =
-                                      await controller.canGoBack();
-                                  final canGoForward =
-                                      await controller.canGoForward();
-                                  final urlString = url?.toString();
-                                  setState(() {
-                                    _currentUrl = urlString ?? '';
-                                    _canGoBack = canGoBack;
-                                    _canGoForward = canGoForward;
-                                  });
-                                },
-                            onTitleChanged: (controller, title) {
-                              if (title != null && title.isNotEmpty) {
-                                setState(() => _currentTitle = title);
-                              }
-                            },
-                            onDownloadStarting: (controller, request) {
-                              final url = request.url.toString();
-                              ref
-                                  .read(downloadProvider.notifier)
-                                  .startDownload(
-                                    url: url,
-                                    suggestedFilename:
-                                        request.suggestedFilename,
-                                    mimeType: request.mimeType,
-                                    contentLength: request.contentLength,
-                                  );
-                              return null;
-                            },
+          children: [
+            if (_isLoading)
+              M3eLinearProgress(
+                value: _progress,
+                trackColor: theme.colorScheme.surfaceContainerHighest,
+              ),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Offstage(
+                    offstage: _webViewSnapshot != null,
+                    child: InAppWebView(
+                      initialSettings: WebViewSettings.visible
+                        ..useShouldOverrideUrlLoading = true,
+                      initialUserScripts: WebViewSettings.compatPolyfillScripts,
+                      shouldOverrideUrlLoading: _shouldOverrideUrlLoading,
+                      onReceivedServerTrustAuthRequest: (_, challenge) =>
+                          WebViewSettings.handleServerTrustAuthRequest(
+                            challenge,
                           ),
-                          getController: () => _controller,
+                      onWebViewCreated: (controller) async {
+                        _controller = controller;
+                        // 将页面 JavaScript 运行时错误回传到 LogWriter。
+                        WebViewSettings.registerJsErrorReporter(controller);
+                        if (widget.url.isNotEmpty) {
+                          // v0.4.0: 取代 RawSetCookieQueue.flush
+                          await WebViewCookiePriming.instance.prime(widget.url);
+                          await controller.loadUrl(
+                            urlRequest: URLRequest(url: WebUri(widget.url)),
+                          );
+                        }
+                        // 启用 Android WebAuthn/PassKey 支持。
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          const MethodChannel(
+                            'com.fluxdo/webauthn',
+                          ).invokeMethod('enableWebAuthentication');
+                        });
+                      },
+                      onLoadStart: (controller, url) {
+                        setState(() {
+                          _isLoading = true;
+                          _currentUrl = url?.toString() ?? '';
+                        });
+                      },
+                      onProgressChanged: (controller, progress) {
+                        setState(() => _progress = progress / 100);
+                      },
+                      onLoadStop: (controller, url) async {
+                        setState(() => _isLoading = false);
+                        // 触发 cookie observer sweep (Android 主要触发点;
+                        // Apple 平台 native observer 已有覆盖, 此处与 debounce
+                        // 合并不会重复 sweep)
+                        CookieStoreObserver.instance.notifyExternalChange();
+                        final title = await controller.getTitle();
+                        final canGoBack = await controller.canGoBack();
+                        final canGoForward = await controller.canGoForward();
+                        final urlString = url?.toString();
+                        setState(() {
+                          _currentUrl = urlString ?? '';
+                          _canGoBack = canGoBack;
+                          _canGoForward = canGoForward;
+                          if (title != null && title.isNotEmpty) {
+                            _currentTitle = title;
+                          }
+                        });
+                        if (widget.injectCss != null) {
+                          await controller.injectCSSCode(
+                            source: widget.injectCss!,
+                          );
+                        }
+                        // 记录浏览历史
+                        if (urlString != null && urlString.isNotEmpty) {
+                          ref
+                              .read(webHistoryProvider.notifier)
+                              .record(urlString, _currentTitle);
+                        }
+                      },
+                      onUpdateVisitedHistory:
+                          (controller, url, isReload) async {
+                            final canGoBack = await controller.canGoBack();
+                            final canGoForward = await controller
+                                .canGoForward();
+                            final urlString = url?.toString();
+                            setState(() {
+                              _currentUrl = urlString ?? '';
+                              _canGoBack = canGoBack;
+                              _canGoForward = canGoForward;
+                            });
+                          },
+                      onTitleChanged: (controller, title) {
+                        if (title != null && title.isNotEmpty) {
+                          setState(() => _currentTitle = title);
+                        }
+                      },
+                      onDownloadStarting: (controller, request) {
+                        final url = request.url.toString();
+                        ref
+                            .read(downloadProvider.notifier)
+                            .startDownload(
+                              url: url,
+                              suggestedFilename: request.suggestedFilename,
+                              mimeType: request.mimeType,
+                              contentLength: request.contentLength,
+                            );
+                        return null;
+                      },
+                    ),
+                  ),
+                  if (_webViewSnapshot != null)
+                    Positioned.fill(
+                      child: RepaintBoundary(
+                        child: Image.memory(
+                          _webViewSnapshot!,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
                         ),
                       ),
-                      if (_webViewSnapshot != null)
-                        Positioned.fill(
-                          child: RepaintBoundary(
-                            child: Image.memory(
-                              _webViewSnapshot!,
-                              fit: BoxFit.cover,
-                              gaplessPlayback: true,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

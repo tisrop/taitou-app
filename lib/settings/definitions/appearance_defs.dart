@@ -1,7 +1,5 @@
-import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
@@ -149,75 +147,71 @@ List<SettingsGroup> buildAppearanceGroups(BuildContext context) {
       ],
     ),
 
-    // ── 应用图标（仅 iOS/Android）────────────────────────────────
+    // ── 应用图标 ────────────────────────────────────────────────
     SettingsGroup(
       title: l10n.appearance_appIcon,
       icon: Symbols.app_shortcut_rounded,
       wrapInCard: false,
       items: [
-        PlatformConditionalModel(
-          condition: () => !kIsWeb && (Platform.isIOS || Platform.isAndroid),
-          inner: CustomModel(
-            id: 'appIcon',
-            title: l10n.appearance_appIcon,
-            builder: (context, ref) {
-              final iconState = ref.watch(appIconProvider);
-              final theme = Theme.of(context);
-              final isDark = theme.brightness == Brightness.dark;
-              final l10n = context.l10n;
+        CustomModel(
+          id: 'appIcon',
+          title: l10n.appearance_appIcon,
+          builder: (context, ref) {
+            final iconState = ref.watch(appIconProvider);
+            final theme = Theme.of(context);
+            final isDark = theme.brightness == Brightness.dark;
+            final l10n = context.l10n;
 
-              final options = [
-                (
-                  AppIconStyle.classic,
-                  l10n.appearance_iconClassic,
-                  isDark
-                      ? 'assets/images/icon_default_dark_preview.png'
-                      : 'assets/images/icon_default_preview.png',
-                ),
-                (
-                  AppIconStyle.modern,
-                  l10n.appearance_iconModern,
-                  isDark
-                      ? 'assets/images/icon_modern_preview.png'
-                      : 'assets/images/icon_modern_light_preview.png',
-                ),
-              ];
+            final options = [
+              (
+                AppIconStyle.classic,
+                l10n.appearance_iconClassic,
+                isDark
+                    ? 'assets/images/icon_default_dark_preview.png'
+                    : 'assets/images/icon_default_preview.png',
+              ),
+              (
+                AppIconStyle.modern,
+                l10n.appearance_iconModern,
+                isDark
+                    ? 'assets/images/icon_modern_preview.png'
+                    : 'assets/images/icon_modern_light_preview.png',
+              ),
+            ];
 
-              // 与主题模式卡片同宽（400 宽放 3 张 → 2 张为 264）
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 264),
-                  child: Row(
-                    children: [
-                      for (int i = 0; i < options.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 12),
-                        Expanded(
-                          child: _AppIconCard(
-                            label: options[i].$2,
-                            assetPath: options[i].$3,
-                            isSelected:
-                                iconState.currentStyle == options[i].$1,
-                            isChanging: iconState.isChanging,
-                            onTap: () async {
-                              final success = await ref
-                                  .read(appIconProvider.notifier)
-                                  .setIconStyle(options[i].$1);
-                              if (!success) {
-                                ToastService.showError(
-                                  l10n.appearance_switchIconFailed,
-                                );
-                              }
-                            },
-                          ),
+            // 与主题模式卡片同宽（400 宽放 3 张 → 2 张为 264）
+            return Align(
+              alignment: Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 264),
+                child: Row(
+                  children: [
+                    for (int i = 0; i < options.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 12),
+                      Expanded(
+                        child: _AppIconCard(
+                          label: options[i].$2,
+                          assetPath: options[i].$3,
+                          isSelected: iconState.currentStyle == options[i].$1,
+                          isChanging: iconState.isChanging,
+                          onTap: () async {
+                            final success = await ref
+                                .read(appIconProvider.notifier)
+                                .setIconStyle(options[i].$1);
+                            if (!success) {
+                              ToastService.showError(
+                                l10n.appearance_switchIconFailed,
+                              );
+                            }
+                          },
                         ),
-                      ],
+                      ),
                     ],
-                  ),
+                  ],
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         ),
       ],
     ),
@@ -272,22 +266,17 @@ List<SettingsGroup> buildAppearanceGroups(BuildContext context) {
       title: l10n.appearance_displayMode,
       icon: Symbols.monitor_rounded,
       items: [
-        PlatformConditionalModel(
-          condition: () => !kIsWeb && Platform.isAndroid,
-          inner: ActionModel(
-            id: 'displayMode',
-            title: l10n.appearance_displayMode,
-            icon: Symbols.monitor_heart_rounded,
-            getDynamicSubtitle: (ref) {
-              final rate = ref
-                  .watch(preferencesProvider)
-                  .displayModeRefreshRate;
-              return rate == 0
-                  ? context.l10n.appearance_displayModeAuto
-                  : '${rate}Hz';
-            },
-            onTap: (context, ref) => _showDisplayModeSheet(context, ref),
-          ),
+        ActionModel(
+          id: 'displayMode',
+          title: l10n.appearance_displayMode,
+          icon: Symbols.monitor_heart_rounded,
+          getDynamicSubtitle: (ref) {
+            final rate = ref.watch(preferencesProvider).displayModeRefreshRate;
+            return rate == 0
+                ? context.l10n.appearance_displayModeAuto
+                : '${rate}Hz';
+          },
+          onTap: (context, ref) => _showDisplayModeSheet(context, ref),
         ),
       ],
     ),
@@ -756,7 +745,10 @@ class _AppIconCard extends StatelessWidget {
                         Container(
                           color: Colors.black26,
                           child: const Center(
-                            child: LoadingSpinner(size: 24, color: Colors.white),
+                            child: LoadingSpinner(
+                              size: 24,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                     ],
@@ -1292,7 +1284,10 @@ class _ThemeColorSectionState extends ConsumerState<_ThemeColorSection> {
                                 setState(() => _removableColor = null);
                               },
                               iconSize: 28,
-                              icon: Icon(Symbols.delete_rounded, color: cs.primary),
+                              icon: Icon(
+                                Symbols.delete_rounded,
+                                color: cs.primary,
+                              ),
                             ),
                           ),
                       ],

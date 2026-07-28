@@ -1,142 +1,91 @@
-# 发版与 iOS IPA
+# Android 发版说明
 
-## 版本亮点(stable 发版前)
+本仓库只发布 Android APK。稳定版和预发布版都通过版本 tag 触发 `.github/workflows/android-release.yaml`。
 
-stable 版本的发布日志正文取自 `highlights/v<版本>.md`（用户视角亮点）。Android Release 会生成
-「版本亮点 + 分类变更 + Contributors + Full Changelog」正文，其中完整 commit 明细折叠在
-`<details>` 中；亮点文件缺失时自动退回分类变更，不会只留下 Full Changelog。贡献者优先使用
-GitHub 用户名，并自动排除 `github-actions[bot]`、Dependabot 等机器人账号。
-
-发版前在 Claude Code 里运行 `/release-highlights` 起草,人工修订后提交(tag 必须打在包含该文件的
-commit 上),写作约定见 `highlights/README.md`。beta / rc 不需要亮点文件。
-
-修改 release notes 生成脚本或 `highlights/` 后，`Refresh Release Notes` 会自动刷新最新 stable release。
-也可以在 GitHub Actions 手动运行它并输入历史 tag（例如 `v0.2.26`）。这个 workflow 不构建、
-不上传 APK，一般几分钟内完成。
-
-## 标准入口
-
-本地开发推荐直接使用 `just`：
-
-```bash
-just release
-just release patch
-just release minor
-just prerelease
-just prerelease next --preid beta
-just prerelease patch --preid rc
-just release 0.1.0
-just prerelease 0.1.0-beta.0
-just ipa
-just ipa 0.2.3
-```
-
-如果参数以 `-` 开头，记得用 `--` 分隔，例如：
-
-```bash
-just release -- patch --dry-run
-```
-
-自动化、CI 或脚本化场景直接调用 Dart 入口：
-
-```bash
-dart run tool/release.dart --track release
-dart run tool/release.dart --track release patch
-dart run tool/release.dart --track release minor
-dart run tool/release.dart --track prerelease
-dart run tool/release.dart --track prerelease next --preid beta
-dart run tool/release.dart --track prerelease patch --preid rc
-dart run tool/release.dart --track release 0.1.0
-dart run tool/release.dart --track prerelease 0.1.0-beta.0
-dart run tool/build_ipa_nosign.dart
-dart run tool/build_ipa_nosign.dart 0.2.3
-```
-
-## `release` 会做什么
-
-- 稳定版通道使用 `patch/minor/major`
-- 预发布通道使用 `patch/minor/major/next`
-- 兼容模式下仍接受旧的 `prepatch/preminor/premajor/prerelease`
-- 优先用最新 Git tag 作为版本计算基线；同核心版本时不会丢失预发布序列
-- 终端支持时使用 `dart_console` 提供选择式 CLI UI；在 IDE / 无 TTY 场景下自动退回普通行输入
-- 不传版本参数时进入交互式选择，可直接在终端里选发版类型、预发布标识和 `dry-run`
-- 校验版本号格式
-- 检查当前目录是否为 Git 仓库
-- 检查工作区是否干净
-- 检查 tag 是否已存在
-- 执行发版前检查（`just release-check` / `dart run tool/project_tasks.dart release:prepare`）
-- 更新 `pubspec.yaml` 版本号
-- 创建 commit、tag，并推送到远端
-
-## Android GitHub Actions 签名
-
-`Android Release` 工作流需要配置 `ANDROID_KEYSTORE_BASE64`，并推荐使用
-`ANDROID_KEY_PROPERTIES` 保存本地 `android/key.properties` 的完整内容。这样 CI 与本地会使用同一组
-`storePassword`、`keyAlias` 和 `keyPassword`，避免拆分 secret 时录入不一致。
-
-```bash
-base64 -i android/app/taitou-release.jks | pbcopy
-cat android/key.properties | pbcopy
-```
-
-分别把两次复制的内容保存到仓库 Actions secrets：
-
-- `ANDROID_KEYSTORE_BASE64`
-- `ANDROID_KEY_PROPERTIES`
-
-工作流会在正式构建前用 `keytool` 校验 keystore 口令、alias 和私钥口令，配置不匹配时会立即失败，
-不会等到 `packageRelease` 阶段才报错。为兼容旧配置，未设置 `ANDROID_KEY_PROPERTIES` 时仍可使用
-`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD` 三个拆分 secret。
-
-## 使用约束
-
-- 发版前请确保所有改动已提交或已暂存清理
-- 默认建议在 `main` 分支执行；非 `main` 会在最终摘要中提示
-- 本地人工稳定版发版使用 `just release`
-- 本地人工预发布发版使用 `just prerelease`
-- 自动化或 CI 场景直接使用 `dart run tool/release.dart ...`
-- 预发布版本通过 `--preid` 指定 `beta` / `rc`
-- iOS 无签名 IPA 只能在 macOS 上打包
-- `ios:ipa-nosign` 不传版本号时，会默认读取 `pubspec.yaml` 当前版本并进入确认
-
-## 常用示例
-
-```bash
-# 交互式选择发版类型
-just release
-
-# 日常修复发版
-just release patch
-
-# 跳过 analyze 和 test，直接进入版本提交/tag 流程
-just release -- patch --skip-analyze --skip-test -y
-
-# 新增功能发版
-just release minor
-
-# 开始一轮 beta
-just prerelease patch --preid beta
-
-# 继续 beta.1 -> beta.2
-just prerelease next --preid beta
-
-# 交互式输入 IPA 版本并确认构建
-just ipa
-
-# 跳过最终确认
-just release patch -y
-
-# 只预览，不真正写入和推送
-just release -- minor --dry-run
-```
-
-如果你是在某些 IDE 终端或无 TTY 场景下执行，交互确认仍然异常，直接加 `-y` / `--yes` 即可。
-
-## 相关命令
+## 发版前检查
 
 ```bash
 just release-check
-dart run tool/project_tasks.dart release:prepare
-dart run tool/project_tasks.dart native:prepare ios --release
-dart run tool/flutterw.dart build ios --release --no-codesign
 ```
+
+默认会执行项目预处理、静态分析和工作区测试。需要临时跳过时可使用：
+
+```bash
+just release-check -- --skip-analyze
+just release-check -- --skip-test
+```
+
+## 创建版本
+
+稳定版：
+
+```bash
+just release -- patch
+# 也可使用 minor、major 或明确版本号
+```
+
+预发布版：
+
+```bash
+just prerelease -- patch --preid beta
+```
+
+发版工具会更新 `pubspec.yaml` 版本、创建提交和 tag，并按交互确认结果推送。稳定版可在 `highlights/v<版本>.md` 中维护用户视角的版本亮点。
+
+## 本地构建 APK
+
+按 ABI 分包，适合正式分发：
+
+```bash
+./scripts/build-android.sh
+```
+
+构建单个全 ABI APK：
+
+```bash
+./scripts/build-android.sh --universal
+```
+
+构建 debug APK：
+
+```bash
+./scripts/build-android.sh --debug
+```
+
+构建 AAB：
+
+```bash
+./scripts/build-android.sh --aab
+```
+
+产物目录：
+
+- APK：`build/app/outputs/flutter-apk/`
+- AAB：`build/app/outputs/bundle/release/`
+
+## GitHub Actions 签名
+
+`Android Release` 工作流需要配置：
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEY_PROPERTIES`（推荐，内容与本地 `android/key.properties` 一致）
+
+兼容旧配置时，也可以分别设置：
+
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+生成 keystore 的 base64：
+
+```bash
+base64 -i android/app/taitou-release.jks | pbcopy
+```
+
+复制属性文件：
+
+```bash
+cat android/key.properties | pbcopy
+```
+
+工作流会在构建前校验 keystore、alias、storePassword 和 keyPassword，并在构建后用 `apksigner` 确认产物没有使用 Android debug 证书。

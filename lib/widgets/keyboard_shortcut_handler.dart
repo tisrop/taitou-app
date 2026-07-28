@@ -137,8 +137,7 @@ class _KeyboardShortcutHandlerState
 
   bool _isCloseSurfaceAction(ShortcutAction action) {
     return action == ShortcutAction.closeOverlay ||
-        action == ShortcutAction.navigateBack ||
-        action == ShortcutAction.navigateBackAlt;
+        action == ShortcutAction.navigateBack;
   }
 
   void _closeSurface(
@@ -195,7 +194,6 @@ class _KeyboardShortcutHandlerState
 
     switch (action) {
       case ShortcutAction.navigateBack:
-      case ShortcutAction.navigateBackAlt:
         nav.maybePop();
         return true;
       case ShortcutAction.openSearch:

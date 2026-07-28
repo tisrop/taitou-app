@@ -1,17 +1,14 @@
-/// flutter_js 引擎封装（IO 平台实现）。
-///
-/// 通过条件导入被 DiscourseCookService 使用；web 平台走
-/// cook_js_engine_stub.dart（恒不可用）。
+/// Android flutter_js 引擎封装。
 library;
 
 import 'package:flutter_js/flutter_js.dart';
 
-/// 是否支持在本平台跑 JS cook（IO 平台恒 true）。
+/// Android 支持在本地 JS 引擎中执行 cook。
 const bool cookJsSupported = true;
 
 /// 裸 JS 引擎薄封装：eval 代码、取字符串结果。
 ///
-/// Android/Windows/Linux = QuickJS，iOS/macOS = JavaScriptCore（FFI 同步调用）。
+/// Android 使用 flutter_js 提供的 QuickJS 运行时。
 class CookJsEngine {
   CookJsEngine()
     : _runtime = getJavascriptRuntime(

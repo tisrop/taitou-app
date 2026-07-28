@@ -1,5 +1,3 @@
-set windows-shell := ["pwsh.exe", "-NoLogo", "-NoProfile", "-Command"]
-
 # 显示可用命令
 default:
   @just --list
@@ -71,7 +69,3 @@ release *args:
 # 预发布发版；无参时进入交互式流程
 prerelease *args:
   @dart run tool/release.dart --track prerelease {{args}}
-
-# 构建 iOS 无签名 IPA；无参时进入版本输入和确认流程
-ipa *args:
-  @dart run tool/build_ipa_nosign.dart {{args}}

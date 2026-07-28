@@ -8,7 +8,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 
 import '../../../constants.dart';
-import '../../windows_webview_environment_service.dart';
 import 'cookie_logger.dart';
 import 'cookie_value_codec.dart';
 import 'strategy/platform_cookie_strategy.dart';
@@ -57,8 +56,7 @@ class CookieJarService {
   /// - cf_clearance: Cloudflare 反爬虫挑战 token
   static Set<String> criticalCookieNames = {...authCookieNames, 'cf_clearance'};
 
-  CookieManager get webViewCookieManager =>
-      WindowsWebViewEnvironmentService.instance.cookieManager;
+  CookieManager get webViewCookieManager => CookieManager.instance();
 
   /// 获取 CookieJar 实例（用于 Dio CookieManager）
   CookieJar get cookieJar {
@@ -830,187 +828,5 @@ class CookieJarService {
     if (normalized == null || normalized.isEmpty) return true;
     final lower = normalized.toLowerCase();
     return lower == baseHost || lower.endsWith('.$baseHost');
-  }
-
-  /// Windows：通过页面级 controller 的 CDP 读取实时 cookie 值。
-  Future<String?> readCookieValueFromController(
-    InAppWebViewController controller,
-    String name, {
-    String? currentUrl,
-  }) async {
-    if (!io.Platform.isWindows) return null;
-
-    try {
-      final rawCookies = await _readWindowsCookiesFromController(
-        controller,
-        currentUrl: currentUrl,
-      );
-      String? fallback;
-      for (final raw in rawCookies) {
-        final cookieName = raw['name']?.toString();
-        final value = raw['value']?.toString() ?? '';
-        final domain = raw['domain']?.toString();
-        if (cookieName != name || value.isEmpty) continue;
-        if (matchesAppHost(domain)) {
-          return value;
-        }
-        fallback ??= value;
-      }
-      return fallback;
-    } catch (e) {
-      debugPrint('[CookieJar][Windows] Failed to read live cookie $name: $e');
-      return null;
-    }
-  }
-
-  /// Windows：通过页面级 controller 的 CDP 将关键 cookie 直接写入 CookieJar。
-  Future<int> syncCriticalCookiesFromController(
-    InAppWebViewController controller, {
-    String? currentUrl,
-    Set<String>? cookieNames,
-    Set<String>? excludeCookieNames,
-    Map<String, String>? acceptValues,
-    bool trusted = false,
-  }) async {
-    if (!io.Platform.isWindows) return 0;
-    if (!_initialized) await initialize();
-
-    try {
-      final uri =
-          Uri.tryParse(currentUrl ?? AppConstants.baseUrl) ??
-          Uri.parse(AppConstants.baseUrl);
-      final rawCookies = await _readWindowsCookiesFromController(
-        controller,
-        currentUrl: currentUrl,
-      );
-      final filtered = rawCookies
-          .where((raw) {
-            final name = raw['name']?.toString();
-            final value = raw['value']?.toString() ?? '';
-            final domain = raw['domain']?.toString();
-            if (name == null || value.isEmpty) return false;
-            if (cookieNames != null && !cookieNames.contains(name)) {
-              return false;
-            }
-            if (excludeCookieNames != null &&
-                excludeCookieNames.contains(name)) {
-              return false;
-            }
-            final onlyValue = acceptValues?[name];
-            if (onlyValue != null && value != onlyValue) {
-              return false;
-            }
-            return matchesAppHost(domain);
-          })
-          .toList(growable: false);
-
-      if (filtered.isEmpty) return 0;
-
-      final jar = _cookieJar;
-      if (jar is EnhancedPersistCookieJar) {
-        await jar.saveFromCdpCookies(uri, filtered, trusted: trusted);
-        final authNames = filtered
-            .map((raw) => raw['name']?.toString())
-            .whereType<String>()
-            .where(hostOnlyCookieNames.contains)
-            .toSet();
-        if (authNames.isNotEmpty) {
-          await enforceAuthCookiePolicy(
-            reason: 'windows_cdp_sync',
-            names: authNames,
-          );
-        }
-        return filtered.length;
-      }
-
-      final toSave = <io.Cookie>[];
-      for (final raw in filtered) {
-        final name = raw['name']?.toString();
-        final value = raw['value']?.toString() ?? '';
-        if (name == null || value.isEmpty) continue;
-
-        io.Cookie cookie;
-        try {
-          cookie = io.Cookie(name, value);
-        } catch (_) {
-          cookie = io.Cookie(name, CookieValueCodec.encode(value));
-        }
-
-        final domain = raw['domain']?.toString();
-        final path = raw['path']?.toString();
-        final secure = raw['secure'] == true;
-        final httpOnly = raw['httpOnly'] == true;
-        final expires = raw['expires'];
-
-        if (domain != null && domain.trim().isNotEmpty) {
-          cookie.domain = domain;
-        }
-        cookie
-          ..path = path == null || path.isEmpty ? '/' : path
-          ..secure = secure
-          ..httpOnly = httpOnly;
-        if (expires is num && expires > 0) {
-          cookie.expires = DateTime.fromMillisecondsSinceEpoch(
-            (expires * 1000).round(),
-          );
-        }
-        toSave.add(cookie);
-      }
-
-      if (toSave.isEmpty) return 0;
-      await _cookieJar!.saveFromResponse(uri, toSave);
-      final authNames = toSave
-          .map((cookie) => cookie.name)
-          .where(hostOnlyCookieNames.contains)
-          .toSet();
-      if (authNames.isNotEmpty) {
-        await enforceAuthCookiePolicy(
-          reason: 'windows_controller_sync',
-          names: authNames,
-        );
-      }
-      return toSave.length;
-    } catch (e) {
-      debugPrint('[CookieJar][Windows] Failed to sync live cookies: $e');
-      return 0;
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> _readWindowsCookiesFromController(
-    InAppWebViewController controller, {
-    String? currentUrl,
-  }) async {
-    final baseUri = Uri.parse(AppConstants.baseUrl);
-    final hosts = await getKnownHostsForDomain(baseUri.host);
-    final currentHost = Uri.tryParse(currentUrl ?? '')?.host;
-    if (currentHost != null &&
-        currentHost.isNotEmpty &&
-        matchesAppHost(currentHost)) {
-      hosts.add(currentHost);
-    }
-
-    final urls = <String>{
-      AppConstants.baseUrl,
-      '${AppConstants.baseUrl}/',
-      if (currentUrl != null && currentUrl.isNotEmpty) currentUrl,
-      for (final host in hosts) 'https://$host',
-      for (final host in hosts) 'https://$host/',
-    }.toList(growable: false);
-
-    final result = await controller.callDevToolsProtocolMethod(
-      methodName: 'Network.getCookies',
-      parameters: {'urls': urls},
-    );
-    final rawCookies = result is Map<String, dynamic>
-        ? result['cookies']
-        : null;
-    if (rawCookies is! List) return const [];
-
-    return rawCookies
-        .whereType<Map>()
-        .map((raw) => raw.map((key, value) => MapEntry(key.toString(), value)))
-        .cast<Map<String, dynamic>>()
-        .where((raw) => matchesAppHost(raw['domain']?.toString()))
-        .toList(growable: false);
   }
 }

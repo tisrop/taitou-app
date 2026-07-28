@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -222,23 +220,13 @@ Future<bool> launchInExternalBrowser(String url) async {
   final uri = Uri.tryParse(url);
   if (uri == null) return false;
 
-  if (Platform.isAndroid) {
-    try {
-      final result = await _browserChannel.invokeMethod<bool>('openInBrowser', {
-        'url': url,
-      });
-      return result ?? false;
-    } catch (e) {
-      debugPrint('[LinkLauncher] Failed to launch browser: $e');
-      // 回退到 url_launcher
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-        return true;
-      }
-      return false;
-    }
-  } else {
-    // iOS 和其他平台使用 url_launcher
+  try {
+    final result = await _browserChannel.invokeMethod<bool>('openInBrowser', {
+      'url': url,
+    });
+    return result ?? false;
+  } catch (e) {
+    debugPrint('[LinkLauncher] Failed to launch browser: $e');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
       return true;

@@ -96,10 +96,7 @@ class _SettingsGroupPageState extends ConsumerState<SettingsGroupPage> {
   }
 
   Widget _buildGroupItems(ThemeData theme, SettingsGroup group) {
-    final effectiveItems = group.items.where((item) {
-      if (item is PlatformConditionalModel) return item.shouldShow;
-      return true;
-    }).toList();
+    final effectiveItems = group.items;
 
     if (!group.wrapInCard) {
       return Column(
@@ -114,14 +111,11 @@ class _SettingsGroupPageState extends ConsumerState<SettingsGroupPage> {
     }
 
     return SegmentedCardGroup(
-      children: [
-        for (final item in effectiveItems) _buildItem(theme, item),
-      ],
+      children: [for (final item in effectiveItems) _buildItem(theme, item)],
     );
   }
 
-  Widget _buildItem(ThemeData theme, SettingsModel item) {
-    final model = item is PlatformConditionalModel ? item.inner : item;
+  Widget _buildItem(ThemeData theme, SettingsModel model) {
     final key = _itemKeys.putIfAbsent(model.id, () => GlobalKey());
     final isHighlighted = _highlightedId == model.id;
 
@@ -135,12 +129,7 @@ class _SettingsGroupPageState extends ConsumerState<SettingsGroupPage> {
     );
   }
 
-  bool _hasVisibleItems(SettingsGroup group) {
-    return group.items.any((item) {
-      if (item is PlatformConditionalModel) return item.shouldShow;
-      return true;
-    });
-  }
+  bool _hasVisibleItems(SettingsGroup group) => group.items.isNotEmpty;
 
   Widget _buildSectionHeader(ThemeData theme, String title, IconData icon) {
     return Row(

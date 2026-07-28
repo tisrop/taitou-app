@@ -4,12 +4,10 @@ import 'package:chewie/chewie.dart' as lib;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart' as lib;
-import 'package:window_manager/window_manager.dart';
 
 import '../../../../providers/preferences_provider.dart';
 import '../../../../services/navigation/app_route_observer.dart';
 import '../../../../utils/layout_lock.dart';
-import '../../../../utils/platform_utils.dart';
 import '../../../common/anchor_guard_sliver.dart';
 
 /// 自定义视频播放器，基于 fwfh_chewie 的 VideoPlayer，
@@ -32,11 +30,11 @@ class DiscourseVideoPlayer extends StatefulWidget {
 
   /// 错误回调
   final Widget Function(BuildContext context, String url, dynamic error)?
-      errorBuilder;
+  errorBuilder;
 
   /// 加载中回调
   final Widget Function(BuildContext context, String url, Widget child)?
-      loadingBuilder;
+  loadingBuilder;
 
   /// 是否循环播放
   final bool loop;
@@ -62,11 +60,7 @@ class DiscourseVideoPlayer extends StatefulWidget {
 }
 
 class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
-    with
-        WidgetsBindingObserver,
-        WindowListener,
-        RouteAware,
-        AutomaticKeepAliveClientMixin {
+    with WidgetsBindingObserver, RouteAware, AutomaticKeepAliveClientMixin {
   lib.ChewieController? _controller;
   dynamic _error;
   lib.VideoPlayerController? _vpc;
@@ -94,10 +88,7 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
 
   /// 退出全屏时，标记等待屏幕尺寸恢复后再释放 LayoutLock。
   /// 移动端：等 chewie 恢复屏幕方向后尺寸变化回调触发；
-  /// 桌面端：等 onWindowLeaveFullScreen 回调触发。
   bool _pendingLockRelease = false;
-
-  static final bool _isDesktop = PlatformUtils.isDesktop;
 
   /// 全屏期间(含退出全屏的恢复窗口)钉住列表项,防止 macOS 进/出系统
   /// 全屏引发的窗口尺寸连环变化把本项挤出 cacheExtent 而被回收——
@@ -112,12 +103,14 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
   /// PlayerNotifier 不销毁 —— 全屏路由的控制条引用该 notifier，pop
   /// 全屏路由的控制权也在该 ChewieState 手里，二者都死不得。
   static final Map<
-      String,
-      ({
-        lib.VideoPlayerController vpc,
-        lib.ChewieController cc,
-        GlobalKey chewieKey,
-      })> _fullscreenCache = {};
+    String,
+    ({
+      lib.VideoPlayerController vpc,
+      lib.ChewieController cc,
+      GlobalKey chewieKey,
+    })
+  >
+  _fullscreenCache = {};
 
   /// embedded Chewie 的身份键：全屏期间宿主被重建时，新 State 从
   /// [_fullscreenCache] 继承此 key，同帧内原样收养旧 Chewie 子树。
@@ -133,9 +126,6 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
         ? (_knownAspectRatios[widget.url] ?? widget.aspectRatio)
         : widget.aspectRatio;
     WidgetsBinding.instance.addObserver(this);
-    if (_isDesktop) {
-      windowManager.addListener(this);
-    }
     _initControllers();
   }
 
@@ -174,9 +164,6 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
       _scrollIdleNotifier?.removeListener(_scrollIdleListener!);
       _scrollIdleListener = null;
       _scrollIdleNotifier = null;
-    }
-    if (_isDesktop) {
-      windowManager.removeListener(this);
     }
     _controller?.removeListener(_onControllerChanged);
     // 释放 LayoutLock（含等待恢复的延迟释放）
@@ -219,14 +206,15 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
 
       final loadingBuilder = widget.loadingBuilder;
       if (loadingBuilder != null) {
-        child = loadingBuilder(context, widget.url, child ?? const SizedBox.shrink());
+        child = loadingBuilder(
+          context,
+          widget.url,
+          child ?? const SizedBox.shrink(),
+        );
       }
     }
 
-    return AspectRatio(
-      aspectRatio: aspectRatio,
-      child: child,
-    );
+    return AspectRatio(aspectRatio: aspectRatio, child: child);
   }
 
   Future<void> _initControllers() async {
@@ -341,7 +329,7 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
   void didChangeMetrics() {
     // 移动端退出全屏后，chewie 会恢复屏幕方向，此时屏幕尺寸变化
     // 触发此回调，可以安全释放 LayoutLock
-    if (_pendingLockRelease && !_isDesktop) {
+    if (_pendingLockRelease) {
       _pendingLockRelease = false;
       updateKeepAlive();
       // 延迟一帧确保 chewie 的全屏路由 pop 动画完成
@@ -355,18 +343,7 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
     }
   }
 
-  @override
-  void onWindowLeaveFullScreen() {
-    // 桌面端：窗口退出全屏动画完成，安全释放 LayoutLock
-    if (_pendingLockRelease) {
-      _pendingLockRelease = false;
-      LayoutLock.release();
-      updateKeepAlive();
-    }
-  }
-
   /// 全屏状态变化时 acquire/release LayoutLock，
-  /// 桌面平台同时切换系统级全屏。
   void _onControllerChanged() {
     final isFullScreen = _controller?.isFullScreen ?? false;
     if (isFullScreen && !_didLockLayout) {
@@ -375,14 +352,11 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
       updateKeepAlive();
       // 缓存控制器，防止屏幕尺寸变化导致 widget 重建时销毁它们
       if (_vpc != null && _controller != null) {
-        _fullscreenCache[widget.url] =
-            (vpc: _vpc!, cc: _controller!, chewieKey: _chewieKey);
-      }
-      if (_isDesktop) {
-        // 延迟到下一帧，确保 chewie 全屏路由已推入后再触发窗口变化
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          windowManager.setFullScreen(true);
-        });
+        _fullscreenCache[widget.url] = (
+          vpc: _vpc!,
+          cc: _controller!,
+          chewieKey: _chewieKey,
+        );
       }
     } else if (!isFullScreen && _didLockLayout) {
       _didLockLayout = false;
@@ -390,14 +364,8 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
       _fullscreenCache.remove(widget.url);
       // 不立即释放 LayoutLock，等屏幕尺寸恢复后再释放，
       // 防止恢复期间触发布局切换导致控制器被销毁。
-      // 移动端：didChangeMetrics 回调中释放
-      // 桌面端：onWindowLeaveFullScreen 回调中释放
+      // didChangeMetrics 回调中释放。
       _pendingLockRelease = true;
-      if (_isDesktop) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          windowManager.setFullScreen(false);
-        });
-      }
     }
   }
 }

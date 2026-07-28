@@ -8,9 +8,8 @@ version: 0.2.26+2026072717
 environment:
   sdk: ^3.10.4
 
-# sqlite3(经 sqflite_common_ffi 引入)的 build hook 默认在构建期从 GitHub
-# 下载预编译库,Flatpak 离线沙箱内必然失败;指向 vendored amalgamation
-# 改为源码编译,五端统一版本与编译选项。详见 third_party/sqlite3/README.md。
+# sqlite3（经 sqflite_common_ffi 引入）的 build hook 改为使用仓库内源码，
+# 避免构建期下载预编译库。详见 third_party/sqlite3/README.md。
 hooks:
   user_defines:
     sqlite3:
@@ -45,8 +44,7 @@ dependencies:
   native_dio_adapter: ^1.6.0
   flutter_secure_storage: ^10.3.1
   flutter_inappwebview: ^6.2.0-beta.3
-  # 编辑器 1:1 预览:跑 Discourse 官方 markdown-it cook bundle
-  # (Android/Win/Linux=QuickJS,iOS/macOS=JavaScriptCore,均走 FFI)
+  # 编辑器 1:1 预览：通过 QuickJS 运行 Discourse markdown-it cook bundle
   flutter_js: ^0.8.7
   # 自研:native Rust 解码动图(GIF/APNG/动画 WebP),绕开 Flutter Skia
   # multi_frame_codec 在 disposal=2 等场景下的 #85831 bug。
@@ -63,7 +61,7 @@ dependencies:
   cross_file: ^0.3.4+2
   open_filex: ^4.7.0
   file_picker: ^10.3.10
-  record: ^7.1.1  # 语音消息录制(AAC-LC,五端)
+  record: ^7.1.1  # Android 语音消息录制（AAC-LC）
   intl: ^0.20.2
   url_launcher: ^6.3.1
   font_awesome_flutter: ^11.0.0
@@ -97,8 +95,7 @@ dependencies:
     path: packages/fluxdo_render
   flutter_local_notifications: ^21.0.0
   jovial_svg: ^1.1.29
-  # kroki.io mermaid 出图的 zlib+base64url 编码(纯 Dart,web 可用;
-  # 本已是 image 等包的传递依赖,显式声明)
+  # kroki.io mermaid 出图使用的 zlib + base64url 编码。
   archive: ^4.0.9
   html: ^0.15.5
   dio_smart_retry: ^7.0.1
@@ -108,9 +105,6 @@ dependencies:
   # User API Key 授权自愈:RSA 密钥对生成/PKCS1 解密(payload 与 OTP 均为
   # 服务端用客户端公钥加密回传,见 discourse user_api_keys_controller)
   pointycastle: ^4.0.0
-  # Windows 深链前提:discourse://、fluxdo:// 协议需写入 HKCU 注册表
-  # (3.x 被 device_info_plus 12.3.0 的 ^2.1.0 约束挡住,升级时一并跟进)
-  win32_registry: ^2.1.0
   path_provider: ^2.1.5
   path: ^1.9.1
   # 「改名上传」媒体修复的魔数嗅探(MediaCompatService):.xz 等白名单
@@ -150,13 +144,8 @@ dependencies:
   # 此包给 ThemeData 注入平台合适的中文字体到 fontFamilyFallback。
   chinese_font_library: ^1.2.0
 
-  window_manager: ^0.5.1
-  screen_retriever: ^0.2.1
-  flutter_acrylic: ^1.1.4
-
   flutter_dynamic_icon_plus: ^1.4.0  # 动态应用图标切换
   flutter_foreground_task: ^9.2.0  # Android 前台服务保活
-  workmanager: ^0.9.0+3            # iOS BGTaskScheduler
 
   chewie: any
   video_player: any
@@ -175,8 +164,6 @@ dependency_overrides:
   # super_clipboard 0.9.1 要求 device_info_plus <12.0.0，
   # 但实际 12.x 接口兼容，强制使用项目版本
   device_info_plus: 12.3.0
-  flutter_inappwebview_linux:
-    path: packages/flutter_inappwebview_linux
   # 锁定 flutter_rust_bridge 版本，与 rhttp 插件的 codegen 版本保持一致。
   # rhttp_plus 已同步 upstream 0.18.0，生成代码基于 2.12.0。
   flutter_rust_bridge: 2.12.0
@@ -191,12 +178,6 @@ melos:
   useRootAsPackage: true
 
 flutter:
-  # 关闭 SwiftPM：Flutter 3.44 生成的 FlutterGeneratedPluginSwiftPackage 把
-  # macOS deployment target 写死 10.15，未读 Runner 的 11.0，导致 gal 等要求
-  # macOS 11.0 的插件 SPM 构建失败。CocoaPods 链路无此 bug。
-  # 待 Flutter 上游修复后移除（CocoaPods registry 2026-12-02 起转只读）。
-  config:
-    enable-swift-package-manager: false
   uses-material-design: true
   shaders:
     - shaders/progressive_top_blur.frag

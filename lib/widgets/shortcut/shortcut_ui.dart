@@ -3,10 +3,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/shortcut_binding.dart';
 
-String shortcutCategoryLabel(
-  ShortcutCategory category,
-  AppLocalizations l10n,
-) {
+String shortcutCategoryLabel(ShortcutCategory category, AppLocalizations l10n) {
   return switch (category) {
     ShortcutCategory.navigation => l10n.shortcuts_navigation,
     ShortcutCategory.content => l10n.shortcuts_content,
@@ -18,7 +15,6 @@ String shortcutCategoryLabel(
 String shortcutActionLabel(ShortcutAction action, AppLocalizations l10n) {
   return switch (action) {
     ShortcutAction.navigateBack => l10n.shortcuts_navigateBack,
-    ShortcutAction.navigateBackAlt => l10n.shortcuts_navigateBackAlt,
     ShortcutAction.openSearch => l10n.shortcuts_openSearch,
     ShortcutAction.closeOverlay => l10n.shortcuts_closeOverlay,
     ShortcutAction.openSettings => l10n.shortcuts_openSettings,
@@ -118,7 +114,9 @@ class ShortcutKeyCap extends StatelessWidget {
       constraints: BoxConstraints(minWidth: minWidth),
       padding: padding,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.92),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.92,
+        ),
         borderRadius: borderRadius,
         border: Border.all(
           color: theme.colorScheme.outlineVariant.withValues(alpha: 0.75),

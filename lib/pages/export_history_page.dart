@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/s.dart';
@@ -16,7 +15,6 @@ import '../services/toast_service.dart';
 import 'package:common_ui/common_ui.dart';
 import '../storage/export_history_dao.dart';
 import '../utils/dialog_utils.dart';
-import '../utils/platform_utils.dart';
 import '../utils/share_utils.dart';
 import '../utils/time_utils.dart';
 
@@ -106,28 +104,9 @@ class _ExportHistoryPageState extends ConsumerState<ExportHistoryPage> {
       ToastService.showError(S.current.exportHistory_fileNotFound);
       return;
     }
-    if (PlatformUtils.isDesktop) {
-      await _revealInFolder(path);
-      return;
-    }
     final result = await OpenFilex.open(path);
     if (result.type != ResultType.done && mounted) {
       await ShareUtils.shareOrSaveFile(XFile(path));
-    }
-  }
-
-  Future<void> _revealInFolder(String path) async {
-    try {
-      if (Platform.isMacOS) {
-        await Process.run('open', ['-R', path]);
-      } else if (Platform.isWindows) {
-        await Process.run('explorer', ['/select,', path]);
-      } else if (Platform.isLinux) {
-        // xdg-open 不能定位单文件，降级到打开父目录。
-        await Process.run('xdg-open', [p.dirname(path)]);
-      }
-    } catch (_) {
-      ToastService.showError(S.current.share_saveFailed);
     }
   }
 
@@ -341,8 +320,9 @@ class _ExportEntryCard extends StatelessWidget {
                           Text(TimeUtils.formatRelativeTime(entry.createdAt)),
                           if (entry.postCount != null)
                             Text(
-                              context.l10n
-                                  .exportHistory_postCount(entry.postCount!),
+                              context.l10n.exportHistory_postCount(
+                                entry.postCount!,
+                              ),
                             ),
                           if (entry.size != null && entry.size! > 0)
                             Text(_formatSize(entry.size!)),
@@ -393,9 +373,7 @@ class _ExportEntryCard extends StatelessWidget {
 
   IconData get _trailingIcon => switch (entry.targetType) {
     ExportHistoryTarget.notion => Symbols.north_east_rounded,
-    ExportHistoryTarget.localFile => PlatformUtils.isDesktop
-        ? Symbols.folder_open_rounded
-        : Symbols.ios_share_rounded,
+    ExportHistoryTarget.localFile => Symbols.ios_share_rounded,
   };
 
   String _formatSize(int bytes) {

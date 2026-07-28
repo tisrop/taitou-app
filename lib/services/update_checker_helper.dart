@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -29,16 +27,12 @@ class UpdateCheckerHelper {
 
   /// 处理用户点击"立即更新"后的下载/跳转逻辑
   ///
-  /// Android：拉起应用内下载 + 系统通知；iOS/桌面：回退浏览器
+  /// 拉起 Android 应用内下载并通过系统通知展示进度。
   static Future<void> handleUpdate(
     BuildContext context,
     UpdateInfo updateInfo,
   ) async {
-    if (Platform.isAndroid) {
-      await _startInAppDownload(context, updateInfo);
-    } else {
-      _openInBrowser(updateInfo.releaseUrl);
-    }
+    await _startInAppDownload(context, updateInfo);
   }
 
   /// 显示自动更新对话框

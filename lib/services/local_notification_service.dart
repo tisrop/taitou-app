@@ -13,11 +13,13 @@ const String _apkUpdateChannelId = 'apk_update';
 
 /// 本地系统通知服务
 class LocalNotificationService {
-  static final LocalNotificationService _instance = LocalNotificationService._internal();
+  static final LocalNotificationService _instance =
+      LocalNotificationService._internal();
   factory LocalNotificationService() => _instance;
   LocalNotificationService._internal();
 
-  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
   bool _initialized = false;
   bool _permissionGranted = false;
 
@@ -25,25 +27,8 @@ class LocalNotificationService {
   Future<void> initialize() async {
     if (_initialized) return;
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const darwinSettings = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-    const linuxSettings = LinuxInitializationSettings(defaultActionName: 'Open');
-    const windowsSettings = WindowsInitializationSettings(
-      appName: '抬头',
-      appUserModelId: 'Com.Openxinsheng.Taitou',
-      guid: 'e965ef8c-b676-47c1-b6e7-297d63942974',
-    );
-
     const settings = InitializationSettings(
-      android: androidSettings,
-      iOS: darwinSettings,
-      macOS: darwinSettings,
-      linux: linuxSettings,
-      windows: windowsSettings,
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
     );
 
     await _plugin.initialize(
@@ -52,7 +37,7 @@ class LocalNotificationService {
     );
     _initialized = true;
     debugPrint('[LocalNotification] 初始化完成');
-    
+
     // 请求通知权限 (Android 13+)
     await _requestPermission();
   }
@@ -87,16 +72,13 @@ class LocalNotificationService {
   /// 请求通知权限
   Future<void> _requestPermission() async {
     // Android 平台请求权限
-    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
-    if (androidPlugin != null) {
-      final granted = await androidPlugin.requestNotificationsPermission();
-      _permissionGranted = granted ?? false;
-      debugPrint('[LocalNotification] Android 权限: $_permissionGranted');
-    } else {
-      // 非 Android 平台默认已授权
-      _permissionGranted = true;
-    }
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    final granted = await androidPlugin?.requestNotificationsPermission();
+    _permissionGranted = granted ?? false;
+    debugPrint('[LocalNotification] Android 权限: $_permissionGranted');
   }
 
   /// 显示通知
@@ -124,24 +106,26 @@ class LocalNotificationService {
       priority: Priority.high,
     );
 
-    const darwinDetails = DarwinNotificationDetails();
+    final details = NotificationDetails(android: androidDetails);
 
-    final details = NotificationDetails(
-      android: androidDetails,
-      iOS: darwinDetails,
-      macOS: darwinDetails,
-      windows: const WindowsNotificationDetails(),
-    );
+    final notificationId =
+        id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
 
-    final notificationId = id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
-    
     // 构建 payload 用于点击回调
     String? payload;
     if (topicId != null) {
-      payload = postNumber != null ? 'topic:$topicId:$postNumber' : 'topic:$topicId';
+      payload = postNumber != null
+          ? 'topic:$topicId:$postNumber'
+          : 'topic:$topicId';
     }
-    
-    await _plugin.show(id: notificationId, title: title, body: body, notificationDetails: details, payload: payload);
+
+    await _plugin.show(
+      id: notificationId,
+      title: title,
+      body: body,
+      notificationDetails: details,
+      payload: payload,
+    );
     debugPrint('[LocalNotification] 已发送: $title, payload=$payload');
   }
 

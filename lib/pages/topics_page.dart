@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 import 'dart:ui' as ui show lerpDouble;
 
 import 'package:flutter/foundation.dart' hide Category;
@@ -1414,13 +1413,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
     );
   }
 
-  bool _shouldHandlePointerScroll(PointerScrollEvent event) {
-    if (kIsWeb) return false;
-    if (!Platform.isMacOS) return false;
-    final dx = event.scrollDelta.dx.abs();
-    final dy = event.scrollDelta.dy.abs();
-    return dy > dx;
-  }
+  bool _shouldHandlePointerScroll(PointerScrollEvent event) => false;
 
   bool _handleScrollNotification(ScrollNotification notification) {
     // 只关心列表的垂直滚动；TabBarView 横滑/TabBar/标签条横向滚动

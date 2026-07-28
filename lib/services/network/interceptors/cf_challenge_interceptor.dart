@@ -41,7 +41,7 @@ class CfChallengeInterceptor extends Interceptor {
 
   Future<bool> _doSync() async {
     // showManualVerify 内部已通过 CDP 将新 cf_clearance 同步到 CookieJar，
-    // 先检查是否已存在，避免后续 syncFromWebView 在 Windows 上通过
+    // 先检查是否已存在，避免后续 syncFromWebView 通过
     // CookieManager.getCookies() 读取到旧值并覆盖（Bug #5 fix 会先删后写）。
     String? cfClearance = await cookieJarService.getCfClearance();
     if (cfClearance != null && cfClearance.isNotEmpty) {

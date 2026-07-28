@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart' as inappwebview;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,10 +12,8 @@ import '../doh_proxy/cert_preference_service.dart';
 import '../doh_proxy/doh_proxy_ffi.dart';
 import '../doh_proxy/doh_proxy_service.dart';
 import '../doh_proxy/per_device_cert_service.dart';
-import '../doh_proxy/proxy_certificate.dart';
 import '../proxy/proxy_settings_service.dart';
 import '../rhttp/rhttp_settings_service.dart';
-import '../../windows_webview_environment_service.dart';
 import 'doh_resolver.dart';
 
 class NetworkSettings {
@@ -536,18 +533,7 @@ class NetworkSettingsService {
         _clearResolvedHostCache();
       }
 
-      // macOS: 启动前确保 CA 在钥匙串中被信任
-      if (Platform.isMacOS && current.dohEnabled) {
-        final trusted = await ProxyCertificate.ensureKeychainTrust();
-        if (!trusted) {
-          debugPrint('[DOH] macOS: CA 未被钥匙串信任，无法启动代理');
-          _setStartFailed(true);
-          _setPendingStart(false);
-          return;
-        }
-      }
-
-      // per-device CA: 读取证书传给代理（iOS/macOS 强制，其他平台可选）
+      // 可选的每设备 CA：读取证书并传给代理。
       String? caCertPem;
       String? caKeyPem;
       if (await CertPreferenceService.usePerDevice()) {
@@ -642,8 +628,7 @@ class NetworkSettingsService {
 
   /// 检查代理是否仍然存活，若已意外停止则自动重启
   ///
-  /// 用于 App 从后台恢复时调用：iOS 挂起进程后 Rust 代理的 TCP listener
-  /// 可能失效，需要检测并重启。
+  /// 用于 App 从后台恢复时检测并重启失效的 Rust 代理。
   Future<void> ensureProxyAlive() async {
     if (!shouldRunLocalProxy) return;
     if (!_rustProxyService.isRunning) return;
@@ -683,26 +668,6 @@ class NetworkSettingsService {
     final port = _activeProxyPort;
     if (port == null) return;
 
-    if (Platform.isWindows) {
-      try {
-        await WindowsWebViewEnvironmentService.instance.setProxy(
-          'http://127.0.0.1:$port',
-        );
-        _webViewProxySet = true;
-        debugPrint('[DOH] WebView2 代理已设置 -> 127.0.0.1:$port');
-      } catch (e) {
-        debugPrint('[DOH] WebView2 代理设置失败: $e');
-      }
-      return;
-    }
-
-    // macOS 14 以下 / iOS 17 以下调用 setProxyOverride 可能报错
-    if (!Platform.isAndroid &&
-        !await _isMacOS14OrAbove() &&
-        !await _isiOS17OrAbove()) {
-      return;
-    }
-
     try {
       await inappwebview.ProxyController.instance().setProxyOverride(
         settings: inappwebview.ProxySettings(
@@ -718,23 +683,6 @@ class NetworkSettingsService {
 
   Future<void> _clearWebViewProxy() async {
     if (!_webViewProxySet) return;
-
-    if (Platform.isWindows) {
-      try {
-        await WindowsWebViewEnvironmentService.instance.setProxy(null);
-        _webViewProxySet = false;
-        debugPrint('[DOH] WebView2 代理已清除');
-      } catch (e) {
-        debugPrint('[DOH] WebView2 代理清除失败: $e');
-      }
-      return;
-    }
-
-    if (!Platform.isAndroid &&
-        !await _isMacOS14OrAbove() &&
-        !await _isiOS17OrAbove()) {
-      return;
-    }
     try {
       await inappwebview.ProxyController.instance().clearProxyOverride();
       _webViewProxySet = false;
@@ -742,28 +690,6 @@ class NetworkSettingsService {
     } catch (e) {
       debugPrint('[DOH] WebView 代理清除失败: $e');
     }
-  }
-
-  static bool? _isMacOS14OrAboveCache;
-
-  Future<bool> _isMacOS14OrAbove() async {
-    if (!Platform.isMacOS) return false;
-    if (_isMacOS14OrAboveCache != null) return _isMacOS14OrAboveCache!;
-    final info = await DeviceInfoPlugin().macOsInfo;
-    // 修复：majorVersion 对应 macOS 大版本，如 macOS 14 (Sonoma) => majorVersion == 14 ≠ Darwin 23
-    _isMacOS14OrAboveCache = info.majorVersion >= 14;
-    return _isMacOS14OrAboveCache!;
-  }
-
-  static bool? _isiOS17OrAboveCache;
-
-  Future<bool> _isiOS17OrAbove() async {
-    if (!Platform.isIOS) return false;
-    if (_isiOS17OrAboveCache != null) return _isiOS17OrAboveCache!;
-    final info = await DeviceInfoPlugin().iosInfo;
-    final major = int.tryParse(info.systemVersion.split('.').first) ?? 0;
-    _isiOS17OrAboveCache = major >= 17;
-    return _isiOS17OrAboveCache!;
   }
 
   void _touch() {

@@ -14,8 +14,7 @@ import 'dart:io' show File;
 import 'dart:math' show max;
 
 import 'package:chat_bottom_container/chat_bottom_container.dart';
-import 'package:flutter/foundation.dart'
-    show Uint8List, defaultTargetPlatform, kDebugMode;
+import 'package:flutter/foundation.dart' show Uint8List, kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:app_icons/app_icons.dart';
@@ -354,13 +353,11 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   /// 上下/回车/Tab/Esc。
   bool _interceptKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
-    // Cmd/Ctrl+K 插入链接(对齐 Discourse composer;内核不处理 keyK,
+    // Ctrl+K 插入链接(对齐 Discourse composer;内核不处理 keyK,
     // 弹窗动作属宿主层 —— 与剪贴板三键同理不进纯状态层)
     if (_slashOverlay == null &&
         event.logicalKey == LogicalKeyboardKey.keyK &&
-        (defaultTargetPlatform == TargetPlatform.macOS
-            ? HardwareKeyboard.instance.isMetaPressed
-            : HardwareKeyboard.instance.isControlPressed)) {
+        HardwareKeyboard.instance.isControlPressed) {
       _insertLink();
       return true;
     }
@@ -1695,11 +1692,11 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   /// 岛的 onebox 身份:OneboxNode(外链卡)恒有 url;QuoteCardNode 仅
   /// oneboxUrl 标记非空(站内话题 onebox 展开物)时算 —— 真引用卡不出。
   String? _oneboxUrlOf(IslandBlock island) => switch (island.node) {
-        OneboxNode(:final url) => (url == null || url.isEmpty) ? null : url,
-        QuoteCardNode(:final oneboxUrl) =>
-          (oneboxUrl == null || oneboxUrl.isEmpty) ? null : oneboxUrl,
-        _ => null,
-      };
+    OneboxNode(:final url) => (url == null || url.isEmpty) ? null : url,
+    QuoteCardNode(:final oneboxUrl) =>
+      (oneboxUrl == null || oneboxUrl.isEmpty) ? null : oneboxUrl,
+    _ => null,
+  };
 
   void _onIslandSelected(IslandSelection? sel) {
     _islandSel = sel;
@@ -1717,72 +1714,82 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   }
 
   void _showOneboxToolbar() {
-    _oneboxToolbarOverlay = OverlayEntry(builder: (context) {
-      final sel = _islandSel;
-      final url = sel == null ? null : _oneboxUrlOf(sel.island);
-      if (sel == null || url == null) return const SizedBox.shrink();
-      final scheme = Theme.of(context).colorScheme;
-      final screen = MediaQuery.sizeOf(context);
+    _oneboxToolbarOverlay = OverlayEntry(
+      builder: (context) {
+        final sel = _islandSel;
+        final url = sel == null ? null : _oneboxUrlOf(sel.island);
+        if (sel == null || url == null) return const SizedBox.shrink();
+        final scheme = Theme.of(context).colorScheme;
+        final screen = MediaQuery.sizeOf(context);
 
-      Widget btn(IconData icon, String tooltip, VoidCallback onTap) =>
-          Tooltip(
-            message: tooltip,
-            waitDuration: const Duration(milliseconds: 600),
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: Icon(icon, size: 17, color: scheme.onSurfaceVariant),
+        Widget btn(IconData icon, String tooltip, VoidCallback onTap) =>
+            Tooltip(
+              message: tooltip,
+              waitDuration: const Duration(milliseconds: 600),
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(icon, size: 17, color: scheme.onSurfaceVariant),
+                ),
+              ),
+            );
+
+        const barH = 40.0;
+        final rect = sel.globalRect;
+        final top = rect.top - barH - 6 < kToolbarHeight
+            ? rect.bottom + 6
+            : rect.top - barH - 6;
+        final availW = screen.width - 24;
+        final anchorX = rect.center.dx.clamp(12.0, screen.width - 12.0);
+        final alignX = availW <= 0 ? 0.0 : (((anchorX - 12) / availW) * 2 - 1);
+
+        return Positioned(
+          left: 12,
+          right: 12,
+          top: top.clamp(8.0, screen.height - barH - 8),
+          child: Align(
+            alignment: Alignment(alignX.clamp(-1.0, 1.0), 0),
+            child: TapRegion(
+              groupId: 'rich-composer-onebox-toolbar',
+              child: _FloatingPanel(
+                maxHeight: barH + 4,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    btn(Icons.copy_rounded, '复制链接', () {
+                      Clipboard.setData(ClipboardData(text: url));
+                      ScaffoldMessenger.maybeOf(this.context)?.showSnackBar(
+                        const SnackBar(
+                          content: Text('链接已复制'),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    }),
+                    btn(
+                      Icons.close_fullscreen_rounded,
+                      '移除预览',
+                      _removeOneboxPreview,
+                    ),
+                    Container(
+                      width: 1,
+                      height: 20,
+                      color: scheme.outlineVariant.withValues(alpha: 0.5),
+                    ),
+                    btn(
+                      Icons.open_in_new_rounded,
+                      '访问链接',
+                      () => launchContentLink(this.context, url),
+                    ),
+                  ],
+                ),
               ),
             ),
-          );
-
-      const barH = 40.0;
-      final rect = sel.globalRect;
-      final top = rect.top - barH - 6 < kToolbarHeight
-          ? rect.bottom + 6
-          : rect.top - barH - 6;
-      final availW = screen.width - 24;
-      final anchorX = rect.center.dx.clamp(12.0, screen.width - 12.0);
-      final alignX =
-          availW <= 0 ? 0.0 : (((anchorX - 12) / availW) * 2 - 1);
-
-      return Positioned(
-        left: 12,
-        right: 12,
-        top: top.clamp(8.0, screen.height - barH - 8),
-        child: Align(
-          alignment: Alignment(alignX.clamp(-1.0, 1.0), 0),
-          child: TapRegion(
-            groupId: 'rich-composer-onebox-toolbar',
-            child: _FloatingPanel(
-              maxHeight: barH + 4,
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                btn(Icons.copy_rounded, '复制链接', () {
-                  Clipboard.setData(ClipboardData(text: url));
-                  ScaffoldMessenger.maybeOf(this.context)?.showSnackBar(
-                    const SnackBar(
-                      content: Text('链接已复制'),
-                      duration: Duration(seconds: 1),
-                    ),
-                  );
-                }),
-                btn(Icons.close_fullscreen_rounded, '移除预览',
-                    _removeOneboxPreview),
-                Container(
-                  width: 1,
-                  height: 20,
-                  color: scheme.outlineVariant.withValues(alpha: 0.5),
-                ),
-                btn(Icons.open_in_new_rounded, '访问链接',
-                    () => launchContentLink(this.context, url)),
-              ]),
-            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
     Overlay.of(context).insert(_oneboxToolbarOverlay!);
   }
 
@@ -2337,7 +2344,11 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                                 // 水平 20 = 与 header 标题对齐(源码模式
                                 // 同值);垂直 12 兼吸收表格悬挂柄溢出
                                 padding: const EdgeInsets.fromLTRB(
-                                    20, 12, 20, 12),
+                                  20,
+                                  12,
+                                  20,
+                                  12,
+                                ),
                                 child: FluxdoEditor(
                                   state: editor,
                                   autofocus: true,

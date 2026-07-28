@@ -1,7 +1,4 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
-import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:native_dio_adapter/native_dio_adapter.dart';
 
@@ -18,8 +15,8 @@ import 'webview_http_adapter.dart';
 
 /// 当前使用的适配器类型
 enum AdapterType {
-  webview, // WebView 适配器（仅 Windows 显式兜底）
-  native, // Native/IO 适配器（Cronet/Cupertino/Dio IO）
+  webview, // Android WebView 网络栈兼容适配器
+  native, // Android NativeAdapter
   network, // Network 适配器（通过代理）
   rhttp, // rhttp 引擎（Rust reqwest）
 }
@@ -65,13 +62,7 @@ String getAdapterDisplayName(AdapterType type) {
     case AdapterType.webview:
       return S.current.network_adapterWebView;
     case AdapterType.native:
-      if (Platform.isAndroid) {
-        return S.current.network_adapterNativeAndroid;
-      }
-      if (Platform.isIOS || Platform.isMacOS) {
-        return S.current.network_adapterNativeIos;
-      }
-      return _getDesktopIoAdapterDisplayName();
+      return S.current.network_adapterNativeAndroid;
     case AdapterType.network:
       return S.current.network_adapterNetwork;
     case AdapterType.rhttp:
@@ -96,19 +87,13 @@ HttpClientAdapter createExternalHttpAdapter() {
 }
 
 /// 配置平台适配器
-void configurePlatformAdapter(Dio dio, {bool preferWebViewFallback = false}) {
+void configurePlatformAdapter(Dio dio) {
   final settings = NetworkSettingsService.instance;
   final proxySettings = ProxySettingsService.instance;
   final fallbackService = CronetFallbackService.instance;
   final rhttpSettings = RhttpSettingsService.instance;
 
-  if (Platform.isWindows && preferWebViewFallback) {
-    configureWebViewFallbackAdapter(dio);
-    return;
-  }
-
-  // 所有平台默认使用主链路动态适配；
-  // Windows 主链路为 Dio IO 适配器，WebView 仅保留显式兜底入口。
+  // Android 默认使用主链路动态适配。
   dio.httpClientAdapter = _DynamicAdapter(
     settings,
     proxySettings,
@@ -127,37 +112,13 @@ void configurePlatformAdapter(Dio dio, {bool preferWebViewFallback = false}) {
   dio.httpClientAdapter = _GatewayAdapterWrapper(dio.httpClientAdapter);
 }
 
-/// 配置 WebView 适配器（仅 Windows 显式兜底）
-void configureWebViewFallbackAdapter(Dio dio) {
-  _configureWebViewAdapter(dio);
-  _currentAdapterType = AdapterType.webview;
-}
-
-/// 配置稳定的 NativeAdapter,绕过 _DynamicAdapter 的 rhttp/proxy 切换。
-///
-/// 适用于 long polling 等长期运行的场景:
-/// - iOS/macOS 走 URLSession,享受系统级后台 suspend 和 radio coalescing,
-///   功耗显著低于 rhttp 的用户态 reqwest。
-/// - 不参与 rhttp/proxy 设置版本号轮换,连接复用更稳定。
+/// 配置稳定的 NativeAdapter，绕过动态的 rhttp/proxy 切换。
+/// 适用于 long polling 等长期运行的场景。
 ///
 /// 仍走 [_GatewayAdapterWrapper] 包装,以保持 gateway 模式下的 URL 改写一致。
 void configureStableNativeAdapter(Dio dio) {
   final adapter = _GatewayAdapterWrapper(_createNativeAdapter());
   dio.httpClientAdapter = adapter;
-}
-
-/// 配置 WebView 适配器
-void _configureWebViewAdapter(Dio dio) {
-  final adapter = WebViewHttpAdapter();
-  dio.httpClientAdapter = adapter;
-  adapter
-      .initialize()
-      .then((_) {
-        debugPrint('[DIO] Using WebViewHttpAdapter as Windows fallback');
-      })
-      .catchError((e) {
-        debugPrint('[DIO] WebViewHttpAdapter init failed: $e');
-      });
 }
 
 AdapterType _resolveAdapterType(
@@ -235,50 +196,8 @@ bool requestAllowsRhttpAdapter(RequestOptions options) {
   return options.extra['skipRhttpAdapter'] != true;
 }
 
-/// 创建当前平台对应的 NativeAdapter
-HttpClientAdapter _createNativeAdapter() {
-  if (Platform.isWindows) {
-    debugPrint('[DIO] Dynamic adapter -> IOHttpClientAdapter');
-    return IOHttpClientAdapter();
-  }
-  if (kDebugMode && (Platform.isMacOS || Platform.isIOS)) {
-    // 调试模式下使用默认适配器（IOHttpClientAdapter），避免 NativeAdapter 热重启崩溃
-    debugPrint('[DIO] Dynamic adapter -> IOHttpClientAdapter (debug mode)');
-    return IOHttpClientAdapter();
-  }
-  if (Platform.isMacOS && _macOSNeedsNativeFallback) {
-    // objective_c 原生库编译产物的 LC_BUILD_VERSION minos 可能与构建机器一致，
-    // 在低版本 macOS 上 dlopen 时 dyld 无法处理 __DATA_CONST 段保护，
-    // 触发 SIGBUS 崩溃 (KERN_PROTECTION_FAILURE in map_images_nolock)。
-    // 参见 https://github.com/dart-lang/native/issues/3011
-    debugPrint('[DIO] Dynamic adapter -> IOHttpClientAdapter (macOS < 14)');
-    return IOHttpClientAdapter();
-  }
-  if (Platform.isIOS || Platform.isMacOS) {
-    // Release 模式: URLSession 默认会自动管理 Cookie（httpShouldSetCookies=true），
-    // 会与 AppCookieManager 拦截器冲突。禁用 URLSession 的 Cookie 自动管理。
-    final config = URLSessionConfiguration.ephemeralSessionConfiguration();
-    config.httpShouldSetCookies = false;
-    return NativeAdapter(createCupertinoConfiguration: () => config);
-  }
-  return NativeAdapter();
-}
-
-/// macOS 版本 < 14 时需要降级为 IO 适配器。
-/// objective_c 框架在构建时 minos 可能被设为构建机器的 OS 版本，
-/// 导致在低版本 macOS 上 dlopen 崩溃 (dart-lang/native#3011)。
-final bool _macOSNeedsNativeFallback = () {
-  if (!Platform.isMacOS) return false;
-  try {
-    // Platform.operatingSystemVersion 格式: "Version 14.5 (Build 23F79)"
-    final ver = Platform.operatingSystemVersion;
-    final match = RegExp(r'Version (\d+)\.').firstMatch(ver);
-    if (match != null) {
-      return int.parse(match.group(1)!) < 14;
-    }
-  } catch (_) {}
-  return false;
-}();
+/// 创建 Android NativeAdapter。
+HttpClientAdapter _createNativeAdapter() => NativeAdapter();
 
 /// Gateway 适配器包装器：在传输层透明改写 URL
 ///
@@ -472,11 +391,8 @@ String _requestHeaderValueToString(Object? value) {
   return value.toString().trim();
 }
 
-/// 动态适配器：每次请求时根据设置 version 变化自动切换底层适配器
-///
-/// Android 上在 rhttp ↔ network ↔ native（Cronet）之间切换；
-/// iOS/macOS 在 rhttp ↔ network ↔ native（Cupertino）之间切换；
-/// Windows 在 rhttp ↔ network ↔ native（Dio IO）之间切换。
+/// Android 动态适配器：每次请求时根据设置 version 在
+/// rhttp、network、native 和 WebView 网络栈之间切换。
 class _DynamicAdapter implements HttpClientAdapter {
   _DynamicAdapter(
     this._settings,
@@ -580,18 +496,4 @@ class _DynamicAdapter implements HttpClientAdapter {
     }
     _delegates.clear();
   }
-}
-
-String _getDesktopIoAdapterDisplayName() {
-  final localeName = S.current.localeName.toLowerCase();
-  if (localeName.startsWith('zh_hk')) {
-    return 'Dio IO 適配器';
-  }
-  if (localeName.startsWith('zh_tw')) {
-    return 'Dio IO 介面卡';
-  }
-  if (localeName.startsWith('zh')) {
-    return 'Dio IO 适配器';
-  }
-  return 'Dio IO adapter';
 }

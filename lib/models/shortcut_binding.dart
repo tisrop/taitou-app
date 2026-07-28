@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -23,9 +20,6 @@ enum ShortcutCategory {
 enum ShortcutAction {
   /// 返回导航
   navigateBack,
-
-  /// 返回导航（macOS Alt+←）
-  navigateBackAlt,
 
   /// 打开搜索
   openSearch,
@@ -143,7 +137,9 @@ class ShortcutBinding {
       action: action,
       category: category,
       defaultActivator: defaultActivator,
-      customActivator: clearCustom ? null : customActivator ?? this.customActivator,
+      customActivator: clearCustom
+          ? null
+          : customActivator ?? this.customActivator,
     );
   }
 
@@ -160,16 +156,12 @@ class ShortcutBinding {
   };
 
   /// 将 SingleActivator 格式化为可读字符串
-  static String formatActivator(SingleActivator activator) {
-    final parts = formatActivatorParts(activator);
-    final isMac = !kIsWeb && Platform.isMacOS;
-    return parts.join(isMac ? '' : '+');
-  }
+  static String formatActivator(SingleActivator activator) =>
+      formatActivatorParts(activator).join('+');
 
   /// 将 SingleActivator 格式化为键位片段（如 Ctrl / Shift / N）
   static List<String> formatActivatorParts(SingleActivator activator) {
     final parts = <String>[];
-    final isMac = !kIsWeb && Platform.isMacOS;
 
     // 如果是 Shift+基础键 且有对应符号，直接显示符号（如 ? 而非 Shift+/）
     if (activator.shift &&
@@ -180,10 +172,10 @@ class ShortcutBinding {
       if (symbol != null) return [symbol];
     }
 
-    if (activator.control) parts.add(isMac ? '⌃' : 'Ctrl');
-    if (activator.alt) parts.add(isMac ? '⌥' : 'Alt');
-    if (activator.shift) parts.add(isMac ? '⇧' : 'Shift');
-    if (activator.meta) parts.add(isMac ? '⌘' : 'Super');
+    if (activator.control) parts.add('Ctrl');
+    if (activator.alt) parts.add('Alt');
+    if (activator.shift) parts.add('Shift');
+    if (activator.meta) parts.add('Super');
 
     parts.add(_keyLabel(activator.trigger));
     return List.unmodifiable(parts);
@@ -258,38 +250,30 @@ class ShortcutBinding {
   }
 }
 
-/// 构建平台对应的默认快捷键绑定列表
+/// 构建 Android 默认快捷键绑定列表。
 List<ShortcutBinding> buildDefaultBindings() {
-  final isMac = !kIsWeb && Platform.isMacOS;
-
   return [
     // ── 导航 ──
-    ShortcutBinding(
+    const ShortcutBinding(
       action: ShortcutAction.navigateBack,
       category: ShortcutCategory.navigation,
-      defaultActivator: isMac
-          ? const SingleActivator(LogicalKeyboardKey.bracketLeft, meta: true)
-          : const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true),
-    ),
-    // macOS 额外的 Alt+← 返回
-    if (isMac)
-      const ShortcutBinding(
-        action: ShortcutAction.navigateBackAlt,
-        category: ShortcutCategory.navigation,
-        defaultActivator:
-            SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true),
+      defaultActivator: SingleActivator(
+        LogicalKeyboardKey.arrowLeft,
+        alt: true,
       ),
+    ),
     ShortcutBinding(
       action: ShortcutAction.openSearch,
       category: ShortcutCategory.navigation,
       defaultActivator: const SingleActivator(LogicalKeyboardKey.slash),
     ),
-    ShortcutBinding(
+    const ShortcutBinding(
       action: ShortcutAction.openSettings,
       category: ShortcutCategory.navigation,
-      defaultActivator: isMac
-          ? const SingleActivator(LogicalKeyboardKey.comma, meta: true)
-          : const SingleActivator(LogicalKeyboardKey.comma, control: true),
+      defaultActivator: SingleActivator(
+        LogicalKeyboardKey.comma,
+        control: true,
+      ),
     ),
 
     // ── 内容 ──
@@ -298,18 +282,15 @@ List<ShortcutBinding> buildDefaultBindings() {
       category: ShortcutCategory.content,
       defaultActivator: SingleActivator(LogicalKeyboardKey.escape),
     ),
-    ShortcutBinding(
+    const ShortcutBinding(
       action: ShortcutAction.refresh,
       category: ShortcutCategory.content,
-      defaultActivator: isMac
-          ? const SingleActivator(LogicalKeyboardKey.keyR, meta: true)
-          : const SingleActivator(LogicalKeyboardKey.f5),
+      defaultActivator: SingleActivator(LogicalKeyboardKey.f5),
     ),
     const ShortcutBinding(
       action: ShortcutAction.showShortcutHelp,
       category: ShortcutCategory.content,
-      defaultActivator:
-          SingleActivator(LogicalKeyboardKey.slash, shift: true),
+      defaultActivator: SingleActivator(LogicalKeyboardKey.slash, shift: true),
     ),
     const ShortcutBinding(
       action: ShortcutAction.nextItem,
@@ -331,12 +312,14 @@ List<ShortcutBinding> buildDefaultBindings() {
       category: ShortcutCategory.navigation,
       defaultActivator: SingleActivator(LogicalKeyboardKey.backquote),
     ),
-    ShortcutBinding(
+    const ShortcutBinding(
       action: ShortcutAction.toggleNotifications,
       category: ShortcutCategory.navigation,
-      defaultActivator: isMac
-          ? const SingleActivator(LogicalKeyboardKey.keyN, meta: true, shift: true)
-          : const SingleActivator(LogicalKeyboardKey.keyN, control: true, shift: true),
+      defaultActivator: SingleActivator(
+        LogicalKeyboardKey.keyN,
+        control: true,
+        shift: true,
+      ),
     ),
     const ShortcutBinding(
       action: ShortcutAction.switchToTopics,
@@ -348,39 +331,38 @@ List<ShortcutBinding> buildDefaultBindings() {
       category: ShortcutCategory.navigation,
       defaultActivator: SingleActivator(LogicalKeyboardKey.digit2, alt: true),
     ),
-    ShortcutBinding(
+    const ShortcutBinding(
       action: ShortcutAction.createTopic,
       category: ShortcutCategory.content,
-      defaultActivator: isMac
-          ? const SingleActivator(LogicalKeyboardKey.keyN, meta: true)
-          : const SingleActivator(LogicalKeyboardKey.keyN, control: true),
+      defaultActivator: SingleActivator(LogicalKeyboardKey.keyN, control: true),
     ),
     const ShortcutBinding(
       action: ShortcutAction.previousTab,
       category: ShortcutCategory.navigation,
-      defaultActivator: SingleActivator(LogicalKeyboardKey.bracketLeft, alt: true),
+      defaultActivator: SingleActivator(
+        LogicalKeyboardKey.bracketLeft,
+        alt: true,
+      ),
     ),
     const ShortcutBinding(
       action: ShortcutAction.nextTab,
       category: ShortcutCategory.navigation,
-      defaultActivator: SingleActivator(LogicalKeyboardKey.bracketRight, alt: true),
+      defaultActivator: SingleActivator(
+        LogicalKeyboardKey.bracketRight,
+        alt: true,
+      ),
     ),
-    ShortcutBinding(
+    const ShortcutBinding(
       action: ShortcutAction.toggleAiPanel,
       category: ShortcutCategory.content,
-      defaultActivator: isMac
-          ? const SingleActivator(LogicalKeyboardKey.keyL, meta: true)
-          : const SingleActivator(LogicalKeyboardKey.keyL, control: true),
+      defaultActivator: SingleActivator(LogicalKeyboardKey.keyL, control: true),
     ),
 
     // ── 话题 ──
     const ShortcutBinding(
       action: ShortcutAction.jumpToPost,
       category: ShortcutCategory.topic,
-      defaultActivator: SingleActivator(
-        LogicalKeyboardKey.digit3,
-        shift: true,
-      ),
+      defaultActivator: SingleActivator(LogicalKeyboardKey.digit3, shift: true),
     ),
     const ShortcutBinding(
       action: ShortcutAction.goToUnreadPost,
@@ -437,10 +419,7 @@ List<ShortcutBinding> buildDefaultBindings() {
     const ShortcutBinding(
       action: ShortcutAction.flagPost,
       category: ShortcutCategory.post,
-      defaultActivator: SingleActivator(
-        LogicalKeyboardKey.digit1,
-        shift: true,
-      ),
+      defaultActivator: SingleActivator(LogicalKeyboardKey.digit1, shift: true),
     ),
     const ShortcutBinding(
       action: ShortcutAction.deletePost,

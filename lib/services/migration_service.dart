@@ -164,9 +164,7 @@ class MigrationService {
                     io.Cookie.fromSetCookieValue(header),
                   ]);
                 } catch (e) {
-                  debugPrint(
-                    '[Migration v5] 单条 cookie 回灌失败 url=$url: $e',
-                  );
+                  debugPrint('[Migration v5] 单条 cookie 回灌失败 url=$url: $e');
                 }
               }
             } catch (e) {
@@ -181,7 +179,7 @@ class MigrationService {
       },
     ),
     // v6: 图片缓存索引从自研 Hive repo 迁回 flutter_cache_manager 默认后端
-    // (移动端 / macOS = sqlite 事务安全; Windows / Linux = Json 纯 Dart)。
+    // Android 使用 sqlite 事务保证迁移过程安全。
     // 旧的 image_cache_meta_* Hive box 不再使用,其中损坏的 box 正是
     // "unknown typeId" 崩溃源,一次性删除。图片文件本身仍在,索引重建 =
     // 首次访问按需重新下载,无数据损失。
@@ -382,8 +380,10 @@ class MigrationService {
   }
 
   /// 全部迁移完成标记 key(供备份服务排除,数据驱动不抄常量)。
-  static List<String> get migrationKeys =>
-      [for (final m in _migrations) m.key, 'cookie_domain_migration_v2'];
+  static List<String> get migrationKeys => [
+    for (final m in _migrations) m.key,
+    'cookie_domain_migration_v2',
+  ];
 
   /// 判断是否为 v0.1.x 以前的老用户。
   ///

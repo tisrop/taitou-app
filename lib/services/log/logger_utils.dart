@@ -43,27 +43,11 @@ class LoggerUtils {
     } catch (_) {}
 
     try {
-      final deviceInfo = DeviceInfoPlugin();
-      if (Platform.isAndroid) {
-        final info = await deviceInfo.androidInfo;
-        buf.writeln('平台: Android ${info.version.release} (SDK ${info.version.sdkInt})');
-        buf.writeln('设备: ${info.brand} ${info.model}');
-      } else if (Platform.isIOS) {
-        final info = await deviceInfo.iosInfo;
-        buf.writeln('平台: iOS ${info.systemVersion}');
-        buf.writeln('设备: ${info.utsname.machine}');
-      } else if (Platform.isMacOS) {
-        final info = await deviceInfo.macOsInfo;
-        buf.writeln('平台: macOS ${info.majorVersion}.${info.minorVersion}.${info.patchVersion}');
-        buf.writeln('设备: ${info.model} (${info.arch})');
-      } else if (Platform.isLinux) {
-        final info = await deviceInfo.linuxInfo;
-        buf.writeln('平台: ${info.prettyName}');
-      } else if (Platform.isWindows) {
-        final info = await deviceInfo.windowsInfo;
-        buf.writeln('平台: Windows (${info.buildNumber})');
-        buf.writeln('设备: ${info.computerName}');
-      }
+      final info = await DeviceInfoPlugin().androidInfo;
+      buf.writeln(
+        '平台: Android ${info.version.release} (SDK ${info.version.sdkInt})',
+      );
+      buf.writeln('设备: ${info.brand} ${info.model}');
     } catch (_) {}
 
     // WebView 版本
@@ -87,64 +71,27 @@ class LoggerUtils {
 
     try {
       final pkg = await PackageInfo.fromPlatform();
-      buf.writeln(jsonEncode({
-        '_header': 'app_info',
-        'appName': pkg.appName,
-        'version': pkg.version,
-        'buildNumber': pkg.buildNumber,
-        'packageName': pkg.packageName,
-      }));
+      buf.writeln(
+        jsonEncode({
+          '_header': 'app_info',
+          'appName': pkg.appName,
+          'version': pkg.version,
+          'buildNumber': pkg.buildNumber,
+          'packageName': pkg.packageName,
+        }),
+      );
     } catch (_) {}
 
     try {
-      final deviceInfo = DeviceInfoPlugin();
-      Map<String, dynamic> device;
-      if (Platform.isAndroid) {
-        final info = await deviceInfo.androidInfo;
-        device = {
-          '_header': 'device_info',
-          'platform': 'Android',
-          'brand': info.brand,
-          'model': info.model,
-          'sdkInt': info.version.sdkInt,
-          'release': info.version.release,
-        };
-      } else if (Platform.isIOS) {
-        final info = await deviceInfo.iosInfo;
-        device = {
-          '_header': 'device_info',
-          'platform': 'iOS',
-          'model': info.utsname.machine,
-          'systemVersion': info.systemVersion,
-        };
-      } else if (Platform.isMacOS) {
-        final info = await deviceInfo.macOsInfo;
-        device = {
-          '_header': 'device_info',
-          'platform': 'macOS',
-          'model': info.model,
-          'osVersion':
-              '${info.majorVersion}.${info.minorVersion}.${info.patchVersion}',
-          'arch': info.arch,
-        };
-      } else if (Platform.isLinux) {
-        final info = await deviceInfo.linuxInfo;
-        device = {
-          '_header': 'device_info',
-          'platform': 'Linux',
-          'prettyName': info.prettyName,
-        };
-      } else if (Platform.isWindows) {
-        final info = await deviceInfo.windowsInfo;
-        device = {
-          '_header': 'device_info',
-          'platform': 'Windows',
-          'computerName': info.computerName,
-          'buildNumber': info.buildNumber,
-        };
-      } else {
-        device = {'_header': 'device_info', 'platform': Platform.operatingSystem};
-      }
+      final info = await DeviceInfoPlugin().androidInfo;
+      final device = <String, dynamic>{
+        '_header': 'device_info',
+        'platform': 'Android',
+        'brand': info.brand,
+        'model': info.model,
+        'sdkInt': info.version.sdkInt,
+        'release': info.version.release,
+      };
 
       // User-Agent
       device['userAgent'] = AppConstants.userAgent;
@@ -167,12 +114,8 @@ class LoggerUtils {
   /// 从缓存的 User-Agent 中解析 WebView/浏览器引擎版本
   static String? _parseWebViewVersion() {
     final ua = AppConstants.userAgent;
-    // Chrome/xxx.x.x.x（Android WebView 和桌面端）
     final chromeMatch = RegExp(r'Chrome/([\d.]+)').firstMatch(ua);
     if (chromeMatch != null) return 'Chrome/${chromeMatch.group(1)}';
-    // Safari/xxx（iOS WKWebView）
-    final safariMatch = RegExp(r'Version/([\d.]+).*Safari').firstMatch(ua);
-    if (safariMatch != null) return 'Safari/${safariMatch.group(1)}';
     return null;
   }
 
@@ -263,8 +206,8 @@ class LoggerUtils {
         if (json['message'] == null) {
           final customParams =
               json['customParameters'] as Map<String, dynamic>?;
-          json['message'] = customParams?['message']?.toString() ??
-              json['error']?.toString();
+          json['message'] =
+              customParams?['message']?.toString() ?? json['error']?.toString();
           // 同时提升 tag
           json['tag'] ??= customParams?['tag']?.toString();
         }

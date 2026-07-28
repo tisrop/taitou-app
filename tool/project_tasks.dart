@@ -65,10 +65,7 @@ Future<void> _appRebuild(List<String> args) async {
   );
 }
 
-Future<void> _testAll(
-  List<String> args, {
-  bool includePrep = true,
-}) async {
+Future<void> _testAll(List<String> args, {bool includePrep = true}) async {
   if (includePrep) {
     await _runProjectPrep('test');
   }
@@ -87,50 +84,15 @@ Future<void> _nativePrepare(List<String> args) async {
   final target = _parseNativeTarget(args);
   final mode = _parseBuildMode(args);
   final androidTargets = _parseTargetPlatforms(args);
-  final macOsArch = _parseMacOsArch(args);
 
   switch (target) {
     case 'certs':
       await _runProjectPrep('certs');
       return;
     case 'auto':
-      await _prepareAutoNative(mode, androidTargets);
-      return;
-    case 'desktop':
-      await _prepareDesktopHost(mode, arch: macOsArch);
-      return;
-    case 'windows':
-      await _prepareWindowsNative(mode);
-      return;
-    case 'macos':
-      await _prepareMacOsNative(mode, arch: macOsArch);
-      return;
-    case 'linux':
-      await _prepareLinuxNative(mode);
-      return;
     case 'android':
       await _runProjectPrep('certs');
       await _prepareAndroidNative(mode, androidTargets);
-      return;
-    case 'ios':
-      await _prepareIosNative(mode);
-      return;
-    case 'all':
-      await _runProjectPrep('certs');
-      if (Platform.isWindows) {
-        await _prepareWindowsNative(mode);
-        await _prepareAndroidNative(mode, androidTargets);
-      } else if (Platform.isMacOS) {
-        await _prepareMacOsNative(mode, arch: macOsArch);
-        await _prepareAndroidNative(mode, androidTargets);
-        await _prepareIosNative(mode);
-      } else if (Platform.isLinux) {
-        await _prepareLinuxNative(mode);
-        await _prepareAndroidNative(mode, androidTargets);
-      } else {
-        stderr.writeln('当前平台不支持 native:prepare all');
-        exit(64);
-      }
       return;
     default:
       stderr.writeln('未知 native:prepare 目标: $target');
@@ -151,47 +113,14 @@ Future<void> _prepareAutoNative(
   _BuildMode mode,
   List<String>? requestedAndroidTargets,
 ) async {
-  stdout.writeln('==> 按宿主机与当前已连接设备自动准备原生产物');
+  stdout.writeln('==> 按当前已连接的 Android 设备准备原生产物');
 
   final devices = await _loadFlutterDevices();
   final androidTargets =
       requestedAndroidTargets == null || requestedAndroidTargets.isEmpty
       ? _connectedAndroidTargetPlatforms(devices)
       : requestedAndroidTargets;
-
-  if (Platform.isWindows) {
-    await _runAutoPrepareStep(
-      label: 'Windows 原生产物',
-      check: () => _checkDesktopAutoPrepare('windows', mode),
-      action: () => _prepareWindowsNative(mode),
-    );
-    await _prepareAndroidAuto(mode, androidTargets);
-    return;
-  }
-
-  if (Platform.isMacOS) {
-    await _runAutoPrepareStep(
-      label: 'macOS 原生产物',
-      check: () => _checkDesktopAutoPrepare('macos', mode),
-      action: () => _prepareMacOsNative(mode),
-    );
-    await _prepareAndroidAuto(mode, androidTargets);
-    await _prepareIosAuto(mode, devices);
-    return;
-  }
-
-  if (Platform.isLinux) {
-    await _runAutoPrepareStep(
-      label: 'Linux 原生产物',
-      check: () => _checkDesktopAutoPrepare('linux', mode),
-      action: () => _prepareLinuxNative(mode),
-    );
-    await _prepareAndroidAuto(mode, androidTargets);
-    return;
-  }
-
-  stderr.writeln('当前平台不支持 native:prepare auto');
-  exit(64);
+  await _prepareAndroidAuto(mode, androidTargets);
 }
 
 Future<void> _releasePrepare(List<String> args) async {
@@ -241,9 +170,9 @@ List<_FlutterTestTask> _buildWorkspaceTestTasks(List<String> args) {
       continue;
     }
 
-    targetPackages.putIfAbsent(resolvedTarget.packagePath, () => <String>[]).add(
-      resolvedTarget.relativeTarget,
-    );
+    targetPackages
+        .putIfAbsent(resolvedTarget.packagePath, () => <String>[])
+        .add(resolvedTarget.relativeTarget);
   }
 
   if (targetPackages.isEmpty) {
@@ -259,7 +188,9 @@ List<_FlutterTestTask> _buildWorkspaceTestTasks(List<String> args) {
   }
 
   return testPackages
-      .where((testPackage) => targetPackages.containsKey(testPackage.packagePath))
+      .where(
+        (testPackage) => targetPackages.containsKey(testPackage.packagePath),
+      )
       .map(
         (testPackage) => _FlutterTestTask(
           label: testPackage.label,
@@ -293,7 +224,9 @@ List<_WorkspaceTestPackage> _workspaceTestPackages() {
         packagesRoot
             .listSync(followLinks: false)
             .whereType<Directory>()
-            .where((directory) => Directory('${directory.path}/test').existsSync())
+            .where(
+              (directory) => Directory('${directory.path}/test').existsSync(),
+            )
             .toList(growable: false)
           ..sort((a, b) => a.path.compareTo(b.path));
 
@@ -339,10 +272,9 @@ _ExplicitTestTarget? _resolveExplicitTestTarget(
       continue;
     }
 
-    final relativeTarget =
-        absolutePath == testRootPath
-            ? 'test'
-            : 'test/${absolutePath.substring(testRootPath.length + 1)}';
+    final relativeTarget = absolutePath == testRootPath
+        ? 'test'
+        : 'test/${absolutePath.substring(testRootPath.length + 1)}';
 
     return _ExplicitTestTarget(
       packagePath: testPackage.packagePath,
@@ -364,10 +296,9 @@ bool _flutterTestOptionConsumesNextValue(String arg) {
 }
 
 String _normalizeTestPath(String path) {
-  final normalized =
-      path
-          .replaceAll('/', Platform.pathSeparator)
-          .replaceAll('\\', Platform.pathSeparator);
+  final normalized = path
+      .replaceAll('/', Platform.pathSeparator)
+      .replaceAll('\\', Platform.pathSeparator);
   if (Platform.isWindows) {
     return normalized.replaceAll(RegExp(r'[\\\/]+$'), '').toLowerCase();
   }
@@ -390,23 +321,6 @@ Future<void> _prepareAndroidAuto(
   );
 }
 
-Future<void> _prepareIosAuto(
-  _BuildMode mode,
-  List<_FlutterDevice> devices,
-) async {
-  final hasIosDevice = devices.any((device) => device.targetPlatform == 'ios');
-  if (!hasIosDevice) {
-    stdout.writeln('==> [SKIP] iOS 原生产物: 未检测到 iOS 设备或模拟器');
-    return;
-  }
-
-  await _runAutoPrepareStep(
-    label: 'iOS 原生产物',
-    check: () => _checkIosAutoPrepare(mode),
-    action: () => _prepareIosNative(mode),
-  );
-}
-
 Future<void> _runAutoPrepareStep({
   required String label,
   required Future<_AutoPrepareCheck> Function() check,
@@ -426,7 +340,7 @@ String _parseNativeTarget(List<String> args) {
       return arg;
     }
   }
-  return 'desktop';
+  return 'android';
 }
 
 _BuildMode _parseBuildMode(List<String> args) {
@@ -462,127 +376,6 @@ List<String>? _parseTargetPlatforms(List<String> args) {
     }
   }
   return null;
-}
-
-Future<void> _prepareDesktopHost(_BuildMode mode, {String? arch}) {
-  if (Platform.isWindows) {
-    return _prepareWindowsNative(mode);
-  }
-  if (Platform.isMacOS) {
-    return _prepareMacOsNative(mode, arch: arch);
-  }
-  if (Platform.isLinux) {
-    return _prepareLinuxNative(mode);
-  }
-  stderr.writeln('desktop 仅支持 Windows / macOS / Linux');
-  exit(64);
-}
-
-Future<void> _prepareWindowsNative(_BuildMode mode) async {
-  _assertHostPlatform('windows');
-
-  final stagedOutputs = _windowsStagedOutputs;
-
-  if (_nativeStageCurrent('windows', mode, stagedOutputs)) {
-    stdout.writeln('==> Windows DOH 原生产物已是最新状态');
-    return;
-  }
-
-  await runOrExit(
-    title: '构建 Windows DOH 原生产物',
-    executable: 'cargo',
-    arguments: [
-      'build',
-      if (mode == _BuildMode.release) '--release',
-      '--features',
-      'ech',
-      '--bin',
-      'doh_proxy_bin',
-      '--lib',
-    ],
-    workingDirectory: 'core/doh_proxy',
-  );
-
-  final cargoDir = mode == _BuildMode.release ? 'release' : 'debug';
-  _stageFile('core/doh_proxy/target/$cargoDir/doh_proxy.dll', stagedOutputs[0]);
-  _stageFile(
-    'core/doh_proxy/target/$cargoDir/doh_proxy_bin.exe',
-    stagedOutputs[1],
-  );
-  _writeNativeStageStamp('windows', mode);
-}
-
-Future<void> _prepareMacOsNative(_BuildMode mode, {String? arch}) async {
-  _assertHostPlatform('macos');
-
-  final resolvedArch = arch ?? await _detectMacOsHostArch();
-  final macTarget = _resolveMacOsArch(resolvedArch);
-  final variantKey = _macOsVariantKey(macTarget);
-
-  final stagedOutputs = _macOsStagedOutputs;
-
-  if (_nativeStageCurrent(
-    'macos',
-    mode,
-    stagedOutputs,
-    variantKey: variantKey,
-  )) {
-    stdout.writeln('==> macOS DOH 原生产物已是最新状态(${macTarget.arch})');
-    return;
-  }
-
-  await runOrExit(
-    title: '构建 macOS DOH 原生产物(${macTarget.arch})',
-    executable: 'cargo',
-    arguments: [
-      'build',
-      if (mode == _BuildMode.release) '--release',
-      '--features',
-      'ech',
-      '--bin',
-      'doh_proxy_bin',
-      '--lib',
-      '--target',
-      macTarget.rustTarget,
-    ],
-    workingDirectory: 'core/doh_proxy',
-  );
-
-  final cargoDir = mode == _BuildMode.release ? 'release' : 'debug';
-  final base = 'core/doh_proxy/target/${macTarget.rustTarget}/$cargoDir';
-  _stageFile('$base/libdoh_proxy.dylib', stagedOutputs[0]);
-  _stageFile('$base/doh_proxy_bin', stagedOutputs[1]);
-  await _chmodIfSupported(stagedOutputs[1]);
-  _writeNativeStageStamp('macos', mode, variantKey: variantKey);
-}
-
-Future<void> _prepareLinuxNative(_BuildMode mode) async {
-  _assertHostPlatform('linux');
-
-  final stagedOutputs = _linuxStagedOutputs;
-  if (_nativeStageCurrent('linux', mode, stagedOutputs)) {
-    stdout.writeln('==> Linux DOH 原生产物已是最新状态');
-    return;
-  }
-
-  await runOrExit(
-    title: '构建 Linux DOH 原生产物',
-    executable: 'cargo',
-    arguments: [
-      'build',
-      if (mode == _BuildMode.release) '--release',
-      '--features',
-      'ech',
-      '--bin',
-      'doh_proxy_bin',
-    ],
-    workingDirectory: 'core/doh_proxy',
-  );
-
-  final cargoDir = mode == _BuildMode.release ? 'release' : 'debug';
-  _stageFile('core/doh_proxy/target/$cargoDir/doh_proxy_bin', stagedOutputs[0]);
-  await _chmodIfSupported(stagedOutputs[0]);
-  _writeNativeStageStamp('linux', mode);
 }
 
 Future<void> _prepareAndroidNative(
@@ -631,51 +424,6 @@ Future<void> _prepareAndroidNative(
     );
   }
   _writeNativeStageStamp('android', mode, variantKey: variantKey);
-}
-
-Future<void> _prepareIosNative(_BuildMode mode) async {
-  _assertHostPlatform('macos');
-
-  final stagedOutputs = _iosStagedOutputs;
-
-  if (_nativeStageCurrent('ios', mode, stagedOutputs)) {
-    stdout.writeln('==> iOS DOH 原生产物已是最新状态');
-    return;
-  }
-
-  final buildArgs = <String>[
-    'rustc',
-    if (mode == _BuildMode.release) '--release',
-    '--features',
-    'ech',
-    '--lib',
-    '--crate-type',
-    'staticlib',
-  ];
-
-  await runOrExit(
-    title: '构建 iOS device DOH 原生库',
-    executable: 'cargo',
-    arguments: [...buildArgs, '--target', 'aarch64-apple-ios'],
-    workingDirectory: 'core/doh_proxy',
-  );
-  await runOrExit(
-    title: '构建 iOS simulator DOH 原生库',
-    executable: 'cargo',
-    arguments: [...buildArgs, '--target', 'aarch64-apple-ios-sim'],
-    workingDirectory: 'core/doh_proxy',
-  );
-
-  final cargoDir = mode == _BuildMode.release ? 'release' : 'debug';
-  _stageFile(
-    'core/doh_proxy/target/aarch64-apple-ios/$cargoDir/libdoh_proxy.a',
-    stagedOutputs[0],
-  );
-  _stageFile(
-    'core/doh_proxy/target/aarch64-apple-ios-sim/$cargoDir/libdoh_proxy.a',
-    stagedOutputs[1],
-  );
-  _writeNativeStageStamp('ios', mode);
 }
 
 bool _nativeStageCurrent(
@@ -768,18 +516,6 @@ void _stageFile(String sourcePath, String targetPath) {
   target.setLastModifiedSync(source.lastModifiedSync());
 }
 
-Future<void> _chmodIfSupported(String path) async {
-  if (Platform.isWindows) {
-    return;
-  }
-
-  await runOrExit(
-    title: '设置可执行权限 $path',
-    executable: 'chmod',
-    arguments: ['755', path],
-  );
-}
-
 Future<void> _runProjectPrep(String command) {
   return runOrExit(
     title: '执行项目预处理 $command',
@@ -812,34 +548,6 @@ List<_AndroidTarget> _resolveAndroidTargets(List<String>? targetPlatforms) {
   return _allAndroidTargets.where(resolved.contains).toList();
 }
 
-Future<_AutoPrepareCheck> _checkDesktopAutoPrepare(
-  String target,
-  _BuildMode mode,
-) async {
-  final stagedOutputs = switch (target) {
-    'windows' => _windowsStagedOutputs,
-    'macos' => _macOsStagedOutputs,
-    'linux' => _linuxStagedOutputs,
-    _ => const <String>[],
-  };
-
-  // macOS 走 host 架构默认编译,缓存戳带 arch variantKey,
-  // 这里必须用同一 key 才能正确命中(否则永远 cache miss)。
-  final variantKey = target == 'macos'
-      ? _macOsVariantKey(_resolveMacOsArch(await _detectMacOsHostArch()))
-      : null;
-
-  if (_nativeStageCurrent(target, mode, stagedOutputs, variantKey: variantKey)) {
-    return const _AutoPrepareCheck.ready();
-  }
-
-  if (!await _canRun('cargo', const ['--version'])) {
-    return const _AutoPrepareCheck.skip('未找到 cargo');
-  }
-
-  return const _AutoPrepareCheck.ready();
-}
-
 Future<_AutoPrepareCheck> _checkAndroidAutoPrepare(
   _BuildMode mode,
   List<String> targetPlatforms,
@@ -868,31 +576,6 @@ Future<_AutoPrepareCheck> _checkAndroidAutoPrepare(
   }
 
   return _checkRustTargets(androidTargets.map((target) => target.rustTarget));
-}
-
-Future<_AutoPrepareCheck> _checkIosAutoPrepare(_BuildMode mode) async {
-  if (_nativeStageCurrent('ios', mode, _iosStagedOutputs)) {
-    return const _AutoPrepareCheck.ready();
-  }
-
-  if (!await _canRun('cargo', const ['--version'])) {
-    return const _AutoPrepareCheck.skip('未找到 cargo');
-  }
-  if (!await _canRun('xcrun', const ['--sdk', 'iphoneos', '--show-sdk-path'])) {
-    return const _AutoPrepareCheck.skip('未找到 Xcode iPhoneOS SDK');
-  }
-  if (!await _canRun('xcrun', const [
-    '--sdk',
-    'iphonesimulator',
-    '--show-sdk-path',
-  ])) {
-    return const _AutoPrepareCheck.skip('未找到 Xcode iPhone Simulator SDK');
-  }
-
-  return _checkRustTargets(const [
-    'aarch64-apple-ios',
-    'aarch64-apple-ios-sim',
-  ]);
 }
 
 Future<_AutoPrepareCheck> _checkRustTargets(Iterable<String> targets) async {
@@ -1138,61 +821,13 @@ String _androidVariantKey(List<_AndroidTarget> targets) {
   return 'targets=${targets.map((target) => target.flutterTarget).join(',')}';
 }
 
-Future<String> _detectMacOsHostArch() async {
-  // uname -m 在 Apple Silicon 上返回 'arm64',Intel 上返回 'x86_64'。
-  // Platform.version 不含 CPU 架构信息,不可用于此判断。
-  final result = await Process.run('uname', const ['-m']);
-  final raw = (result.stdout as String).trim();
-  return raw == 'arm64' ? 'arm64' : 'x86_64';
-}
-
-_MacOsArch _resolveMacOsArch(String arch) {
-  return _macOsArchs.firstWhere(
-    (item) => item.arch == arch,
-    orElse: () {
-      stderr.writeln('未知 macOS 架构: $arch(支持 arm64 / x86_64)');
-      exit(64);
-    },
-  );
-}
-
-String _macOsVariantKey(_MacOsArch target) => 'arch=${target.arch}';
-
-String? _parseMacOsArch(List<String> args) {
-  for (final value in args) {
-    if (value.startsWith('--arch=')) {
-      final parsed = value.substring('--arch='.length).trim();
-      return parsed.isEmpty ? null : parsed;
-    }
-  }
-  final index = args.indexOf('--arch');
-  if (index != -1 && index + 1 < args.length) {
-    final parsed = args[index + 1].trim();
-    return parsed.isEmpty ? null : parsed;
-  }
-  return null;
-}
-
-void _assertHostPlatform(String platform) {
-  final matches =
-      (platform == 'windows' && Platform.isWindows) ||
-      (platform == 'macos' && Platform.isMacOS) ||
-      (platform == 'linux' && Platform.isLinux);
-  if (matches) {
-    return;
-  }
-
-  stderr.writeln('$platform 原生产物只能在对应宿主平台上准备');
-  exit(64);
-}
-
 const _usage = '''
 用法:
   dart tool/project_tasks.dart app:clean
   dart tool/project_tasks.dart app:rebuild <flutter build args...>
   dart tool/project_tasks.dart test:all [flutter test args...]
   dart tool/project_tasks.dart run:prepare [--debug|--release|--profile] [--target-platform=<platforms>]
-  dart tool/project_tasks.dart native:prepare [certs|auto|desktop|windows|macos|linux|android|ios|all] [--debug|--release|--profile] [--arch=arm64|x86_64]
+  dart tool/project_tasks.dart native:prepare [certs|auto|android] [--debug|--release|--profile] [--target-platform=<platforms>]
   dart tool/project_tasks.dart release:prepare [--skip-analyze] [--skip-test] [--strict-analyze]
 ''';
 
@@ -1255,33 +890,11 @@ const _flutterTestOptionsWithValue = <String>{
   '--test-randomize-ordering-seed',
 };
 
-const _windowsStagedOutputs = <String>[
-  'windows/runner/native/doh_proxy.dll',
-  'windows/runner/native/doh_proxy_bin.exe',
-];
-
-const _macOsStagedOutputs = <String>[
-  'macos/Runner/native/libdoh_proxy.dylib',
-  'macos/Runner/native/doh_proxy_bin',
-];
-
-const _linuxStagedOutputs = <String>['linux/runner/native/doh_proxy_bin'];
-
-const _iosStagedOutputs = <String>[
-  'ios/rust_libs/device/libdoh_proxy.a',
-  'ios/rust_libs/simulator/libdoh_proxy.a',
-];
-
 const _allAndroidTargets = <_AndroidTarget>[
   _AndroidTarget('android-arm64', 'arm64-v8a', 'aarch64-linux-android'),
   _AndroidTarget('android-arm', 'armeabi-v7a', 'armv7-linux-androideabi'),
   _AndroidTarget('android-x64', 'x86_64', 'x86_64-linux-android'),
   _AndroidTarget('android-x86', 'x86', 'i686-linux-android'),
-];
-
-const _macOsArchs = <_MacOsArch>[
-  _MacOsArch('arm64', 'aarch64-apple-darwin'),
-  _MacOsArch('x86_64', 'x86_64-apple-darwin'),
 ];
 
 class _AutoPrepareCheck {
@@ -1301,13 +914,6 @@ class _AndroidTarget {
   final String flutterTarget;
   final String androidAbi;
   final String rustTarget;
-}
-
-class _MacOsArch {
-  const _MacOsArch(this.arch, this.rustTarget);
-
-  final String arch; // 'arm64' | 'x86_64'
-  final String rustTarget; // 'aarch64-apple-darwin' | 'x86_64-apple-darwin'
 }
 
 class _FlutterDevice {

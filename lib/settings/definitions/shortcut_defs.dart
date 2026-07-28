@@ -20,7 +20,6 @@ List<SettingsGroup> buildShortcutGroups(BuildContext context) {
       icon: Symbols.navigation_rounded,
       items: [
         _maybeShortcutCustomModel(ShortcutAction.navigateBack, l10n),
-        _maybeShortcutCustomModel(ShortcutAction.navigateBackAlt, l10n),
         _maybeShortcutCustomModel(ShortcutAction.openSearch, l10n),
         _maybeShortcutCustomModel(ShortcutAction.openSettings, l10n),
         _maybeShortcutCustomModel(ShortcutAction.toggleNotifications, l10n),

@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -56,16 +54,9 @@ class UserApiKeyLoginFlow {
   Future<bool> start() async {
     final authorizeUrl = await UserApiKeyService().buildAuthorizeUrl();
     try {
-      // Android 用 Custom Tabs(inAppBrowserView),不用 externalApplication:
-      // Chrome 对已建立 App Links 关联的域名会把
-      // externalApplication 打开的链接直接弹回本 app,表现为"浏览器一闪就跳回"
-      // (仅 Chrome 有此行为,换其他浏览器正常)。Custom Tabs 在 app 上下文内打开,
-      // 不触发该回弹,且共享 Chrome cookie 复用浏览器登录态(OAuth 标准做法)。
-      // 其他平台 externalApplication 已验证正常,保持不变。
-      final mode = Platform.isAndroid
-          ? LaunchMode.inAppBrowserView
-          : LaunchMode.externalApplication;
-      return await launchUrl(authorizeUrl, mode: mode);
+      // 使用 Android Custom Tabs，避免 App Links 把授权页面立即拉回本应用，
+      // 同时复用浏览器登录态。
+      return await launchUrl(authorizeUrl, mode: LaunchMode.inAppBrowserView);
     } catch (e) {
       debugPrint('[UserApiKeyLoginFlow] 拉起浏览器失败: $e');
       return false;

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection' show UnmodifiableListView;
 import 'dart:convert';
-import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -19,7 +18,6 @@ import 'network/cookie/webview_cookie_priming.dart';
 import 'preloaded_data_service.dart';
 import 'webview_session_cookie_refresh_service.dart';
 import 'webview_settings.dart';
-import 'windows_webview_environment_service.dart';
 
 enum BrowserTrustPreloadPath { native, webView }
 
@@ -461,15 +459,11 @@ class BrowserTrustCoordinator {
     HeadlessInAppWebView? webView;
 
     webView = HeadlessInAppWebView(
-      webViewEnvironment: io.Platform.isWindows
-          ? WindowsWebViewEnvironmentService.instance.environment
-          : null,
       initialSettings: WebViewSettings.headless,
       initialUserScripts: _startupPreloadScripts(),
       onReceivedServerTrustAuthRequest: (_, challenge) =>
           WebViewSettings.handleServerTrustAuthRequest(challenge),
       onWebViewCreated: (createdController) {
-        WebViewSettings.applyWindowsHeadlessMemoryTarget(createdController);
         WebViewSettings.registerJsErrorReporter(createdController);
       },
       onLoadStop: (_, _) {
@@ -492,24 +486,12 @@ class BrowserTrustCoordinator {
       final c = webView.webViewController;
       if (c == null) return false;
 
-      if (io.Platform.isWindows) {
-        await c.loadUrl(
-          urlRequest: URLRequest(url: WebUri(_windowsBootstrapUrl)),
-        );
-        try {
-          await loadCompleter.future.timeout(_originLoadTimeout);
-        } on TimeoutException {
-          debugPrint('[BrowserTrust] Windows origin bootstrap timeout');
-        }
-        await _writeStartupShell(c);
-      } else {
-        await c.loadData(
-          data: _startupShellHtml,
-          baseUrl: WebUri(AppConstants.baseUrl),
-          mimeType: 'text/html',
-          encoding: 'utf-8',
-        );
-      }
+      await c.loadData(
+        data: _startupShellHtml,
+        baseUrl: WebUri(AppConstants.baseUrl),
+        mimeType: 'text/html',
+        encoding: 'utf-8',
+      );
 
       loadCompleter = Completer<void>();
       await _navigateToHome(c);
@@ -723,20 +705,6 @@ class BrowserTrustCoordinator {
       ),
     ]);
   }
-
-  Future<void> _writeStartupShell(InAppWebViewController controller) async {
-    final html = jsonEncode(_startupShellHtml);
-    await controller.evaluateJavascript(
-      source:
-          '''
-document.open();
-document.write($html);
-document.close();
-''',
-    );
-  }
-
-  String get _windowsBootstrapUrl => '${AppConstants.baseUrl}/robots.txt';
 
   String get _startupShellHtml =>
       '<!DOCTYPE html><html><head><meta charset="utf-8"></head>'

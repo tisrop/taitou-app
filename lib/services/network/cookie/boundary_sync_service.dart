@@ -43,14 +43,6 @@ class BoundarySyncService {
     final uri = Uri.parse(url);
     final host = uri.host;
 
-    if (io.Platform.isWindows && controller != null) {
-      return _jar.readCookieValueFromController(
-        controller,
-        name,
-        currentUrl: url,
-      );
-    }
-
     final webViewCookies = await _strategy.readCookiesFromWebView(
       _jar.webViewCookieManager,
       url,
@@ -106,33 +98,7 @@ class BoundarySyncService {
         return;
       }
 
-      if (io.Platform.isWindows && controller != null) {
-        final synced = await _jar.syncCriticalCookiesFromController(
-          controller,
-          currentUrl: url,
-          cookieNames: cookieNames,
-          excludeCookieNames: excludeCookieNames,
-          trusted: trusted,
-          acceptValues: acceptValues,
-        );
-        if (synced > 0) {
-          final syncedDetails = await _jar.getCookieDiagnosticsForRequest(
-            uri,
-            names: cookieNames,
-          );
-          CookieLogger.sync(
-            direction: 'WebView(CDP) → CookieJar',
-            count: synced,
-            names: cookieNames?.toList() ?? const [],
-            source: 'boundary_sync',
-            url: url,
-            cookieDetails: syncedDetails,
-          );
-          return;
-        }
-      }
-
-      // 通过 strategy 读取（Linux 用 getAllCookies 兜底）
+      // 通过 Android CookieManager strategy 读取
       final webViewCookies = await _strategy.readCookiesFromWebView(
         _jar.webViewCookieManager,
         url,
@@ -652,7 +618,9 @@ class BoundarySyncService {
     List<Cookie> cookies,
   ) {
     final valueHashes =
-        cookies.map((cookie) => (cookie.value?.toString() ?? '').hashCode).toList()
+        cookies
+            .map((cookie) => (cookie.value?.toString() ?? '').hashCode)
+            .toList()
           ..sort();
     return '$host|$name|${valueHashes.join(',')}';
   }

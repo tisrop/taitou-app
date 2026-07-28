@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart';
@@ -141,7 +140,7 @@ class DohDnsCacheRecord {
 /// DOH Proxy FFI bindings
 ///
 /// This provides direct FFI bindings to the Rust DOH proxy library
-/// for Android and iOS platforms.
+/// for the Android native library.
 class DohProxyFfi {
   DohProxyFfi._();
   static final DohProxyFfi instance = DohProxyFfi._();
@@ -329,86 +328,12 @@ class DohProxyFfi {
 
   DynamicLibrary? _loadLibrary() {
     try {
-      if (Platform.isAndroid) {
-        return DynamicLibrary.open('libdoh_proxy.so');
-      } else if (Platform.isIOS) {
-        // iOS uses static linking, so we use the process itself
-        return DynamicLibrary.process();
-      } else if (Platform.isWindows) {
-        return _loadWindowsLibrary();
-      } else if (Platform.isMacOS) {
-        return _loadMacOSLibrary();
-      } else if (Platform.isLinux) {
-        return DynamicLibrary.open('libdoh_proxy.so');
-      }
+      return DynamicLibrary.open('libdoh_proxy.so');
     } catch (e) {
       lastInitError = '加载原生库失败: $e';
       debugPrint('[DOH FFI] $lastInitError');
-    }
-    return null;
-  }
-
-  DynamicLibrary? _loadWindowsLibrary() {
-    const libName = 'doh_proxy.dll';
-    final execPath = Platform.resolvedExecutable;
-    final execDir = File(execPath).parent.path;
-    final projectRoot = _projectRootFromBuildPath(execPath);
-    final candidates = <String>[
-      '$execDir/native/$libName',
-      if (projectRoot != null) '$projectRoot/windows/runner/native/$libName',
-      if (projectRoot != null)
-        '$projectRoot/core/doh_proxy/target/release/$libName',
-      if (projectRoot != null)
-        '$projectRoot/core/doh_proxy/target/debug/$libName',
-      '${Directory.current.path}/windows/runner/native/$libName',
-      '${Directory.current.path}/core/doh_proxy/target/release/$libName',
-      '${Directory.current.path}/core/doh_proxy/target/debug/$libName',
-    ];
-
-    for (final path in candidates) {
-      if (File(path).existsSync()) {
-        debugPrint('[DOH FFI] 加载 Windows 库: $path');
-        return DynamicLibrary.open(path);
-      }
-    }
-
-    return DynamicLibrary.open(libName);
-  }
-
-  DynamicLibrary? _loadMacOSLibrary() {
-    const libName = 'libdoh_proxy.dylib';
-    final execPath = Platform.resolvedExecutable;
-    final execDir = File(execPath).parent.path;
-    final projectRoot = _projectRootFromBuildPath(execPath);
-    final candidates = <String>[
-      '$execDir/../Frameworks/$libName',
-      '$execDir/../Resources/native/$libName',
-      if (projectRoot != null) '$projectRoot/macos/Runner/native/$libName',
-      if (projectRoot != null)
-        '$projectRoot/core/doh_proxy/target/release/$libName',
-      if (projectRoot != null)
-        '$projectRoot/core/doh_proxy/target/debug/$libName',
-      '${Directory.current.path}/macos/Runner/native/$libName',
-      '${Directory.current.path}/core/doh_proxy/target/release/$libName',
-      '${Directory.current.path}/core/doh_proxy/target/debug/$libName',
-    ];
-    for (final path in candidates) {
-      if (File(path).existsSync()) {
-        debugPrint('[DOH FFI] 加载 macOS 库: $path');
-        return DynamicLibrary.open(path);
-      }
-    }
-    // 最后尝试系统搜索路径
-    return DynamicLibrary.open(libName);
-  }
-
-  String? _projectRootFromBuildPath(String execPath) {
-    final normalized = execPath.replaceAll('\\', '/');
-    final buildIndex = normalized.indexOf('/build/');
-    if (buildIndex <= 0) {
       return null;
     }
-    return normalized.substring(0, buildIndex);
   }
 
   /// 最近一次初始化失败的原因
@@ -777,19 +702,6 @@ class DohProxyFfi {
   void initLogging() {
     if (!_initialized && !initialize()) return;
     _dohProxyInitLogging();
-  }
-
-  /// Check if FFI is available on this platform
-  static bool get isAvailable {
-    return Platform.isAndroid ||
-        Platform.isIOS ||
-        Platform.isMacOS ||
-        Platform.isWindows;
-  }
-
-  /// 桌面平台 FFI 失败时可以回退到进程模式
-  static bool get canFallbackToProcess {
-    return Platform.isMacOS || Platform.isWindows || Platform.isLinux;
   }
 }
 

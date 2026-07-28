@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
@@ -204,7 +202,7 @@ class _EngineCardState extends State<EngineCard> {
     final webviewSettings = WebViewAdapterSettingsService.instance;
     final webviewEnabled = webviewSettings.effectiveEnabled;
     final sessionFallback = webviewSettings.sessionFallbackEnabled;
-    final showReset = isFallback && Platform.isAndroid && !sessionFallback;
+    final showReset = isFallback && !sessionFallback;
 
     // WebView 在最外层分流：主站 API 走 WebView，其余走推算出的引擎。
     // 它不参与 resolveEffectiveAdapter()，所以开启时要单独显示分流，
@@ -366,9 +364,8 @@ class _EngineCardState extends State<EngineCard> {
           value: webviewEnabled,
           onChanged: (value) => webview.setEnabled(value),
         ),
-        // Android：Cronet 降级控制
-        if (Platform.isAndroid)
-          ..._buildFallbackControls(theme, fallbackService),
+        // Android Cronet 降级控制。
+        ..._buildFallbackControls(theme, fallbackService),
       ],
     );
   }

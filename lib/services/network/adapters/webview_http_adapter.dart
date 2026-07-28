@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -14,17 +13,13 @@ import '../cookie/cookie_jar_service.dart';
 import '../cookie/session_cookie_sentinel.dart';
 import '../cookie/webview_cookie_priming.dart';
 import '../../webview_settings.dart';
-import '../../windows_webview_environment_service.dart';
 import 'adapter_log_metadata.dart';
 
 /// WebView HTTP 适配器
 ///
 /// 使用 InAppWebView 的 JS fetch() 发起 HTTP 请求。
-/// 请求经过真正的 Chrome/WebKit 内核，TLS 指纹与浏览器完全一致，
+/// 请求经过 Android Chrome WebView 内核，TLS 指纹与浏览器一致，
 /// 可绕过 Cloudflare Bot Management 等基于指纹的检测。
-///
-/// 全平台支持：Android (Chrome WebView)、iOS/macOS (WKWebView)、
-/// Windows (WebView2)、Linux (WebKitGTK)。
 class WebViewHttpAdapter implements HttpClientAdapter {
   static const Set<String> _forbiddenBrowserHeaders = {
     'accept-charset',
@@ -94,17 +89,12 @@ class WebViewHttpAdapter implements HttpClientAdapter {
 
     try {
       _headlessWebView = HeadlessInAppWebView(
-        // Windows 需要 WebView2 环境，其他平台传 null
-        webViewEnvironment: Platform.isWindows
-            ? WindowsWebViewEnvironmentService.instance.environment
-            : null,
         initialSettings: WebViewSettings.headless,
         initialUserScripts: WebViewSettings.compatPolyfillScripts,
         onReceivedServerTrustAuthRequest: (_, challenge) =>
             WebViewSettings.handleServerTrustAuthRequest(challenge),
         onWebViewCreated: (controller) {
           _controller = controller;
-          WebViewSettings.applyWindowsHeadlessMemoryTarget(controller);
           WebViewSettings.registerJsErrorReporter(controller);
 
           controller.addJavaScriptHandler(
@@ -151,18 +141,12 @@ class WebViewHttpAdapter implements HttpClientAdapter {
       }
 
       pageLoadCompleter = Completer<void>();
-      if (Platform.isWindows) {
-        await controller.loadUrl(
-          urlRequest: URLRequest(url: WebUri(_windowsBootstrapUrl)),
-        );
-      } else {
-        await controller.loadData(
-          data: _bootstrapHtml,
-          baseUrl: WebUri(AppConstants.baseUrl),
-          mimeType: 'text/html',
-          encoding: 'utf-8',
-        );
-      }
+      await controller.loadData(
+        data: _bootstrapHtml,
+        baseUrl: WebUri(AppConstants.baseUrl),
+        mimeType: 'text/html',
+        encoding: 'utf-8',
+      );
 
       await pageLoadCompleter.future.timeout(
         const Duration(seconds: 30),
@@ -170,10 +154,6 @@ class WebViewHttpAdapter implements HttpClientAdapter {
           throw TimeoutException('WebView init timeout');
         },
       );
-
-      if (Platform.isWindows) {
-        await _writeBootstrapHtml(controller);
-      }
 
       _isInitialized = true;
       if (!initCompleter.isCompleted) {
@@ -201,20 +181,6 @@ class WebViewHttpAdapter implements HttpClientAdapter {
       }
     }
   }
-
-  Future<void> _writeBootstrapHtml(InAppWebViewController controller) async {
-    final html = jsonEncode(_bootstrapHtml);
-    await controller.evaluateJavascript(
-      source:
-          '''
-document.open();
-document.write($html);
-document.close();
-''',
-    );
-  }
-
-  String get _windowsBootstrapUrl => '${AppConstants.baseUrl}/robots.txt';
 
   String get _bootstrapHtml =>
       '<!DOCTYPE html><html><head><meta charset="utf-8"></head>'
@@ -1491,11 +1457,7 @@ document.close();
     options.extra['_networkLogFields'] = mergedFields;
   }
 
-  CookieManager _resolveCookieManager() {
-    return Platform.isWindows
-        ? WindowsWebViewEnvironmentService.instance.cookieManager
-        : CookieManager.instance();
-  }
+  CookieManager _resolveCookieManager() => CookieManager.instance();
 
   Future<void> _abortWebViewFetch(String requestId) async {
     final controller = _controller;

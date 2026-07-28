@@ -108,7 +108,6 @@ class DraftController {
   }
 
   Future<LocalDraftEntry?> _readLocalDraft() async {
-    if (kIsWeb) return null;
     try {
       final accountId = await _resolveAccountId();
       if (accountId == null) return null;
@@ -265,7 +264,6 @@ class DraftController {
   }
 
   void _scheduleLocalSave(DraftData data) {
-    if (kIsWeb) return;
     _localDebounceTimer?.cancel();
     _pendingLocalData = data;
     _localDebounceTimer = Timer(_localDebounceDelay, () {
@@ -274,7 +272,6 @@ class DraftController {
   }
 
   Future<void> _saveLocalNow(DraftData data) async {
-    if (kIsWeb) return;
     _localDebounceTimer?.cancel();
     if (!data.hasContent) return;
     _pendingLocalData = null;
@@ -302,7 +299,6 @@ class DraftController {
   }
 
   Future<void> _deleteLocalIfMatches(DraftData data) async {
-    if (kIsWeb) return;
     _localDebounceTimer?.cancel();
     await _flushPendingLocalWrite();
     await _enqueueLocalOperation(() async {
@@ -317,7 +313,6 @@ class DraftController {
   }
 
   Future<void> _deleteLocal() {
-    if (kIsWeb) return Future.value();
     return _enqueueLocalOperation(() async {
       final accountId = await _resolveAccountId();
       if (accountId == null) return;

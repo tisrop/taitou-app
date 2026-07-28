@@ -16,7 +16,7 @@ import 'package:path_provider/path_provider.dart';
 /// 把 `name_normalized`、`updated_at` 拆成顶层字段是为了让聚合 /
 /// 增量对账等操作不必再 jsonDecode 整个 payload，发挥 Hive box 的随机访问优势。
 ///
-/// 纯 Dart，无 native 依赖；移动端 / 桌面端 / Web 都可用。
+/// 纯 Dart 存储层，Android 端通过应用文档目录持久化。
 class AppDatabase {
   AppDatabase._();
 
@@ -135,13 +135,6 @@ class AppDatabase {
   }
 
   static Future<void> _initialize() async {
-    if (kIsWeb) {
-      // Web 暂时不走本地缓存——上层 BookmarksNotifier 在 username 为空时
-      // 直接返回空表，这里抛错是为了在被错误地引入到 Web 构建时尽早暴露。
-      throw UnsupportedError(
-        'AppDatabase 暂不支持 Web 平台：书签本地缓存仅在移动端与桌面端启用。',
-      );
-    }
     final directory = await getApplicationDocumentsDirectory();
     Hive.init(p.join(directory.path, 'hive'));
     _initialized = true;

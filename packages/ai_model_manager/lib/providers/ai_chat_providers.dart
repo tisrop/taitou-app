@@ -1,6 +1,5 @@
 import 'dart:async';
-import 'dart:io';
-
+import 'dart:io' show File;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 // ignore: depend_on_referenced_packages
@@ -1353,14 +1352,7 @@ class TopicAiChatNotifier extends StateNotifier<TopicAiChatState> {
     return '$base\n\n[diag] $diag';
   }
 
-  String _platformTag() {
-    if (Platform.isIOS) return 'ios';
-    if (Platform.isAndroid) return 'android';
-    if (Platform.isMacOS) return 'macos';
-    if (Platform.isWindows) return 'windows';
-    if (Platform.isLinux) return 'linux';
-    return 'other';
-  }
+  String _platformTag() => 'android';
 
   @override
   void dispose() {

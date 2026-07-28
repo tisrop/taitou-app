@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -13,7 +12,6 @@ import 'network/cookie/cookie_jar_service.dart';
 import 'network/cookie/webview_cookie_priming.dart';
 import 'preloaded_data_service.dart';
 import 'webview_settings.dart';
-import 'windows_webview_environment_service.dart';
 
 /// WebView session bootstrap 的执行结果。
 ///
@@ -300,16 +298,12 @@ class WebViewSessionCookieRefreshService {
     }
 
     webView = HeadlessInAppWebView(
-      webViewEnvironment: io.Platform.isWindows
-          ? WindowsWebViewEnvironmentService.instance.environment
-          : null,
       initialSettings: WebViewSettings.headless,
       initialUserScripts: WebViewSettings.compatPolyfillScripts,
       onReceivedServerTrustAuthRequest: (_, challenge) =>
           WebViewSettings.handleServerTrustAuthRequest(challenge),
       onWebViewCreated: (createdController) {
         controller = createdController;
-        WebViewSettings.applyWindowsHeadlessMemoryTarget(createdController);
         WebViewSettings.registerJsErrorReporter(createdController);
       },
       onLoadStop: (_, _) {
@@ -334,27 +328,17 @@ class WebViewSessionCookieRefreshService {
         return const SessionBootstrapResult.failure(phase: 'controller');
       }
 
-      if (io.Platform.isWindows) {
-        await c.loadUrl(
-          urlRequest: URLRequest(url: WebUri(_windowsBootstrapUrl)),
-        );
-      } else {
-        await c.loadData(
-          data: _bootstrapHtml,
-          baseUrl: WebUri(AppConstants.baseUrl),
-          mimeType: 'text/html',
-          encoding: 'utf-8',
-        );
-      }
+      await c.loadData(
+        data: _bootstrapHtml,
+        baseUrl: WebUri(AppConstants.baseUrl),
+        mimeType: 'text/html',
+        encoding: 'utf-8',
+      );
 
       try {
         await loadCompleter.future.timeout(const Duration(seconds: 8));
       } on TimeoutException {
         debugPrint('[WebViewSessionSync] 轻量 bootstrap 文档加载等待超时，继续尝试');
-      }
-
-      if (io.Platform.isWindows) {
-        await _writeBootstrapHtml(c);
       }
 
       final bootstrap = await runOnController(
@@ -568,18 +552,6 @@ class WebViewSessionCookieRefreshService {
     }
   }
 
-  Future<void> _writeBootstrapHtml(InAppWebViewController controller) async {
-    final html = jsonEncode(_bootstrapHtml);
-    await controller.evaluateJavascript(
-      source:
-          '''
-document.open();
-document.write($html);
-document.close();
-''',
-    );
-  }
-
   /// 把 caller 提供的 plugin url 列表注入到 WebView 全局，bootstrap 脚本会
   /// 优先用它跳过自己的首页 fetch。
   Future<void> _injectPluginCandidates(
@@ -599,8 +571,6 @@ document.close();
       source: 'window.__fluxdoPluginCandidates = $encoded;',
     );
   }
-
-  String get _windowsBootstrapUrl => '${AppConstants.baseUrl}/robots.txt';
 
   String get _bootstrapHtml =>
       '<!DOCTYPE html><html><head><meta charset="utf-8"></head>'

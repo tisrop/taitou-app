@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -17,7 +16,6 @@ import '../../services/preloaded_data_service.dart';
 import '../../services/toast_service.dart';
 import '../../services/webview_session_cookie_refresh_service.dart';
 import '../../services/webview_settings.dart';
-import '../../services/windows_webview_environment_service.dart';
 
 /// 登录对话框结果状态。
 enum WebViewLoginStatus { success, failure, canceled }
@@ -122,7 +120,6 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
   bool _processing = false; // hcaptcha 通过后登录请求进行中
   bool _finished = false; // 防止重复 pop / 回调重入
   bool _cookiesPrimed = false; // 方案 A: 是否已从 jar 预灌 cookie
-  bool _windowsInlineHtmlInjected = false;
   bool _cfRetryUsed = false; // CSRF 403 自动重验证只做一次, 避免死循环
   final int _flowGeneration = AuthSession().generation;
   // 最近一次 _runLogin 的参数, CSRF 403 重新过 CF 后用同样参数重跑。
@@ -149,9 +146,6 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
     ];
     return list.toSet().toList(); // 去重保序
   }
-
-  WebUri get _windowsBootstrapUrl =>
-      WebUri('${AppConstants.baseUrl}/robots.txt');
 
   String get _inlineHtml {
     final scheme = Theme.of(context).colorScheme;
@@ -354,8 +348,7 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
 
   /// 方案 A: 把 jar 里的会话 / CF cookie 灌进登录 WebView 的 store。
   ///
-  /// 不依赖各平台 WebView 间 cookie store 自动共享 —— Windows 靠共享同一个
-  /// WebViewEnvironment 才物理同 store, iOS/Android/Linux 的共享行为不一致。
+  /// 不依赖 Android WebView 与 Dart CookieJar 自动共享 cookie store。
   /// [LoginPage._ensureCfClearance] 已保证 jar 有 cf_clearance, 这里以 jar 为准
   /// 灌进 store, 确保同源 fetch 能带上 cf_clearance 过 CF。
   /// 必须走 canonical Set-Cookie 写入，不能把 Cookie header 拆成 name/value，
@@ -368,50 +361,6 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
       debugPrint('[WebViewLogin] 已从 jar 预灌 cookie 到登录 WebView store');
     } catch (e) {
       debugPrint('[WebViewLogin] 预灌 cookie 失败 (继续, 依赖共享 store): $e');
-    }
-  }
-
-  /// Windows flutter_inappwebview 0.7.x 会用 WebView2 NavigateToString()
-  /// 加载 initialData, 原生层忽略 baseUrl, 导致文档不是本站 origin。
-  /// hCaptcha 会把 about:blank/opaque origin 判成 invalid-data。这里先导航到
-  /// 站点的轻量静态资源拿真实 origin, 再写入同一份内嵌登录页。
-  Future<void> _injectWindowsInlineHtml(
-    InAppWebViewController controller,
-  ) async {
-    if (_finished) return;
-    if (_windowsInlineHtmlInjected) {
-      return;
-    }
-    try {
-      final probe = await controller.evaluateJavascript(
-        source: '''
-({
-  href: window.location.href,
-  origin: window.location.origin,
-  contentType: document.contentType,
-  readyState: document.readyState
-})
-''',
-      );
-      final origin = probe is Map ? probe['origin']?.toString() : null;
-      if (origin != AppConstants.baseUrl) {
-        debugPrint('[WebViewLogin] Windows bootstrap origin not ready: $probe');
-        return;
-      }
-
-      final html = jsonEncode(_inlineHtml);
-      _windowsInlineHtmlInjected = true;
-      await controller.evaluateJavascript(
-        source:
-            '''
-document.open();
-document.write($html);
-document.close();
-''',
-      );
-    } catch (e) {
-      debugPrint('[WebViewLogin] Windows hcaptcha bootstrap 失败: $e');
-      _finishFailure(LoginErrorKind.unknown, '人机验证页面初始化失败');
     }
   }
 
@@ -716,26 +665,12 @@ document.close();
                                 children: [
                                   Positioned.fill(
                                     child: InAppWebView(
-                                      webViewEnvironment: Platform.isWindows
-                                          ? WindowsWebViewEnvironmentService
-                                                .instance
-                                                .environment
-                                          : null,
-                                      initialUrlRequest: Platform.isWindows
-                                          ? URLRequest(
-                                              url: _windowsBootstrapUrl,
-                                            )
-                                          : null,
-                                      initialData: Platform.isWindows
-                                          ? null
-                                          : InAppWebViewInitialData(
-                                              data: _inlineHtml,
-                                              baseUrl: WebUri(
-                                                AppConstants.baseUrl,
-                                              ),
-                                              mimeType: 'text/html',
-                                              encoding: 'utf-8',
-                                            ),
+                                      initialData: InAppWebViewInitialData(
+                                        data: _inlineHtml,
+                                        baseUrl: WebUri(AppConstants.baseUrl),
+                                        mimeType: 'text/html',
+                                        encoding: 'utf-8',
+                                      ),
                                       initialSettings: InAppWebViewSettings(
                                         javaScriptEnabled: true,
                                         transparentBackground: true,
@@ -759,36 +694,11 @@ document.close();
                                         );
                                         _setupHandlers(controller);
                                       },
-                                      onLoadStop: (controller, _) async {
-                                        if (Platform.isWindows) {
-                                          await _injectWindowsInlineHtml(
-                                            controller,
-                                          );
-                                          return;
-                                        }
+                                      onLoadStop: (_, _) {
                                         if (mounted) {
                                           setState(() => _loading = false);
                                         }
                                       },
-                                      onProgressChanged:
-                                          (controller, progress) async {
-                                            if (Platform.isWindows &&
-                                                progress >= 100) {
-                                              await _injectWindowsInlineHtml(
-                                                controller,
-                                              );
-                                            }
-                                          },
-                                      onReceivedError:
-                                          (controller, request, error) async {
-                                            if (Platform.isWindows &&
-                                                request.isForMainFrame ==
-                                                    true) {
-                                              await _injectWindowsInlineHtml(
-                                                controller,
-                                              );
-                                            }
-                                          },
                                     ),
                                   ),
                                   if (_loading)

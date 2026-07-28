@@ -51,17 +51,15 @@ List<SettingsSearchResult> buildSearchIndex(BuildContext context) {
   }) {
     return groups
         .expand((g) => g.items)
-        .where((item) {
-          if (item is PlatformConditionalModel) return item.shouldShow;
-          return true;
-        })
-        .map((item) => SettingsSearchResult(
-              model: item is PlatformConditionalModel ? item.inner : item,
-              categoryName: categoryName,
-              categoryIcon: categoryIcon,
-              categoryColor: categoryColor,
-              pageBuilder: pageBuilder,
-            ))
+        .map(
+          (item) => SettingsSearchResult(
+            model: item,
+            categoryName: categoryName,
+            categoryIcon: categoryIcon,
+            categoryColor: categoryColor,
+            pageBuilder: pageBuilder,
+          ),
+        )
         .toList();
   }
 
@@ -79,8 +77,7 @@ List<SettingsSearchResult> buildSearchIndex(BuildContext context) {
       categoryName: l10n.settings_preferences,
       categoryIcon: Symbols.tune_rounded,
       categoryColor: Colors.deepPurple,
-      pageBuilder: ({highlightId}) =>
-          PreferencesPage(highlightId: highlightId),
+      pageBuilder: ({highlightId}) => PreferencesPage(highlightId: highlightId),
     ),
     ...fromGroups(
       buildBottomNavGroups(context),
@@ -95,8 +92,7 @@ List<SettingsSearchResult> buildSearchIndex(BuildContext context) {
       categoryName: l10n.settings_appearance,
       categoryIcon: Symbols.color_lens_rounded,
       categoryColor: Colors.teal,
-      pageBuilder: ({highlightId}) =>
-          AppearancePage(highlightId: highlightId),
+      pageBuilder: ({highlightId}) => AppearancePage(highlightId: highlightId),
     ),
     ...fromGroups(
       buildNetworkGroups(context),

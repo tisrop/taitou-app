@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:ai_model_manager/ai_model_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
@@ -84,17 +82,14 @@ List<SettingsGroup> buildPreferencesGroups(BuildContext context) {
           },
           onTap: (context, ref) => showBlockedUsernamesDialog(context, ref),
         ),
-        PlatformConditionalModel(
-          inner: SwitchModel(
-            id: 'portraitLock',
-            title: l10n.preferences_portraitLock,
-            subtitle: l10n.preferences_portraitLockDesc,
-            icon: Symbols.screen_lock_portrait_rounded,
-            getValue: (ref) => ref.watch(preferencesProvider).portraitLock,
-            onChanged: (ref, v) =>
-                ref.read(preferencesProvider.notifier).setPortraitLock(v),
-          ),
-          condition: () => Platform.isIOS || Platform.isAndroid,
+        SwitchModel(
+          id: 'portraitLock',
+          title: l10n.preferences_portraitLock,
+          subtitle: l10n.preferences_portraitLockDesc,
+          icon: Symbols.screen_lock_portrait_rounded,
+          getValue: (ref) => ref.watch(preferencesProvider).portraitLock,
+          onChanged: (ref, v) =>
+              ref.read(preferencesProvider.notifier).setPortraitLock(v),
         ),
       ],
     ),
@@ -164,7 +159,7 @@ List<SettingsGroup> buildPreferencesGroups(BuildContext context) {
       ],
     ),
     // 没有真实 Firebase 项目时不暴露这个开关，见 AppConstants.enableCrashReporting
-    if (Platform.isAndroid && AppConstants.enableCrashReporting)
+    if (AppConstants.enableCrashReporting)
       SettingsGroup(
         title: l10n.preferences_advanced,
         icon: Symbols.bug_report_rounded,

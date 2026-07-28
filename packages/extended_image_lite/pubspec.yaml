@@ -1,5 +1,5 @@
 name: extended_image_lite
-description: Lite version of extended_image with iOS-style physics for image gestures (bounce, inertia, snap).
+description: Lite version of extended_image with mobile image gesture physics (bounce, inertia, snap).
 version: 1.0.0
 
 environment:

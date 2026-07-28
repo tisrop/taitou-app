@@ -61,7 +61,6 @@ void main() {
         // 设备/运行态
         'cronet_has_fallen_back',
         'vpn_suppressed_doh',
-        'per_device_cert_installed',
         'cert_use_per_device',
         'window_x',
         // 一次性标记

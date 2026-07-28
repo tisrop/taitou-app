@@ -21,13 +21,7 @@ class JsonFileHandler extends ReportHandler {
   }
 
   @override
-  List<PlatformType> getSupportedPlatforms() => [
-    PlatformType.android,
-    PlatformType.iOS,
-    PlatformType.macOS,
-    PlatformType.linux,
-    PlatformType.windows,
-  ];
+  List<PlatformType> getSupportedPlatforms() => [PlatformType.android];
 
   /// 非空字符串返回原值，否则返回 null（避免写入空堆栈）
   static String? _nonEmpty(String? s) =>
@@ -40,7 +34,8 @@ class JsonFileHandler extends ReportHandler {
       'timestamp': report.dateTime.toIso8601String(),
       'level': 'error',
       'type': 'general',
-      'message': customParams['message']?.toString() ??
+      'message':
+          customParams['message']?.toString() ??
           report.error?.toString() ??
           'Unknown error',
       if (customParams['tag'] != null) 'tag': customParams['tag'],

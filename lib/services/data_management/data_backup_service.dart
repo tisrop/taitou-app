@@ -48,7 +48,6 @@ class DataBackupService {
     // ── 设备绑定 / 运行态 ──
     'cronet_', // 降级状态
     'vpn_suppressed_',
-    'per_device_cert_installed',
     'cert_use_per_device',
     'window_', // 桌面端窗口几何(legacy keys)
     // ── 一次性 UI 标记(新设备应重新引导)──
