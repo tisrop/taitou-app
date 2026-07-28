@@ -35,12 +35,6 @@ _GITHUB_EMAIL_RE = re.compile(
     r"^(?:\d+\+)?(?P<login>[^@]+)@users\.noreply\.github\.com$",
     re.IGNORECASE,
 )
-# origin 建仓时未同步的历史 tag。值为（展示版本、该版本在当前 Git 历史中的 commit）。
-# 只用于确定变更范围，不会向任何远端补推历史 tag。
-_LEGACY_RELEASE_BASES = {
-    "v0.2.26": ("v0.2.25", "3eb54ff561c2f44a0855a91ef63960680028b2be"),
-}
-
 _BOT_NAMES = {
     "github-actions[bot]",
     "github-actions",
@@ -289,14 +283,6 @@ def resolve_release_data(
     local_tags = _local_tags(tag)
     previous_tag = choose_previous_tag(tag, local_tags)
     previous_ref = previous_tag
-
-    if previous_tag is None and tag in _LEGACY_RELEASE_BASES:
-        previous_tag, previous_ref = _LEGACY_RELEASE_BASES[tag]
-        _tag_commit(previous_ref)
-        print(
-            f"origin 缺少历史 tag {previous_tag}；"
-            f"使用仓库内 commit {previous_ref[:8]} 作为只读发布基线"
-        )
 
     print(
         f"本地 Git 找到 {len(local_tags)} 个已合并版本 tag；"

@@ -78,18 +78,17 @@ class GenerateAndroidReleaseNotesTest(unittest.TestCase):
             ["tag", "--merged", "deadbeef", "--list", "v*"]
         )
 
-    def test_legacy_release_base_is_used_when_origin_lacks_previous_tag(self) -> None:
+    def test_explicit_first_release_allows_missing_previous_tag(self) -> None:
         with mock.patch.object(_MODULE, "_local_tags", return_value=[]):
-            with mock.patch.object(_MODULE, "_tag_commit", side_effect=lambda ref: ref):
-                with mock.patch.object(_MODULE, "_local_commits", return_value=[Commit("1", "fix: one")]):
-                    previous_tag, previous_ref, commits = resolve_release_data(
-                        tag="v0.2.26",
-                        repository="tisrop/taitou-app",
-                    )
+            previous_tag, previous_ref, commits = resolve_release_data(
+                tag="v0.2.25",
+                repository="tisrop/taitou-app",
+                allow_first_release=True,
+            )
 
-        self.assertEqual(previous_tag, "v0.2.25")
-        self.assertEqual(previous_ref, "3eb54ff561c2f44a0855a91ef63960680028b2be")
-        self.assertEqual(len(commits), 1)
+        self.assertIsNone(previous_tag)
+        self.assertIsNone(previous_ref)
+        self.assertEqual(commits, [])
 
     def test_missing_previous_tag_fails_instead_of_generating_incomplete_notes(self) -> None:
         with mock.patch.object(_MODULE, "_local_tags", return_value=["v9.9.9"]):

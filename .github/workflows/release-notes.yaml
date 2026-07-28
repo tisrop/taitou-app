@@ -65,10 +65,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          release_args=()
+          if [ "$RELEASE_TAG" = "v0.2.25" ]; then
+            release_args+=(--allow-first-release)
+          fi
           python3 scripts/ci/generate_android_release_notes.py \
             --tag "$RELEASE_TAG" \
             --repository "$GITHUB_REPOSITORY" \
-            --output release_notes.md
+            --output release_notes.md \
+            "${release_args[@]}"
           cat release_notes.md
 
       - name: 更新 GitHub Release 正文
