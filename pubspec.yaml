@@ -3,7 +3,7 @@ name: fluxdo
 # 会让每次 rebase 上游都产生大量冲突，而用户完全看不到它。
 description: "抬头 —— 开源心声社区（openxinsheng.com）第三方 Android 客户端"
 publish_to: 'none'
-version: 0.2.26+2026072717
+version: 0.2.25+2026072717
 
 environment:
   sdk: ^3.10.4
