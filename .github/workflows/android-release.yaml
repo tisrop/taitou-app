@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive   # core/doh_proxy 与 packages/fluxdo_render 是必需的
+          submodules: recursive   # 仅初始化构建所需的 core/doh_proxy
           fetch-depth: 0          # Release Notes 需要读取上一个版本 tag 和提交范围
 
       - uses: actions/setup-java@v4

@@ -102,8 +102,8 @@ dart run tool/project_prep.dart app   # l10n 生成 + DoH 代理证书
 flutter build apk --release
 ```
 
-`core/doh_proxy` 与项目中的渲染依赖包是 git submodule，克隆时务必带
-`--recurse-submodules`，否则构建会失败。
+仅 `core/doh_proxy` 使用 git submodule，克隆时务必带
+`--recurse-submodules`。`packages/fluxdo_render` 已纳入本仓库，由本项目手工维护。
 
 ### 签名
 
