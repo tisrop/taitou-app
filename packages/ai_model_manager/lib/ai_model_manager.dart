@@ -1,0 +1,31 @@
+/// AI 模型服务配置管理
+library;
+
+export 'models/ai_provider.dart';
+export 'models/ai_chat_message.dart';
+export 'models/ai_chat_attachment.dart';
+export 'models/prompt_preset.dart';
+export 'models/prompt_dimension.dart';
+export 'utils/model_capabilities.dart';
+export 'services/ai_provider_service.dart';
+export 'services/ai_chat_service.dart';
+export 'services/ai_chat_storage_service.dart';
+export 'services/ai_package_logger.dart';
+export 'services/prompt_preset_storage.dart';
+export 'services/toast_delegate.dart';
+export 'l10n/ai_l10n.dart';
+export 'providers/ai_provider_providers.dart';
+export 'providers/ai_chat_providers.dart';
+export 'providers/prompt_preset_providers.dart';
+export 'pages/ai_providers_page.dart';
+export 'pages/ai_provider_list_page.dart';
+export 'pages/ai_provider_edit_page.dart';
+export 'pages/ai_model_config_page.dart';
+export 'pages/ai_advanced_settings_page.dart';
+export 'pages/ai_chat_history_page.dart';
+export 'pages/prompt_presets_page.dart';
+export 'pages/prompt_preset_edit_page.dart';
+export 'widgets/icon_emoji_picker.dart';
+export 'widgets/model_icon.dart';
+export 'widgets/preset_icon.dart';
+export 'widgets/swipe_action_cell.dart';

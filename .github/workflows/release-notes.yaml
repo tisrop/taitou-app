@@ -1,0 +1,80 @@
+name: Refresh Release Notes
+
+# 只重新生成并更新已有 GitHub Release 的正文，不编译 APK。
+# 修改本工作流、生成脚本或 highlights 后会自动刷新最新 stable release；
+# 也可以手动指定历史 tag。
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release-notes.yaml
+      - scripts/ci/generate_android_release_notes.py
+      - highlights/**
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 要更新的版本 tag；留空时使用最新 stable tag
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-release-notes-${{ inputs.tag || 'latest-stable' }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: 获取完整 tag
+        run: git fetch --force --tags origin
+
+      - name: 确定并校验 tag
+        env:
+          REQUESTED_TAG: ${{ inputs.tag }}
+        run: |
+          RELEASE_TAG="$REQUESTED_TAG"
+          if [ -z "$RELEASE_TAG" ]; then
+            RELEASE_TAG="$(
+              git tag --merged HEAD --list 'v*' \
+                | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+                | sort -V \
+                | tail -n 1
+            )"
+          fi
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::无效版本 tag：$RELEASE_TAG"
+            exit 1
+          fi
+          if ! git rev-parse --verify --quiet "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "::error::仓库中不存在 tag：$RELEASE_TAG"
+            exit 1
+          fi
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "将刷新 $RELEASE_TAG 的 Release Notes"
+
+      - name: 生成结构化 Release Notes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/ci/generate_android_release_notes.py \
+            --tag "$RELEASE_TAG" \
+            --repository "$GITHUB_REPOSITORY" \
+            --output release_notes.md
+          cat release_notes.md
+
+      - name: 更新 GitHub Release 正文
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: 抬头 ${{ env.RELEASE_TAG }}
+          body_path: release_notes.md
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}

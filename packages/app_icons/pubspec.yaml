@@ -1,0 +1,19 @@
+name: app_icons
+description: "全局统一图标库（Material Symbols Rounded + 自绘）。"
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.10.4
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+  material_symbols_icons: ^4.2951.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

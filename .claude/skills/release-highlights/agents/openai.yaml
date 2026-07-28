@@ -1,0 +1,7 @@
+interface:
+  display_name: "稳定版发版亮点"
+  short_description: "预检版本、起草亮点并在确认后执行稳定版发版"
+  default_prompt: "Use $release-highlights to prepare the next stable release highlights and wait for my confirmation before releasing."
+
+policy:
+  allow_implicit_invocation: true

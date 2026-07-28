@@ -1,0 +1,214 @@
+name: Android Release
+
+# 打 tag 触发，产出签名的 release APK 并挂到 GitHub Release。
+# 手动触发时只构建、不发布，方便验证改动。
+#
+# 需要在仓库 Secrets 里配置：
+#   ANDROID_KEYSTORE_BASE64  —— base64 -i android/app/taitou-release.jks | pbcopy
+#   ANDROID_KEY_PROPERTIES   —— 推荐，直接保存本地 android/key.properties 的完整内容
+#
+# 若未配置 ANDROID_KEY_PROPERTIES，也可拆分配置：
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+# 缺任意一项时 Gradle 会回退到 debug 签名，此处会直接判失败，避免发出无法升级的包。
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# 同一个 tag 被重新推送时，只保留最新一次构建，避免重复占用 runner。
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive   # core/doh_proxy 与 packages/fluxdo_render 是必需的
+          fetch-depth: 0          # Release Notes 需要读取上一个版本 tag 和提交范围
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'      # AGP 要求；21+ 构建会失败
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle*
+            android/gradle/wrapper/gradle-wrapper.properties
+            **/pubspec.lock
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.8'
+          channel: stable
+          cache: true
+          pub-cache: true
+
+      - name: 设置 Rust Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      # 缓存 Cargo registry、cargo-ndk 和 core/doh_proxy/target。后续发版只需
+      # 重编译真正变化的 Rust crate，而不是每次从零编译三个 ABI。
+      - name: 缓存 Rust Android 构建
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core/doh_proxy
+          key: android-release
+          cache-bin: true
+
+      - name: 安装 Rust Android 构建工具
+        run: |
+          if ! command -v cargo-ndk >/dev/null 2>&1; then
+            cargo install cargo-ndk --locked
+          fi
+          if ! command -v cmake >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y cmake
+          fi
+
+      - name: 设置 Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: 安装 NDK
+        run: |
+          # quickjs_engine 固定要 27.x，其余插件跟 Flutter 默认的 28.x
+          sdkmanager --install "ndk;27.0.12077973" "ndk;28.2.13676358"
+
+      - name: 还原并校验签名配置
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::缺少 ANDROID_KEYSTORE_BASE64，拒绝产出 debug 签名的 release 包"
+            exit 1
+          fi
+          if ! printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/app/taitou-release.jks; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 不是有效的 base64"
+            exit 1
+          fi
+
+          if [ -n "$KEY_PROPERTIES" ]; then
+            # 兼容现有 Build workflow 使用的组合 secret，并统一到当前 keystore 路径。
+            printf '%s\n' "$KEY_PROPERTIES" > android/key.properties
+            python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("android/key.properties")
+          lines = path.read_text().splitlines()
+          pattern = re.compile(r"^\s*storeFile\s*[:=]")
+          replaced = False
+          normalized = []
+          for line in lines:
+              if pattern.match(line):
+                  normalized.append("storeFile=app/taitou-release.jks")
+                  replaced = True
+              else:
+                  normalized.append(line)
+          if not replaced:
+              normalized.insert(0, "storeFile=app/taitou-release.jks")
+          path.write_text("\n".join(normalized) + "\n")
+          PY
+            STORE_PASSWORD_CHECK="$(sed -n -E 's/^[[:space:]]*storePassword[[:space:]]*[:=][[:space:]]*//p' android/key.properties | head -n1)"
+            KEY_ALIAS_CHECK="$(sed -n -E 's/^[[:space:]]*keyAlias[[:space:]]*[:=][[:space:]]*//p' android/key.properties | head -n1)"
+            KEY_PASSWORD_CHECK="$(sed -n -E 's/^[[:space:]]*keyPassword[[:space:]]*[:=][[:space:]]*//p' android/key.properties | head -n1)"
+          else
+            if [ -z "$STORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASSWORD" ]; then
+              echo "::error::请配置 ANDROID_KEY_PROPERTIES，或完整配置三个拆分签名 secret"
+              exit 1
+            fi
+            cat > android/key.properties <<EOF
+          storeFile=app/taitou-release.jks
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+            STORE_PASSWORD_CHECK="$STORE_PASSWORD"
+            KEY_ALIAS_CHECK="$KEY_ALIAS"
+            KEY_PASSWORD_CHECK="$KEY_PASSWORD"
+          fi
+
+          if [ -z "$STORE_PASSWORD_CHECK" ] || [ -z "$KEY_ALIAS_CHECK" ] || [ -z "$KEY_PASSWORD_CHECK" ]; then
+            echo "::error::签名配置缺少 storePassword、keyAlias 或 keyPassword"
+            exit 1
+          fi
+          if ! keytool -list \
+            -keystore android/app/taitou-release.jks \
+            -storepass "$STORE_PASSWORD_CHECK" \
+            -alias "$KEY_ALIAS_CHECK" >/dev/null 2>&1; then
+            echo "::error::keystore、storePassword 或 keyAlias 不匹配，请重新同步 GitHub Secrets"
+            exit 1
+          fi
+
+          rm -f /tmp/taitou-signing-check.p12
+          if ! keytool -importkeystore -noprompt \
+            -srckeystore android/app/taitou-release.jks \
+            -srcstorepass "$STORE_PASSWORD_CHECK" \
+            -srcalias "$KEY_ALIAS_CHECK" \
+            -srckeypass "$KEY_PASSWORD_CHECK" \
+            -destkeystore /tmp/taitou-signing-check.p12 \
+            -deststoretype PKCS12 \
+            -deststorepass taitou-signing-check >/dev/null 2>&1; then
+            echo "::error::keyPassword 与 keystore 私钥不匹配，请重新同步 GitHub Secrets"
+            exit 1
+          fi
+          rm -f /tmp/taitou-signing-check.p12
+          echo "Android release signing configuration verified"
+
+      - name: 构建
+        run: ./scripts/build-android.sh
+
+      - name: 校验确实用了 release 签名
+        run: |
+          APK=$(ls build/app/outputs/flutter-apk/app-arm64-v8a-release.apk)
+          "$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --print-certs "$APK" | tee /tmp/certs.txt
+          if grep -qi "CN=Android Debug" /tmp/certs.txt; then
+            echo "::error::产物是 debug 签名，签名配置没生效"
+            exit 1
+          fi
+
+      - name: 清理签名材料
+        if: always()
+        run: rm -f android/app/taitou-release.jks android/key.properties
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: taitou-apk
+          path: build/app/outputs/flutter-apk/*.apk
+
+      - name: 生成结构化 Release Notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/ci/generate_android_release_notes.py \
+            --tag "${GITHUB_REF_NAME}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --output release_notes.md
+          cat release_notes.md
+
+      - name: 发布到 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: 抬头 ${{ github.ref_name }}
+          files: build/app/outputs/flutter-apk/*.apk
+          body_path: release_notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}

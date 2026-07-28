@@ -1,0 +1,244 @@
+{
+  "@@locale": "zh",
+  "ai_askSubtitle": "AI 会基于话题内容为你解答",
+  "ai_askTitle": "向 AI 助手提问",
+  "ai_clearChat": "清空聊天",
+  "ai_clearChatConfirm": "确定要清空所有聊天记录吗？",
+  "ai_clearChatTitle": "清空聊天",
+  "ai_clearLabel": "清空",
+  "ai_copiedToClipboard": "已复制到剪贴板",
+  "ai_copyLabel": "复制",
+  "ai_exportImage": "导出图片",
+  "ai_generateFailed": "生成失败",
+  "ai_highlights": "有什么值得关注的",
+  "ai_highlightsPrompt": "这个话题中有哪些值得关注的信息或亮点？",
+  "ai_inputHint": "输入消息...",
+  "ai_likeInDev": "点赞功能开发中...",
+  "ai_listViewpoints": "列出主要观点",
+  "ai_listViewpointsPrompt": "请列出这个话题中各楼层的主要观点和立场。",
+  "ai_moreTooltip": "更多",
+  "ai_multiSelectExport": "多选导出",
+  "ai_newSession": "新建会话",
+  "ai_retryLabel": "重试",
+  "ai_selectContext": "选择上下文范围",
+  "ai_selectExportMessages": "请选择要导出的消息",
+  "ai_selectModel": "选择模型",
+  "ai_selectedCount": "已选 {count} 条",
+  "@ai_selectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ai_sendTooltip": "发送",
+  "ai_sessionCount": "{count} 条",
+  "@ai_sessionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ai_sessionHistory": "会话记录",
+  "ai_sessionTitle": "会话 {index}",
+  "@ai_sessionTitle": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
+  "ai_stopGenerate": "停止生成",
+  "ai_summarizePrompt": "请简要总结这个话题的主要内容和讨论要点。",
+  "ai_summarizeTopic": "总结这个话题",
+  "ai_swipeHint": "向左滑动可打开 AI 助手",
+  "ai_title": "AI 助手",
+  "ai_translatePost": "翻译主帖",
+  "ai_translatePrompt": "请将主帖内容翻译成英文。",
+  "ai_typingIndicator": "正在输入",
+  "ai_thinkingLabel": "思考过程",
+  "ai_thinkingEnabled": "深度思考",
+  "ai_attachImageTooltip": "附加图片",
+  "ai_removeAttachment": "移除附件",
+  "ai_imageGenerating": "正在生成图片",
+  "ai_optimizingPrompt": "正在分析话题",
+  "ai_optimizedPromptLabel": "优化后的 Prompt",
+  "ai_imageDraft": "草图",
+  "ai_saveImageLabel": "保存到相册",
+  "ai_copyImageLabel": "复制图片",
+  "ai_imageSaved": "已保存到相册",
+  "ai_imageSaveFailed": "保存失败",
+  "ai_imageCopied": "图片已复制",
+  "ai_imageCopyFailed": "复制失败",
+  "ai_imageSavePermission": "请授予相册访问权限",
+  "ai_replyToTopicLabel": "回复到话题",
+  "ai_replyToTopicUploading": "正在上传图片…",
+  "ai_replyToTopicUploadFailed": "上传图片失败",
+  "ai_replyToTopicSuccess": "图片已插入回复框",
+  "ai_modelGroupChat": "聊天模型",
+  "ai_modelGroupImage": "图像模型",
+  "ai_modeSwitchToImage": "生图",
+  "ai_modeBackToChat": "退出生图",
+  "ai_imageModelMissingTooltip": "添加图像生成模型",
+  "ai_imageModelMissingTitle": "需要图像生成模型",
+  "ai_imageModelMissingMessage": "还没添加支持图像输出的模型。可以在 AI 设置里添加 gpt-image-1、gemini-3-image-preview 等。",
+  "ai_imageModelMissingGoSettings": "去添加",
+  "ai_toolsCamera": "拍照",
+  "ai_toolsPhotos": "相册",
+  "ai_toolsTooltip": "更多操作",
+  "ai_modelSearchHint": "搜索模型或供应商",
+  "ai_modelSearchNoMatch": "没有匹配的模型",
+  "ai_modelFavoritesSection": "收藏模型",
+  "ai_modelFavoritesDock": "收藏",
+  "ai_modelFavoriteAdd": "收藏模型",
+  "ai_modelFavoriteRemove": "取消收藏",
+  "ai_modelFavoriteSortHint": "长按排序",
+  "ai_imageGenTitle": "生成图片",
+  "ai_imageGenSubtitle": "选一个风格预设，或直接描述你想要的画面",
+  "ai_imageCoverLabel": "封面海报",
+  "ai_imageCoverPrompt": "为「{title}」这个话题画一张极简风格的封面海报，主色调克制、富有意境，适合作为话题展示图",
+  "@ai_imageCoverPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageIllustrationLabel": "话题插画",
+  "ai_imageIllustrationPrompt": "把「{title}」这个话题的核心场景画成一幅插画，构图简洁明了，能传达话题氛围",
+  "@ai_imageIllustrationPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageComicLabel": "漫画风格",
+  "ai_imageComicPrompt": "用扁平化漫画风格表达「{title}」这个话题的核心讨论，画面幽默有趣、富有表现力",
+  "@ai_imageComicPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageCardLabel": "分享卡片",
+  "ai_imageCardPrompt": "做一张可用于社交分享的「{title}」话题视觉卡片，含主题文字与装饰元素，整体精致美观",
+  "@ai_imageCardPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageInfographicLabel": "手绘小报",
+  "ai_imageInfographicPrompt": "把「{title}」整理成一张 16:9 横版手绘卡通信息图：粗糙草图线条、蜡笔/马克笔质感，标题居中或左上，列出 3-6 个 1-6 字的简短要点，关键词用手绘圆圈/箭头/星星标注，搭配可爱小图标或角色，大量留白，画面层次清晰，纯涂鸦感、无写实、无 3D",
+  "@ai_imageInfographicPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageMinimalLabel": "极简",
+  "ai_imageMinimalPrompt": "为「{title}」这个话题做一张极简风格的视觉，构图干净、留白充足、几何元素克制",
+  "@ai_imageMinimalPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageWatercolorLabel": "水彩",
+  "ai_imageWatercolorPrompt": "用水彩画风格表达「{title}」这个话题，色彩柔和透明、笔触自然有水分晕染感",
+  "@ai_imageWatercolorPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imagePixelLabel": "像素",
+  "ai_imagePixelPrompt": "把「{title}」这个话题画成 8-bit 像素风格图，格子清晰、用色鲜明、复古游戏画面感",
+  "@ai_imagePixelPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_image3dClayLabel": "黏土 3D",
+  "ai_image3dClayPrompt": "把「{title}」这个话题做成 3D 黏土风格图，圆润饱满、表面有手捏质感，色彩明亮饱和",
+  "@ai_image3dClayPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageSketchNotesLabel": "涂鸦笔记",
+  "ai_imageSketchNotesPrompt": "把「{title}」这个话题做成手绘涂鸦笔记风格：黑色马克笔在米色纸上，散布手写标题、简笔画图标、箭头、连线，富有学习笔记气息",
+  "@ai_imageSketchNotesPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_dimensionPaletteLabel": "色彩",
+  "ai_dimensionRenderingLabel": "画风",
+  "ai_dimensionMoodLabel": "氛围",
+  "ai_dimensionAspectLabel": "比例",
+  "ai_paletteWarmLabel": "暖色",
+  "ai_paletteWarmFragment": "整体使用暖色调（橘红、米黄、咖啡）作为主色",
+  "ai_paletteCoolLabel": "冷色",
+  "ai_paletteCoolFragment": "整体使用冷色调（蓝、青、紫）作为主色",
+  "ai_palettePastelLabel": "粉彩",
+  "ai_palettePastelFragment": "使用低饱和度的粉彩色（薄荷绿、樱花粉、奶油黄）作为主色",
+  "ai_paletteMonoLabel": "黑白",
+  "ai_paletteMonoFragment": "黑白灰单色调，仅用一种点缀色提亮",
+  "ai_paletteVividLabel": "高饱和",
+  "ai_paletteVividFragment": "使用高饱和度的鲜艳对比色，画面活力十足",
+  "ai_paletteEarthLabel": "大地色",
+  "ai_paletteEarthFragment": "用大地色系（沙土黄、橄榄绿、赭红、灰褐）作为主色，自然质朴",
+  "ai_paletteRetroLabel": "复古",
+  "ai_paletteRetroFragment": "使用复古印刷色调（芥末黄、砖红、墨绿、深蓝）",
+  "ai_renderingHandDrawnLabel": "手绘",
+  "ai_renderingHandDrawnFragment": "采用手绘草图线条，自然不规则，蜡笔或马克笔质感",
+  "ai_renderingFlatVectorLabel": "扁平矢量",
+  "ai_renderingFlatVectorFragment": "扁平化矢量插画风格，色块清晰、边缘干净、无渐变",
+  "ai_renderingWatercolorLabel": "水彩",
+  "ai_renderingWatercolorFragment": "水彩画质感，颜色透明柔和、有水分晕染边缘",
+  "ai_renderingChalkLabel": "粉笔",
+  "ai_renderingChalkFragment": "黑板上的粉笔画质感，笔触有颗粒感、手写感强",
+  "ai_renderingPixelLabel": "像素",
+  "ai_renderingPixelFragment": "8-bit 像素风格，格子清晰、复古游戏画面感",
+  "ai_rendering3dClayLabel": "黏土 3D",
+  "ai_rendering3dClayFragment": "3D 黏土质感，物体圆润饱满、表面有手捏痕迹",
+  "ai_moodSubtleLabel": "克制",
+  "ai_moodSubtleFragment": "整体氛围克制安静，对比柔和，富有意境",
+  "ai_moodBalancedLabel": "均衡",
+  "ai_moodBalancedFragment": "氛围均衡舒适，色彩与构图都不夸张",
+  "ai_moodBoldLabel": "强烈",
+  "ai_moodBoldFragment": "氛围强烈大胆，高对比、富有冲击力",
+  "ai_aspectSquareLabel": "1:1",
+  "ai_aspectWideLabel": "16:9",
+  "ai_aspectTallLabel": "9:16",
+  "ai_aspect4x3Label": "4:3",
+  "ai_aspect3x4Label": "3:4",
+  "ai_quickPromptsManage": "快捷词管理",
+  "ai_quickPromptsTitle": "AI 快捷词",
+  "ai_quickPromptsImageTab": "图像",
+  "ai_quickPromptsTextTab": "文本",
+  "ai_quickPromptsBuiltInSection": "内置",
+  "ai_quickPromptsCustomSection": "自定义",
+  "ai_quickPromptsMore": "更多",
+  "ai_quickPromptsEmpty": "还没有自定义快捷词",
+  "ai_quickPromptsAddNew": "新建快捷词",
+  "ai_quickPromptsEditTitle": "编辑快捷词",
+  "ai_quickPromptsCreateTitle": "新建快捷词",
+  "ai_quickPromptsName": "名称",
+  "ai_quickPromptsNameHint": "如：手绘小报",
+  "ai_quickPromptsType": "类型",
+  "ai_quickPromptsIcon": "图标",
+  "ai_quickPromptsIconTab": "图标",
+  "ai_quickPromptsEmojiTab": "Emoji",
+  "ai_quickPromptsEmojiInputHint": "输入或粘贴 emoji",
+  "ai_quickPromptsTemplate": "Prompt 模板",
+  "ai_quickPromptsTemplateHint": "占位符： [title] 话题标题， [context] 上下文摘要",
+  "ai_quickPromptsAspect": "默认比例",
+  "ai_quickPromptsTags": "标签",
+  "ai_quickPromptsTagsHint": "用逗号分隔",
+  "ai_quickPromptsDimensions": "维度组合（高级）",
+  "ai_quickPromptsTestGenerate": "测试生成",
+  "ai_quickPromptsTesting": "测试中…",
+  "ai_quickPromptsTestSuccess": "测试图已生成",
+  "ai_quickPromptsTestFailed": "测试失败",
+  "ai_quickPromptsResetBuiltIns": "恢复内置默认",
+  "ai_quickPromptsResetBuiltInsConfirm": "确定要恢复所有内置快捷词的默认配置吗？（不影响自定义）",
+  "ai_quickPromptsHide": "隐藏",
+  "ai_quickPromptsUnhide": "显示",
+  "ai_quickPromptsDuplicate": "复制",
+  "ai_quickPromptsDelete": "删除",
+  "ai_quickPromptsDeleteConfirm": "确定删除快捷词「{name}」吗？",
+  "@ai_quickPromptsDeleteConfirm": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "ai_quickPromptsPin": "Pin 到聊天页",
+  "ai_quickPromptsUnpin": "取消 Pin",
+  "ai_quickPromptsManageSubtitle": "管理 AI 助手底部的快捷词，可增删改、Pin、调顺序",
+  "ai_quickPromptsValidateNameRequired": "请输入名称",
+  "ai_quickPromptsValidateTemplateRequired": "请输入 prompt 模板",
+  "ai_tokenUsage": "输入 {prompt} · 输出 {response}",
+  "@ai_tokenUsage": {
+    "placeholders": {
+      "prompt": {
+        "type": "int"
+      },
+      "response": {
+        "type": "int"
+      }
+    }
+  }
+}

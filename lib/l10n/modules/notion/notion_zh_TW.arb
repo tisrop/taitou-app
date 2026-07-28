@@ -1,0 +1,88 @@
+{
+  "@@locale": "zh_TW",
+  "notion_title": "Notion 同步",
+  "notion_subtitle": "把帖子完整同步到你的 Notion Database",
+  "notion_configured": "已設定完成",
+  "notion_editConfig": "修改設定",
+  "notion_upgradeAvailable": "Database 需要升級",
+  "notion_upgradeMessage": "應用新增了「按帖子去重」能力,需要給你的 Notion Database 加一個 Post ID 欄位。點下方按鈕一鍵升級",
+  "notion_upgradeAction": "立即升級",
+  "notion_upgradeSucceed": "Database 已升級",
+  "notion_upgradeFailed": "升級失敗:{error}",
+  "@notion_upgradeFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "notion_step1Title": "建立 Integration 取得 Token",
+  "notion_step1Body": "1. 打開 notion.so/my-integrations\n2. 點 + New integration,Type 選 Internal,連結到你的 workspace\n3. 建立後,在頁面頂部找到 Internal Integration Secret,點 Show → Copy\n4. 貼到下方的輸入框",
+  "notion_step2Title": "準備 Database",
+  "notion_step2Body": "在 Notion 中挑(或新建)一個 Page,點右上角 ··· → Connections → 加入剛才建立的 Integration。接著複製此 Page URL 末尾的 32 位 ID,點下方「一鍵建立」即可在該 Page 下產生帶預設欄位的 Database。\n\n如果你已經手動建好了 Database,直接貼 Database ID 也可以(同樣要 share 給 Integration)。",
+  "notion_step3Title": "儲存並測試",
+  "notion_step3Body": "測試通過後,設定生效,可以在帖子的匯出選單中選 Notion 同步。",
+  "notion_openIntegrationsPage": "打開 Notion Integrations",
+  "notion_tokenSection": "Integration Token",
+  "notion_databaseSection": "Database",
+  "notion_howToGetToken": "如何取得 Token？",
+  "notion_createTemplateDb": "一鍵建立範本 Database",
+  "notion_saveAndTest": "儲存並測試連線",
+  "notion_disconnect": "斷開",
+  "notion_disconnected": "已斷開 Notion",
+  "notion_fillTokenAndDb": "請填寫 Token 與 Database ID",
+  "notion_tokenRequired": "請先填寫 Integration Token",
+  "notion_testOk": "連線成功:{name}",
+  "@notion_testOk": {
+    "placeholders": {
+      "name": { "type": "String" }
+    }
+  },
+  "notion_testFailed": "連線失敗:{error}",
+  "@notion_testFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "notion_databaseCreated": "Database 已建立,Database ID 已填入",
+  "notion_dbCreateFailed": "建立失敗:{error}",
+  "@notion_dbCreateFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "notion_pickParentPage": "選擇 Parent Page",
+  "notion_pickParentPageHint": "請在 Notion 中建立或選擇一個 Page,把它分享給 Integration,然後複製 Page URL 中的 32 位 ID 貼進來",
+  "notion_syncOptions": "同步選項",
+  "notion_autoSyncOnBookmark": "收藏話題時自動同步",
+  "notion_autoSyncDesc": "開啟後,收藏話題(主帖)會在背景同步到 Notion。收藏單條回覆不會觸發",
+  "notion_syncScope": "同步範圍",
+  "notion_tokenSecurityNote": "Token 僅儲存在本機,不會上傳到任何伺服器。建議為 fluxdo 單獨建立一個 Internal Integration,並只把目標 Database 分享給它。",
+  "notion_syncSucceed": "已同步到 Notion",
+  "notion_syncFailed": "同步失敗:{error}",
+  "@notion_syncFailed": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "notion_duplicateTitle": "Notion 中已存在",
+  "notion_duplicateMessage": "Notion Database 中已有此帖子的頁面。要怎麼處理?",
+  "notion_duplicateSkip": "跳過",
+  "notion_duplicateOverwrite": "覆蓋(歸檔舊的,建立新的)",
+  "notion_notConfigured": "請先在「Notion 同步」設定中配置 Token 與 Database",
+  "notion_syncing": "同步中…",
+  "notion_syncingFetch": "抓取帖子 {current}/{total}",
+  "@notion_syncingFetch": {
+    "placeholders": {
+      "current": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  },
+  "notion_syncingConvert": "轉換格式…",
+  "notion_syncingCreate": "建立頁面…",
+  "notion_syncingAppend": "追加內容 {current}/{total}",
+  "@notion_syncingAppend": {
+    "placeholders": {
+      "current": { "type": "int" },
+      "total": { "type": "int" }
+    }
+  }
+}

@@ -1,0 +1,244 @@
+{
+  "@@locale": "zh_HK",
+  "ai_askSubtitle": "AI 會基於話題內容為你解答",
+  "ai_askTitle": "向 AI 助手提問",
+  "ai_clearChat": "清空聊天",
+  "ai_clearChatConfirm": "確定要清空所有聊天記錄嗎？",
+  "ai_clearChatTitle": "清空聊天",
+  "ai_clearLabel": "清空",
+  "ai_copiedToClipboard": "已複製到剪貼板",
+  "ai_copyLabel": "複製",
+  "ai_exportImage": "導出圖片",
+  "ai_generateFailed": "生成失敗",
+  "ai_highlights": "有什麼值得關注的",
+  "ai_highlightsPrompt": "這個話題中有哪些值得關注的信息或亮點？",
+  "ai_inputHint": "輸入消息...",
+  "ai_likeInDev": "點贊功能開發中...",
+  "ai_listViewpoints": "列出主要觀點",
+  "ai_listViewpointsPrompt": "請列出這個話題中各樓層的主要觀點和立場。",
+  "ai_moreTooltip": "更多",
+  "ai_multiSelectExport": "多選導出",
+  "ai_newSession": "新建會話",
+  "ai_retryLabel": "重試",
+  "ai_selectContext": "選擇上下文範圍",
+  "ai_selectExportMessages": "請選擇要導出的消息",
+  "ai_selectModel": "選擇模型",
+  "ai_selectedCount": "已選 {count} 條",
+  "@ai_selectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ai_sendTooltip": "發送",
+  "ai_sessionCount": "{count} 條",
+  "@ai_sessionCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ai_sessionHistory": "會話記錄",
+  "ai_sessionTitle": "會話 {index}",
+  "@ai_sessionTitle": {
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
+  "ai_stopGenerate": "停止生成",
+  "ai_summarizePrompt": "請簡要總結這個話題的主要內容和討論要點。",
+  "ai_summarizeTopic": "總結這個話題",
+  "ai_swipeHint": "向左滑動可打開 AI 助手",
+  "ai_title": "AI 助手",
+  "ai_translatePost": "翻譯主帖",
+  "ai_translatePrompt": "請將主帖內容翻譯成英文。",
+  "ai_typingIndicator": "正在輸入",
+  "ai_thinkingLabel": "思考過程",
+  "ai_thinkingEnabled": "深度思考",
+  "ai_attachImageTooltip": "附加圖片",
+  "ai_removeAttachment": "移除附件",
+  "ai_imageGenerating": "正在生成圖片",
+  "ai_optimizingPrompt": "正在分析話題",
+  "ai_optimizedPromptLabel": "優化後的 Prompt",
+  "ai_imageDraft": "草圖",
+  "ai_saveImageLabel": "保存到相冊",
+  "ai_copyImageLabel": "複製圖片",
+  "ai_imageSaved": "已保存到相冊",
+  "ai_imageSaveFailed": "保存失敗",
+  "ai_imageCopied": "圖片已複製",
+  "ai_imageCopyFailed": "複製失敗",
+  "ai_imageSavePermission": "請授予相冊訪問權限",
+  "ai_replyToTopicLabel": "回覆到話題",
+  "ai_replyToTopicUploading": "正在上傳圖片…",
+  "ai_replyToTopicUploadFailed": "上傳圖片失敗",
+  "ai_replyToTopicSuccess": "圖片已插入回覆框",
+  "ai_modelGroupChat": "聊天模型",
+  "ai_modelGroupImage": "圖像模型",
+  "ai_modeSwitchToImage": "生圖",
+  "ai_modeBackToChat": "退出生圖",
+  "ai_imageModelMissingTooltip": "添加圖像生成模型",
+  "ai_imageModelMissingTitle": "需要圖像生成模型",
+  "ai_imageModelMissingMessage": "還沒添加支援圖像輸出的模型。可以在 AI 設置裡添加 gpt-image-1、gemini-3-image-preview 等。",
+  "ai_imageModelMissingGoSettings": "去添加",
+  "ai_toolsCamera": "拍照",
+  "ai_toolsPhotos": "相冊",
+  "ai_toolsTooltip": "更多操作",
+  "ai_modelSearchHint": "搜尋模型或供應商",
+  "ai_modelSearchNoMatch": "沒有匹配的模型",
+  "ai_modelFavoritesSection": "收藏模型",
+  "ai_modelFavoritesDock": "收藏",
+  "ai_modelFavoriteAdd": "收藏模型",
+  "ai_modelFavoriteRemove": "取消收藏",
+  "ai_modelFavoriteSortHint": "長按排序",
+  "ai_imageGenTitle": "生成圖片",
+  "ai_imageGenSubtitle": "選一個風格預設，或直接描述你想要的畫面",
+  "ai_imageCoverLabel": "封面海報",
+  "ai_imageCoverPrompt": "為「{title}」這個話題畫一張極簡風格的封面海報，主色調克制、富有意境，適合作為話題展示圖",
+  "@ai_imageCoverPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageIllustrationLabel": "話題插畫",
+  "ai_imageIllustrationPrompt": "把「{title}」這個話題的核心場景畫成一幅插畫，構圖簡潔明了，能傳達話題氛圍",
+  "@ai_imageIllustrationPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageComicLabel": "漫畫風格",
+  "ai_imageComicPrompt": "用扁平化漫畫風格表達「{title}」這個話題的核心討論，畫面幽默有趣、富有表現力",
+  "@ai_imageComicPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageCardLabel": "分享卡片",
+  "ai_imageCardPrompt": "做一張可用於社交分享的「{title}」話題視覺卡片，含主題文字與裝飾元素，整體精緻美觀",
+  "@ai_imageCardPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageInfographicLabel": "手繪小報",
+  "ai_imageInfographicPrompt": "把「{title}」整理成一張 16:9 橫版手繪卡通信息圖：粗糙草圖線條、蠟筆/麥克筆質感，標題居中或左上，列出 3-6 個 1-6 字的簡短要點，關鍵詞用手繪圓圈/箭頭/星星標注，搭配可愛小圖示或角色，大量留白，畫面層次清晰，純塗鴉感、無寫實、無 3D",
+  "@ai_imageInfographicPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageMinimalLabel": "極簡",
+  "ai_imageMinimalPrompt": "為「{title}」這個話題做一張極簡風格的視覺，構圖乾淨、留白充足、幾何元素克制",
+  "@ai_imageMinimalPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageWatercolorLabel": "水彩",
+  "ai_imageWatercolorPrompt": "用水彩畫風格表達「{title}」這個話題，色彩柔和透明、筆觸自然有水分暈染感",
+  "@ai_imageWatercolorPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imagePixelLabel": "像素",
+  "ai_imagePixelPrompt": "把「{title}」這個話題畫成 8-bit 像素風格圖，格子清晰、用色鮮明、復古遊戲畫面感",
+  "@ai_imagePixelPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_image3dClayLabel": "黏土 3D",
+  "ai_image3dClayPrompt": "把「{title}」這個話題做成 3D 黏土風格圖，圓潤飽滿、表面有手捏質感，色彩明亮飽和",
+  "@ai_image3dClayPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_imageSketchNotesLabel": "塗鴉筆記",
+  "ai_imageSketchNotesPrompt": "把「{title}」這個話題做成手繪塗鴉筆記風格：黑色麥克筆在米色紙上，散布手寫標題、簡筆畫圖示、箭頭、連線，富有學習筆記氣息",
+  "@ai_imageSketchNotesPrompt": {
+    "placeholders": { "title": { "type": "String" } }
+  },
+  "ai_dimensionPaletteLabel": "色彩",
+  "ai_dimensionRenderingLabel": "畫風",
+  "ai_dimensionMoodLabel": "氛圍",
+  "ai_dimensionAspectLabel": "比例",
+  "ai_paletteWarmLabel": "暖色",
+  "ai_paletteWarmFragment": "整體使用暖色調（橘紅、米黃、咖啡）作為主色",
+  "ai_paletteCoolLabel": "冷色",
+  "ai_paletteCoolFragment": "整體使用冷色調（藍、青、紫）作為主色",
+  "ai_palettePastelLabel": "粉彩",
+  "ai_palettePastelFragment": "使用低飽和度的粉彩色（薄荷綠、櫻花粉、奶油黃）作為主色",
+  "ai_paletteMonoLabel": "黑白",
+  "ai_paletteMonoFragment": "黑白灰單色調，僅用一種點綴色提亮",
+  "ai_paletteVividLabel": "高飽和",
+  "ai_paletteVividFragment": "使用高飽和度的鮮豔對比色，畫面活力十足",
+  "ai_paletteEarthLabel": "大地色",
+  "ai_paletteEarthFragment": "用大地色系（沙土黃、橄欖綠、赭紅、灰褐）作為主色，自然質樸",
+  "ai_paletteRetroLabel": "復古",
+  "ai_paletteRetroFragment": "使用復古印刷色調（芥末黃、磚紅、墨綠、深藍）",
+  "ai_renderingHandDrawnLabel": "手繪",
+  "ai_renderingHandDrawnFragment": "採用手繪草圖線條，自然不規則，蠟筆或麥克筆質感",
+  "ai_renderingFlatVectorLabel": "扁平向量",
+  "ai_renderingFlatVectorFragment": "扁平化向量插畫風格，色塊清晰、邊緣乾淨、無漸變",
+  "ai_renderingWatercolorLabel": "水彩",
+  "ai_renderingWatercolorFragment": "水彩畫質感，顏色透明柔和、有水分暈染邊緣",
+  "ai_renderingChalkLabel": "粉筆",
+  "ai_renderingChalkFragment": "黑板上的粉筆畫質感，筆觸有顆粒感、手寫感強",
+  "ai_renderingPixelLabel": "像素",
+  "ai_renderingPixelFragment": "8-bit 像素風格，格子清晰、復古遊戲畫面感",
+  "ai_rendering3dClayLabel": "黏土 3D",
+  "ai_rendering3dClayFragment": "3D 黏土質感，物體圓潤飽滿、表面有手捏痕跡",
+  "ai_moodSubtleLabel": "克制",
+  "ai_moodSubtleFragment": "整體氛圍克制安靜，對比柔和，富有意境",
+  "ai_moodBalancedLabel": "均衡",
+  "ai_moodBalancedFragment": "氛圍均衡舒適，色彩與構圖都不誇張",
+  "ai_moodBoldLabel": "強烈",
+  "ai_moodBoldFragment": "氛圍強烈大膽，高對比、富有衝擊力",
+  "ai_aspectSquareLabel": "1:1",
+  "ai_aspectWideLabel": "16:9",
+  "ai_aspectTallLabel": "9:16",
+  "ai_aspect4x3Label": "4:3",
+  "ai_aspect3x4Label": "3:4",
+  "ai_quickPromptsManage": "快捷詞管理",
+  "ai_quickPromptsTitle": "AI 快捷詞",
+  "ai_quickPromptsImageTab": "圖像",
+  "ai_quickPromptsTextTab": "文本",
+  "ai_quickPromptsBuiltInSection": "內置",
+  "ai_quickPromptsCustomSection": "自定義",
+  "ai_quickPromptsMore": "更多",
+  "ai_quickPromptsEmpty": "還沒有自定義快捷詞",
+  "ai_quickPromptsAddNew": "新建快捷詞",
+  "ai_quickPromptsEditTitle": "編輯快捷詞",
+  "ai_quickPromptsCreateTitle": "新建快捷詞",
+  "ai_quickPromptsName": "名稱",
+  "ai_quickPromptsNameHint": "如：手繪小報",
+  "ai_quickPromptsType": "類型",
+  "ai_quickPromptsIcon": "圖示",
+  "ai_quickPromptsIconTab": "圖示",
+  "ai_quickPromptsEmojiTab": "Emoji",
+  "ai_quickPromptsEmojiInputHint": "輸入或貼上 emoji",
+  "ai_quickPromptsTemplate": "Prompt 模板",
+  "ai_quickPromptsTemplateHint": "佔位符： [title] 話題標題， [context] 上下文摘要",
+  "ai_quickPromptsAspect": "預設比例",
+  "ai_quickPromptsTags": "標籤",
+  "ai_quickPromptsTagsHint": "用逗號分隔",
+  "ai_quickPromptsDimensions": "維度組合（進階）",
+  "ai_quickPromptsTestGenerate": "測試生成",
+  "ai_quickPromptsTesting": "測試中…",
+  "ai_quickPromptsTestSuccess": "測試圖已生成",
+  "ai_quickPromptsTestFailed": "測試失敗",
+  "ai_quickPromptsResetBuiltIns": "恢復內置預設",
+  "ai_quickPromptsResetBuiltInsConfirm": "確定要恢復所有內置快捷詞的預設配置嗎？（不影響自定義）",
+  "ai_quickPromptsHide": "隱藏",
+  "ai_quickPromptsUnhide": "顯示",
+  "ai_quickPromptsDuplicate": "複製",
+  "ai_quickPromptsDelete": "刪除",
+  "ai_quickPromptsDeleteConfirm": "確定刪除快捷詞「{name}」嗎？",
+  "@ai_quickPromptsDeleteConfirm": {
+    "placeholders": { "name": { "type": "String" } }
+  },
+  "ai_quickPromptsPin": "Pin 到聊天頁",
+  "ai_quickPromptsUnpin": "取消 Pin",
+  "ai_quickPromptsManageSubtitle": "管理 AI 助手底部的快捷詞，可增刪改、Pin、調順序",
+  "ai_quickPromptsValidateNameRequired": "請輸入名稱",
+  "ai_quickPromptsValidateTemplateRequired": "請輸入 prompt 模板",
+  "ai_tokenUsage": "輸入 {prompt} · 輸出 {response}",
+  "@ai_tokenUsage": {
+    "placeholders": {
+      "prompt": {
+        "type": "int"
+      },
+      "response": {
+        "type": "int"
+      }
+    }
+  }
+}
