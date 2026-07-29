@@ -1,0 +1,198 @@
+name: Android Build Cache Warm
+
+# GitHub Actions 缓存按 ref 隔离：tag 构建可以读取默认分支缓存，却不能读取
+# 上一个 tag 写入的缓存。把重型依赖与原生产物提前写到 main，发版 tag 才能
+# 稳定命中，而不是每个版本都重新编译三套 Rust target。
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/android-cache-warm.yaml'
+      - '.github/workflows/android-release.yaml'
+      - '.gitmodules'
+      - 'android/**'
+      - 'core/doh_proxy'
+      - 'pubspec.lock'
+      - 'packages/**/pubspec.yaml'
+      - 'tool/project_prep.dart'
+      - 'tool/project_tasks.dart'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-build-cache-warm-main
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dkotlin.daemon.jvm.options=-Xmx1G
+  NDK_27: 27.0.12077973
+  NDK_28: 28.2.13676358
+  FLUTTER_VERSION: '3.44.8'
+
+jobs:
+  warm:
+    name: 预热 Android release 缓存
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle*
+            android/gradle/wrapper/gradle-wrapper.properties
+            **/pubspec.lock
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+          pub-cache: true
+
+      # project_tasks.dart 自身依赖 package:crypto；先生成 package config，
+      # 后面的 native:prepare 才能在干净 runner 上启动。
+      - name: 预热 Flutter 与 Dart 依赖
+        run: |
+          flutter precache --android
+          flutter pub get
+
+      - name: 计算 DOH 源码指纹
+        id: doh-src
+        run: |
+          python3 - <<'PY'
+          import hashlib, pathlib, os
+          root = pathlib.Path('core/doh_proxy')
+          files = [root / 'Cargo.toml', root / 'Cargo.lock', root / 'build.rs']
+          src = root / 'src'
+          if src.is_dir():
+              files.extend(p for p in src.rglob('*') if p.is_file())
+          files = sorted(
+              (p for p in files if p.exists()),
+              key=lambda p: p.as_posix(),
+          )
+          h = hashlib.sha256()
+          for p in files:
+              h.update(p.as_posix().encode())
+              h.update(b'\0')
+              h.update(p.read_bytes())
+              h.update(b'\0')
+          digest = h.hexdigest()
+          print(f'doh source sha256={digest}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'hash={digest}\n')
+          PY
+
+      - name: 恢复 DOH 原生产物缓存
+        id: doh-native
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            android/app/src/main/jniLibs
+            .dart_tool/fluxdo_tooling/native
+            core/doh_proxy/certs
+            assets/certs/proxy_ca.pem
+            android/app/src/main/res/raw/proxy_ca.der
+          key: doh-native-${{ hashFiles('tool/project_tasks.dart', 'tool/project_prep.dart') }}-${{ steps.doh-src.outputs.hash }}-release-arm64-arm-x64-v3
+
+      - name: 设置 Rust Android targets
+        if: steps.doh-native.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: 缓存 Rust Android 构建
+        if: steps.doh-native.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core/doh_proxy
+          key: android-release-all-abi-nolto
+          cache-bin: true
+
+      - name: 安装 cargo-ndk
+        if: steps.doh-native.outputs.cache-hit != 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      - name: 设置 Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: 解析 Android SDK 路径
+        id: android-sdk
+        run: |
+          root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$root" ]; then
+            echo "::error::ANDROID_HOME / ANDROID_SDK_ROOT 未设置"
+            exit 1
+          fi
+          echo "root=$root" >> "$GITHUB_OUTPUT"
+
+      - name: 安装并校验 NDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "ndk;${NDK_27}" "ndk;${NDK_28}"
+          root="${{ steps.android-sdk.outputs.root }}"
+          test -d "${root}/ndk/${NDK_27}/toolchains/llvm/prebuilt/linux-x86_64"
+          test -d "${root}/ndk/${NDK_28}/toolchains/llvm/prebuilt/linux-x86_64"
+
+      # 避免 project_prep 通过 cargo run 额外冷编译一次宿主机 Rust target。
+      - name: 生成 DOH 代理证书
+        if: steps.doh-native.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p core/doh_proxy/certs assets/certs android/app/src/main/res/raw
+          openssl req -x509 -newkey ec \
+            -pkeyopt ec_paramgen_curve:prime256v1 \
+            -keyout core/doh_proxy/certs/ca.key \
+            -out core/doh_proxy/certs/ca.crt \
+            -days 3650 -nodes \
+            -subj '/CN=DOH Proxy CA/O=DOH Proxy/C=CN'
+          openssl x509 \
+            -in core/doh_proxy/certs/ca.crt \
+            -outform DER \
+            -out core/doh_proxy/certs/ca.der
+          cp core/doh_proxy/certs/ca.crt assets/certs/proxy_ca.pem
+          cp core/doh_proxy/certs/ca.der android/app/src/main/res/raw/proxy_ca.der
+          chmod 600 core/doh_proxy/certs/ca.key
+
+      - name: 构建 DOH 三 ABI 原生产物
+        if: steps.doh-native.outputs.cache-hit != 'true'
+        env:
+          CARGO_PROFILE_RELEASE_LTO: 'false'
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: '2'
+        run: >-
+          dart tool/project_tasks.dart native:prepare android --release
+          --target-platform=android-arm64,android-arm,android-x64
+
+      - name: 保存 DOH 原生产物缓存
+        if: steps.doh-native.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            android/app/src/main/jniLibs
+            .dart_tool/fluxdo_tooling/native
+            core/doh_proxy/certs
+            assets/certs/proxy_ca.pem
+            android/app/src/main/res/raw/proxy_ca.der
+          key: doh-native-${{ hashFiles('tool/project_tasks.dart', 'tool/project_prep.dart') }}-${{ steps.doh-src.outputs.hash }}-release-arm64-arm-x64-v3
+
+      # 解析 Dart、Gradle、AGP、Kotlin、Firebase 与 AndroidX 依赖。这里不编
+      # Flutter AOT。config-only 同时从 Flutter SDK 注入仓库未跟踪的 Gradle
+      # wrapper，正式发版仍会按 tag 中的应用源码生成最终产物。
+      - name: 预热 Gradle 依赖
+        run: |
+          flutter build apk --config-only --release --no-pub
+          ./android/gradlew -p android :app:dependencies \
+            --configuration releaseRuntimeClasspath \
+            --no-daemon

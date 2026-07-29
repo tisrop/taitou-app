@@ -4,6 +4,9 @@
 #   ./scripts/build-android.sh                # release APK（按 ABI 分包）
 #   ./scripts/build-android.sh --debug        # debug APK
 #   ./scripts/build-android.sh --aab          # Play 商店用的 AAB
+#   ./scripts/build-android.sh --arm          # 仅构建 armeabi-v7a APK
+#   ./scripts/build-android.sh --arm64        # 仅构建 arm64-v8a APK
+#   ./scripts/build-android.sh --x64          # 仅构建 x86_64 APK
 #   ./scripts/build-android.sh --universal    # 单个全 ABI APK（体积大，便于分发）
 #
 # 环境要求见 README：Flutter 3.44+、JDK 17、Android SDK 36、NDK 27 与 28、Rust
@@ -16,12 +19,17 @@ cd "$(dirname "$0")/.."
 MODE=release
 ARTIFACT=apk
 SPLIT=--split-per-abi
+# 默认只编三个发布用 ABI；不带 x86，避免 cargo-ndk 拉 i686 靶子。
+TARGET_PLATFORM=android-arm,android-arm64,android-x64
 
 for arg in "$@"; do
     case "$arg" in
-        --debug)     MODE=debug; SPLIT="" ;;
-        --aab)       ARTIFACT=appbundle; SPLIT="" ;;
-        --universal) SPLIT="" ;;
+        --debug)     MODE=debug; SPLIT=""; TARGET_PLATFORM= ;;
+        --aab)       ARTIFACT=appbundle; SPLIT=""; TARGET_PLATFORM= ;;
+        --arm)       TARGET_PLATFORM=android-arm ;;
+        --arm64)     TARGET_PLATFORM=android-arm64 ;;
+        --x64)       TARGET_PLATFORM=android-x64 ;;
+        --universal) SPLIT=""; TARGET_PLATFORM=android-arm,android-arm64,android-x64 ;;
         *) echo "未知参数: $arg" >&2; exit 2 ;;
     esac
 done
@@ -36,13 +44,19 @@ if [ "$MODE" = release ] && [ ! -f android/key.properties ]; then
     echo "      正式分发前请按 README 配好签名。" >&2
 fi
 
-echo "==> 同步依赖与生成物"
-flutter pub get
-dart run tool/project_prep.dart app
+# flutterw 会先执行 project_prep，ensurePubGet 已保证 package config 最新；
+# 构建阶段不再让 Flutter 重复解析一次依赖。
+BUILD_ARGS=(build "$ARTIFACT" "--$MODE" --no-pub)
+if [ -n "$SPLIT" ]; then
+    BUILD_ARGS+=("$SPLIT")
+fi
+if [ -n "$TARGET_PLATFORM" ]; then
+    BUILD_ARGS+=(--target-platform "$TARGET_PLATFORM")
+fi
 
-echo "==> flutter build $ARTIFACT --$MODE $SPLIT"
-# shellcheck disable=SC2086
-flutter build "$ARTIFACT" "--$MODE" $SPLIT
+echo "==> dart run tool/flutterw.dart ${BUILD_ARGS[*]}"
+# flutterw 统一完成 pub get、l10n、DOH 原生库准备和 Flutter 构建，避免重复预处理。
+dart run tool/flutterw.dart "${BUILD_ARGS[@]}"
 
 echo
 echo "==> 产物"

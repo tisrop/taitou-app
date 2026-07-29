@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
 
 import '_workspace_cli.dart';
 
@@ -469,6 +472,8 @@ String _nativeStageStampContent(_BuildMode mode, {String? variantKey}) {
   return lines.join('\n');
 }
 
+/// 用源码内容 hash 做 stamp，避免 CI checkout 改变 mtime 导致每次重编。
+/// 路径统一为相对仓库根的 POSIX 形式，保证本机与 CI 结果一致。
 String _rustInputStamp() {
   final trackedFiles =
       <File>[
@@ -477,14 +482,29 @@ String _rustInputStamp() {
           File('core/doh_proxy/build.rs'),
           ..._collectFiles('core/doh_proxy/src'),
         ].where((file) => file.existsSync()).toList()
-        ..sort((a, b) => a.path.compareTo(b.path));
+        ..sort((a, b) => _posixRelativePath(a.path).compareTo(_posixRelativePath(b.path)));
 
-  return trackedFiles
-      .map((file) {
-        final stat = file.statSync();
-        return '${file.path}|${stat.modified.millisecondsSinceEpoch}|${stat.size}';
-      })
-      .join('\n');
+  final bytes = BytesBuilder(copy: false);
+  for (final file in trackedFiles) {
+    bytes.add(utf8.encode(_posixRelativePath(file.path)));
+    bytes.addByte(0);
+    bytes.add(file.readAsBytesSync());
+    bytes.addByte(0);
+  }
+  return 'sha256=${sha256.convert(bytes.takeBytes())}';
+}
+
+String _posixRelativePath(String path) {
+  final root = Directory.current.path;
+  var normalized = path;
+  if (normalized.startsWith(root)) {
+    normalized = normalized.substring(root.length);
+    if (normalized.startsWith(Platform.pathSeparator) ||
+        normalized.startsWith('/')) {
+      normalized = normalized.substring(1);
+    }
+  }
+  return normalized.replaceAll(r'\', '/');
 }
 
 Iterable<File> _collectFiles(String path) sync* {

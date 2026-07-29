@@ -1,7 +1,8 @@
 name: Android Release
 
 # 打 tag 触发，产出签名的 release APK 并挂到 GitHub Release。
-# 手动触发时只构建、不发布，方便验证改动。
+# 手动触发默认只构建；填写 release_tag 时发布到指定的已有 tag，适合用
+# 最新 workflow 重新构建历史版本且不改写 tag。
 #
 # 需要在仓库 Secrets 里配置：
 #   ANDROID_KEYSTORE_BASE64  —— base64 -i android/app/taitou-release.jks | pbcopy
@@ -17,29 +18,230 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 可选；将产物发布到指定 tag，例如 v0.2.25
+        required: false
+        type: string
 
 permissions:
   contents: write
 
 # 同一个 tag 被重新推送时，只保留最新一次构建，避免重复占用 runner。
 concurrency:
-  group: android-release-${{ github.ref }}
+  group: android-release-${{ inputs.release_tag || github.ref }}
   cancel-in-progress: true
 
+env:
+  # free runner 约 7GB RAM；仓库默认 -Xmx8G 会逼近 swap。
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dkotlin.daemon.jvm.options=-Xmx1G
+  NDK_27: 27.0.12077973
+  NDK_28: 28.2.13676358
+  FLUTTER_VERSION: '3.44.8'
+  RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+
 jobs:
-  build:
+  # DOH 原生产物只准备一次。缓存未命中时在这里完整构建三 ABI，避免后续
+  # matrix job 各自生成证书、编译 Rust 并争抢同一个缓存 key。
+  prepare_native:
+    name: 准备 DOH 原生产物
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    outputs:
+      doh_source_hash: ${{ steps.doh-src.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive   # 仅初始化构建所需的 core/doh_proxy
-          fetch-depth: 0          # Release Notes 需要读取上一个版本 tag 和提交范围
+          submodules: recursive
+
+      # 指纹算法与 tool/project_tasks.dart 的 _rustInputStamp 保持一致。
+      - name: 计算 DOH 源码指纹
+        id: doh-src
+        run: |
+          python3 - <<'PY'
+          import hashlib, pathlib, os
+          root = pathlib.Path('core/doh_proxy')
+          files = [root / 'Cargo.toml', root / 'Cargo.lock', root / 'build.rs']
+          src = root / 'src'
+          if src.is_dir():
+              files.extend(p for p in src.rglob('*') if p.is_file())
+          files = sorted(
+              (p for p in files if p.exists()),
+              key=lambda p: p.as_posix(),
+          )
+          h = hashlib.sha256()
+          for p in files:
+              h.update(p.as_posix().encode())
+              h.update(b'\0')
+              h.update(p.read_bytes())
+              h.update(b'\0')
+          digest = h.hexdigest()
+          print(f'doh source sha256={digest}')
+          print(f'files={len(files)}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'hash={digest}\n')
+          PY
+
+      - name: 恢复 DOH jniLibs 缓存
+        id: doh-jni
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            android/app/src/main/jniLibs
+            .dart_tool/fluxdo_tooling/native
+            core/doh_proxy/certs
+            assets/certs/proxy_ca.pem
+            android/app/src/main/res/raw/proxy_ca.der
+          key: doh-native-${{ hashFiles('tool/project_tasks.dart', 'tool/project_prep.dart') }}-${{ steps.doh-src.outputs.hash }}-release-arm64-arm-x64-v3
+
+      - uses: actions/setup-java@v4
+        if: steps.doh-jni.outputs.cache-hit != 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        if: steps.doh-jni.outputs.cache-hit != 'true'
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+          pub-cache: true
+
+      - name: 准备 Dart 项目
+        if: steps.doh-jni.outputs.cache-hit != 'true'
+        run: flutter pub get
+
+      - name: 生成 DOH 代理证书
+        if: steps.doh-jni.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p core/doh_proxy/certs assets/certs android/app/src/main/res/raw
+          openssl req -x509 -newkey ec \
+            -pkeyopt ec_paramgen_curve:prime256v1 \
+            -keyout core/doh_proxy/certs/ca.key \
+            -out core/doh_proxy/certs/ca.crt \
+            -days 3650 -nodes \
+            -subj '/CN=DOH Proxy CA/O=DOH Proxy/C=CN'
+          openssl x509 \
+            -in core/doh_proxy/certs/ca.crt \
+            -outform DER \
+            -out core/doh_proxy/certs/ca.der
+          cp core/doh_proxy/certs/ca.crt assets/certs/proxy_ca.pem
+          cp core/doh_proxy/certs/ca.der android/app/src/main/res/raw/proxy_ca.der
+          chmod 600 core/doh_proxy/certs/ca.key
+
+      - name: 设置 Rust Android targets
+        if: steps.doh-jni.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: 缓存 Rust Android 构建
+        if: steps.doh-jni.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core/doh_proxy
+          key: android-release-all-abi-nolto
+          cache-bin: true
+
+      - name: 安装 cargo-ndk
+        if: steps.doh-jni.outputs.cache-hit != 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-ndk
+
+      - name: 设置 Android SDK
+        if: steps.doh-jni.outputs.cache-hit != 'true'
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ''
+
+      - name: 安装 NDK
+        if: steps.doh-jni.outputs.cache-hit != 'true'
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "ndk;${NDK_27}" "ndk;${NDK_28}"
+
+      - name: 构建 DOH 三 ABI 原生产物
+        if: steps.doh-jni.outputs.cache-hit != 'true'
+        env:
+          CARGO_PROFILE_RELEASE_LTO: 'false'
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: '2'
+        run: >-
+          dart tool/project_tasks.dart native:prepare android --release
+          --target-platform=android-arm64,android-arm,android-x64
+
+      - name: 校验 DOH 三 ABI 原生产物
+        run: |
+          expected=(
+            android/app/src/main/jniLibs/armeabi-v7a/libdoh_proxy.so
+            android/app/src/main/jniLibs/arm64-v8a/libdoh_proxy.so
+            android/app/src/main/jniLibs/x86_64/libdoh_proxy.so
+            core/doh_proxy/certs/ca.crt
+            core/doh_proxy/certs/ca.key
+            core/doh_proxy/certs/ca.der
+            assets/certs/proxy_ca.pem
+            android/app/src/main/res/raw/proxy_ca.der
+          )
+          for path in "${expected[@]}"; do
+            test -f "$path" || { echo "::error::缺少 DOH 原生产物：$path"; exit 1; }
+          done
+          ls -lh android/app/src/main/jniLibs/*/*.so
+
+      - name: 保存 DOH jniLibs 缓存
+        if: steps.doh-jni.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            android/app/src/main/jniLibs
+            .dart_tool/fluxdo_tooling/native
+            core/doh_proxy/certs
+            assets/certs/proxy_ca.pem
+            android/app/src/main/res/raw/proxy_ca.der
+          key: doh-native-${{ hashFiles('tool/project_tasks.dart', 'tool/project_prep.dart') }}-${{ steps.doh-src.outputs.hash }}-release-arm64-arm-x64-v3
+
+      - name: 上传 DOH 原生产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: doh-native
+          path: |
+            android/app/src/main/jniLibs
+            core/doh_proxy/certs
+            assets/certs/proxy_ca.pem
+            android/app/src/main/res/raw/proxy_ca.der
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  # 三个 ABI 独立构建，在 hosted runner 上并行执行，以最慢 ABI 作为墙钟时间。
+  build:
+    name: 构建 ${{ matrix.abi }} release APK
+    needs: prepare_native
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: armeabi-v7a
+            target_platform: android-arm
+            build_arg: --arm
+          - abi: arm64-v8a
+            target_platform: android-arm64
+            build_arg: --arm64
+          - abi: x86_64
+            target_platform: android-x64
+            build_arg: --x64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'      # AGP 要求；21+ 构建会失败
+          java-version: '17'
           cache: gradle
           cache-dependency-path: |
             android/**/*.gradle*
@@ -48,44 +250,90 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.44.8'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
           pub-cache: true
 
-      - name: 设置 Rust Android targets
-        uses: dtolnay/rust-toolchain@stable
+      - name: 下载 DOH 原生产物
+        uses: actions/download-artifact@v4
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+          name: doh-native
+          path: .
 
-      # 缓存 Cargo registry、cargo-ndk 和 core/doh_proxy/target。后续发版只需
-      # 重编译真正变化的 Rust crate，而不是每次从零编译三个 ABI。
-      - name: 缓存 Rust Android 构建
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: core/doh_proxy
-          key: android-release
-          cache-bin: true
+      # project_prep 会重建 .dart_tool；必须先完成项目准备，再按当前 ABI 写
+      # stamp，后续 flutterw 才会直接复用前置 job 产出的 libdoh_proxy.so。
+      - name: 准备 Dart 项目
+        run: dart tool/project_prep.dart app
 
-      - name: 安装 Rust Android 构建工具
+      - name: 同步 DOH native stamp
         run: |
-          if ! command -v cargo-ndk >/dev/null 2>&1; then
-            cargo install cargo-ndk --locked
-          fi
-          if ! command -v cmake >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y cmake
-          fi
+          expected=(
+            android/app/src/main/jniLibs/${{ matrix.abi }}/libdoh_proxy.so
+            core/doh_proxy/certs/ca.crt
+            core/doh_proxy/certs/ca.key
+            core/doh_proxy/certs/ca.der
+            assets/certs/proxy_ca.pem
+            android/app/src/main/res/raw/proxy_ca.der
+          )
+          for path in "${expected[@]}"; do
+            if [ ! -f "$path" ]; then
+              echo "::error::DOH 原生产物不完整：$path"
+              exit 1
+            fi
+          done
+          mkdir -p .dart_tool/fluxdo_tooling/native
+          # Dart 侧严格比较完整字符串，最后一行不能带换行。
+          printf 'mode=release\ntargets=%s\nsha256=%s' \
+            '${{ matrix.target_platform }}' \
+            '${{ needs.prepare_native.outputs.doh_source_hash }}' \
+            > .dart_tool/fluxdo_tooling/native/android.stamp
+          ls -lh android/app/src/main/jniLibs/${{ matrix.abi }}/libdoh_proxy.so
+          cat .dart_tool/fluxdo_tooling/native/android.stamp
 
       - name: 设置 Android SDK
         uses: android-actions/setup-android@v4
         with:
           packages: ''
 
-      - name: 安装 NDK
+      - name: 安装 build-tools 36.0.0
+        run: sdkmanager "build-tools;36.0.0"
+
+      - name: 解析 Android SDK 路径
+        id: android-sdk
+        run: |
+          root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$root" ]; then
+            echo "::error::ANDROID_HOME / ANDROID_SDK_ROOT 未设置"
+            exit 1
+          fi
+          echo "root=$root" >> "$GITHUB_OUTPUT"
+          echo "Android SDK: $root"
+
+      # GitHub runner 的 SDK 目录由 root 管理，actions/cache 无法可靠恢复其
+      # 时间戳和权限；缓存还会搬运数 GB 数据，比 sdkmanager 校验版本更慢。
+      - name: 安装并校验 NDK
         run: |
           # quickjs_engine 固定要 27.x，其余插件跟 Flutter 默认的 28.x
-          sdkmanager --install "ndk;27.0.12077973" "ndk;28.2.13676358"
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "ndk;${NDK_27}" "ndk;${NDK_28}"
+          root="${{ steps.android-sdk.outputs.root }}"
+          test -d "${root}/ndk/${NDK_27}/toolchains/llvm/prebuilt/linux-x86_64"
+          test -d "${root}/ndk/${NDK_28}/toolchains/llvm/prebuilt/linux-x86_64"
+          du -sh "${root}/ndk/${NDK_27}" "${root}/ndk/${NDK_28}"
+
+      - name: 收紧 CI Gradle 内存
+        run: |
+          {
+            echo 'org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G -XX:ReservedCodeCacheSize=256m -XX:+HeapDumpOnOutOfMemoryError'
+            echo 'org.gradle.caching=true'
+            echo 'org.gradle.parallel=true'
+            echo 'org.gradle.configureondemand=true'
+            echo 'android.useAndroidX=true'
+            echo 'android.builtInKotlin=false'
+            echo 'android.newDsl=false'
+          } > android/gradle.properties
+          cat android/gradle.properties
 
       - name: 还原并校验签名配置
         env:
@@ -105,7 +353,6 @@ jobs:
           fi
 
           if [ -n "$KEY_PROPERTIES" ]; then
-            # 兼容现有 Build workflow 使用的组合 secret，并统一到当前 keystore 路径。
             printf '%s\n' "$KEY_PROPERTIES" > android/key.properties
             python3 - <<'PY'
           from pathlib import Path
@@ -172,17 +419,30 @@ jobs:
           rm -f /tmp/taitou-signing-check.p12
           echo "Android release signing configuration verified"
 
-      - name: 构建
-        run: ./scripts/build-android.sh
-
-      - name: 校验确实用了 release 签名
+      - name: 构建 ${{ matrix.abi }} release APK
         run: |
-          APK=$(ls build/app/outputs/flutter-apk/app-arm64-v8a-release.apk)
-          "$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --print-certs "$APK" | tee /tmp/certs.txt
-          if grep -qi "CN=Android Debug" /tmp/certs.txt; then
-            echo "::error::产物是 debug 签名，签名配置没生效"
+          export TS_START=$(date +%s)
+          ./scripts/build-android.sh '${{ matrix.build_arg }}'
+          echo "BUILD_TOTAL_SECONDS=$(($(date +%s)-TS_START))" >> "$GITHUB_ENV"
+
+      - name: 报告构建耗时
+        if: always()
+        run: echo "${{ matrix.abi }}=${BUILD_TOTAL_SECONDS}s（$((BUILD_TOTAL_SECONDS / 60)) 分）"
+
+      - name: 校验 ${{ matrix.abi }} APK 签名
+        run: |
+          apk="app-${{ matrix.abi }}-release.apk"
+          path="build/app/outputs/flutter-apk/$apk"
+          if [ ! -f "$path" ]; then
+            echo "::error::缺少 APK：$apk"
             exit 1
           fi
+          "$ANDROID_HOME"/build-tools/36.0.0/apksigner verify --print-certs "$path" | tee /tmp/certs.txt
+          if grep -qi "CN=Android Debug" /tmp/certs.txt; then
+            echo "::error::$apk 是 debug 签名，签名配置没生效"
+            exit 1
+          fi
+          ls -lh "$path"
 
       - name: 清理签名材料
         if: always()
@@ -190,30 +450,77 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: taitou-apk
-          path: build/app/outputs/flutter-apk/*.apk
+          name: taitou-apk-${{ matrix.abi }}
+          path: build/app/outputs/flutter-apk/app-${{ matrix.abi }}-release.apk
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  release:
+    name: 发布三个 APK
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: 下载 APK
+        uses: actions/download-artifact@v4
+        with:
+          pattern: taitou-apk-*
+          path: release-apks
+          merge-multiple: true
+
+      - name: 校验三个 APK 齐全
+        run: |
+          expected=(
+            app-armeabi-v7a-release.apk
+            app-arm64-v8a-release.apk
+            app-x86_64-release.apk
+          )
+          for apk in "${expected[@]}"; do
+            if [ ! -f "release-apks/$apk" ]; then
+              echo "::error::缺少 APK：$apk"
+              exit 1
+            fi
+          done
+          ls -lh release-apks/*.apk
+
+      - name: 校验发布 tag
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::无效版本 tag：$RELEASE_TAG"
+            exit 1
+          fi
+          if ! git rev-parse --verify --quiet "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "::error::仓库中不存在 tag：$RELEASE_TAG"
+            exit 1
+          fi
 
       - name: 生成结构化 Release Notes
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           release_args=()
-          if [ "${GITHUB_REF_NAME}" = "v0.2.25" ]; then
+          if [ "$RELEASE_TAG" = "v0.2.25" ]; then
             release_args+=(--allow-first-release)
           fi
           python3 scripts/ci/generate_android_release_notes.py \
-            --tag "${GITHUB_REF_NAME}" \
+            --tag "$RELEASE_TAG" \
             --repository "${GITHUB_REPOSITORY}" \
             --output release_notes.md \
             "${release_args[@]}"
           cat release_notes.md
 
       - name: 发布到 Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          name: 抬头 ${{ github.ref_name }}
-          files: build/app/outputs/flutter-apk/*.apk
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: 抬头 ${{ env.RELEASE_TAG }}
+          files: release-apks/*.apk
           body_path: release_notes.md
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}

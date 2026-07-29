@@ -113,12 +113,8 @@ android {
 
         if (targetAbi != null) {
             println("Configuring build for ABI: $targetAbi")
-            defaultConfig {
-                ndk {
-                    abiFilters.add(targetAbi)
-                }
-            }
-            
+            // Flutter Gradle 插件已通过 splits.abi 处理 ABI 过滤，此处不再重复设置 ndk.abiFilters
+
             // 强制排除非目标架构的 so 文件 (针对 Cronet 等不服从 abiFilters 的库)
             packaging {
                 jniLibs {

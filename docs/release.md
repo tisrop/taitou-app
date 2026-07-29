@@ -89,3 +89,13 @@ cat android/key.properties | pbcopy
 ```
 
 工作流会在构建前校验 keystore、alias、storePassword 和 keyPassword，并在构建后用 `apksigner` 确认产物没有使用 Android debug 证书。
+
+## CI 构建缓存
+
+`.github/workflows/android-cache-warm.yaml` 会在 `main` 上的 Android、Dart 依赖或 DOH Rust 输入变化时预热缓存。它提前解析 Gradle 依赖，并构建 DOH 的三个 Android ABI 原生产物。版本 tag 的 release workflow 可以读取默认分支缓存，因此通常只需校验固定 NDK 版本，并执行 Flutter AOT、签名和 APK 打包。
+
+release workflow 会先统一准备 DOH 原生产物，再并行构建 `armeabi-v7a`、`arm64-v8a` 和 `x86_64` 三个签名 APK；只有三个 ABI 全部通过签名校验，发布 job 才会聚合产物并更新 GitHub Release。
+
+修改相关依赖后若要立即发版，请先确认 `Android Build Cache Warm` 已完成；也可以在 Actions 页面手动运行该工作流。
+
+需要用最新 workflow 重新构建已有版本时，手动运行 `Android Release`，将 `release_tag` 填为目标 tag。工作流会从当前 `main` 构建并替换该 tag 的 Release 资产，不会移动或重写 tag。
