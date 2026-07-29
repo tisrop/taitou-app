@@ -44,11 +44,15 @@ jobs:
           RELEASE_TAG="$REQUESTED_TAG"
           if [ -z "$RELEASE_TAG" ]; then
             RELEASE_TAG="$(
-              git tag --merged HEAD --list 'v*' \
+              git tag --list 'v*' \
                 | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
                 | sort -V \
                 | tail -n 1
             )"
+          fi
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "::error::没有找到可刷新的 stable release tag"
+            exit 1
           fi
           if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
             echo "::error::无效版本 tag：$RELEASE_TAG"
