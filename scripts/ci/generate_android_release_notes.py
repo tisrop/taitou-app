@@ -164,6 +164,24 @@ def _github_tags(repository: str, token: str) -> list[str]:
     return tags
 
 
+def _commit_from_github_item(item: object) -> Commit | None:
+    if not isinstance(item, dict):
+        return None
+    commit_data = item.get("commit") if isinstance(item.get("commit"), dict) else {}
+    message = str(commit_data.get("message", ""))
+    subject, _, body = message.partition("\n")
+    author_data = commit_data.get("author") if isinstance(commit_data.get("author"), dict) else {}
+    github_author = item.get("author") if isinstance(item.get("author"), dict) else {}
+    return Commit(
+        sha=str(item.get("sha", "")),
+        subject=subject.strip(),
+        body=body.strip(),
+        author_name=str(author_data.get("name", "")),
+        author_email=str(author_data.get("email", "")),
+        author_login=str(github_author.get("login")) if github_author.get("login") else None,
+    )
+
+
 def _github_commits(repository: str, previous_tag: str, tag: str, token: str) -> list[Commit]:
     commits: list[Commit] = []
     comparison = f"{urllib.parse.quote(previous_tag, safe='')}...{urllib.parse.quote(tag, safe='')}"
@@ -179,24 +197,29 @@ def _github_commits(repository: str, previous_tag: str, tag: str, token: str) ->
         if not isinstance(items, list):
             break
         for item in items:
-            if not isinstance(item, dict):
-                continue
-            commit_data = item.get("commit") if isinstance(item.get("commit"), dict) else {}
-            message = str(commit_data.get("message", ""))
-            subject, _, body = message.partition("\n")
-            author_data = commit_data.get("author") if isinstance(commit_data.get("author"), dict) else {}
-            github_author = item.get("author") if isinstance(item.get("author"), dict) else {}
-            commits.append(
-                Commit(
-                    sha=str(item.get("sha", "")),
-                    subject=subject.strip(),
-                    body=body.strip(),
-                    author_name=str(author_data.get("name", "")),
-                    author_email=str(author_data.get("email", "")),
-                    author_login=str(github_author.get("login")) if github_author.get("login") else None,
-                )
-            )
+            commit = _commit_from_github_item(item)
+            if commit is not None:
+                commits.append(commit)
         if len(items) < 100:
+            break
+    return commits
+
+
+def _github_commits_for_ref(repository: str, ref: str, token: str) -> list[Commit]:
+    commits: list[Commit] = []
+    for page in range(1, 11):
+        payload = _github_json(
+            repository,
+            f"commits?sha={urllib.parse.quote(ref, safe='')}&per_page=100&page={page}",
+            token,
+        )
+        if not isinstance(payload, list):
+            break
+        for item in payload:
+            commit = _commit_from_github_item(item)
+            if commit is not None:
+                commits.append(commit)
+        if len(payload) < 100:
             break
     return commits
 
@@ -225,13 +248,14 @@ def _local_tags(tag: str) -> list[str]:
     return [candidate for candidate in tags if candidate != tag]
 
 
-def _local_commits(previous_tag: str, tag: str) -> list[Commit]:
+def _local_commits(previous_tag: str | None, tag: str) -> list[Commit]:
+    revision_range = f"{previous_tag}..{tag}" if previous_tag else tag
     result = subprocess.run(
         [
             "git",
             "log",
             "--format=%H%x1f%an%x1f%ae%x1f%s%x1f%b%x1e",
-            f"{previous_tag}..{tag}",
+            revision_range,
         ],
         check=True,
         text=True,
@@ -240,7 +264,10 @@ def _local_commits(previous_tag: str, tag: str) -> list[Commit]:
     )
     commits: list[Commit] = []
     for record in result.stdout.split("\x1e"):
-        fields = record.strip().split("\x1f", 4)
+        record = record.strip("\n")
+        if not record:
+            continue
+        fields = record.split("\x1f", 4)
         if len(fields) != 5:
             continue
         commits.append(
@@ -295,7 +322,22 @@ def resolve_release_data(
                 f"无法确定 {tag} 的上一版本 tag。请确认 checkout 获取了完整 tags，"
                 "或仅在真正的首次发布时传入 --allow-first-release。"
             )
-        return None, None, []
+        commits = _local_commits(None, _tag_commit(tag))
+        print(f"首次发布模式：通过本地 Git 读取到 {len(commits)} 个 commit")
+        if token:
+            try:
+                github_commits = _github_commits_for_ref(repository, tag, token)
+                commits = _merge_github_authors(commits, github_commits)
+                matched_logins = sum(1 for commit in commits if commit.author_login)
+                print(
+                    f"通过 GitHub API 补充作者信息：返回 {len(github_commits)} 个 commit，"
+                    f"匹配到 {matched_logins} 个 login"
+                )
+            except (urllib.error.URLError, TimeoutError, ValueError, KeyError) as error:
+                print(f"GitHub API 作者信息读取失败，继续使用本地 Git 作者：{error}")
+        if not commits:
+            raise RuntimeError(f"首次发布 {tag} 中没有 commit，拒绝生成不完整 Release Notes")
+        return None, None, commits
 
     commits = _local_commits(previous_ref, _tag_commit(tag))
     print(f"通过本地 Git 读取到 {len(commits)} 个 commit")

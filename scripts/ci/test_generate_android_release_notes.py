@@ -65,6 +65,17 @@ class GenerateAndroidReleaseNotesTest(unittest.TestCase):
         self.assertEqual(merged[0].body, "local body")
         self.assertEqual(merged[0].author_login, "tisrop")
 
+    def test_local_commits_keep_empty_body_records(self) -> None:
+        completed = mock.Mock(
+            stdout="abc\x1fWang Hang\x1ftisrop@example.com\x1ffix: empty body\x1f\x1e"
+        )
+        with mock.patch.object(_MODULE.subprocess, "run", return_value=completed):
+            commits = _MODULE._local_commits(None, "v1.2.3")
+
+        self.assertEqual(len(commits), 1)
+        self.assertEqual(commits[0].subject, "fix: empty body")
+        self.assertEqual(commits[0].body, "")
+
     def test_annotated_current_tag_is_excluded_by_name(self) -> None:
         with mock.patch.object(_MODULE, "_tag_commit", return_value="deadbeef"):
             with mock.patch.object(
@@ -80,15 +91,27 @@ class GenerateAndroidReleaseNotesTest(unittest.TestCase):
 
     def test_explicit_first_release_allows_missing_previous_tag(self) -> None:
         with mock.patch.object(_MODULE, "_local_tags", return_value=[]):
-            previous_tag, previous_ref, commits = resolve_release_data(
-                tag="v0.2.25",
-                repository="tisrop/taitou-app",
-                allow_first_release=True,
-            )
+            with mock.patch.object(
+                _MODULE,
+                "_local_commits",
+                return_value=[
+                    Commit(
+                        "abc",
+                        "fix: first release",
+                        author_name="Wang Hang",
+                        author_login="tisrop",
+                    )
+                ],
+            ):
+                previous_tag, previous_ref, commits = resolve_release_data(
+                    tag="v0.2.25",
+                    repository="tisrop/taitou-app",
+                    allow_first_release=True,
+                )
 
         self.assertIsNone(previous_tag)
         self.assertIsNone(previous_ref)
-        self.assertEqual(commits, [])
+        self.assertEqual([commit.sha for commit in commits], ["abc"])
 
     def test_missing_previous_tag_fails_instead_of_generating_incomplete_notes(self) -> None:
         with mock.patch.object(_MODULE, "_local_tags", return_value=["v9.9.9"]):
