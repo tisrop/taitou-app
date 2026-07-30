@@ -12,9 +12,7 @@
   "enginePreset_standardDesc": "系統自動選擇最優引擎",
   "engineStatus_currentEngine": "目前引擎",
   "engineStatus_reasonFallback": "Cronet 已降級，使用備用介面卡",
-  "engineStatus_reasonGateway": "DoH 直連模式（省一層 TLS）",
   "engineStatus_reasonNative": "系統預設直連",
-  "engineStatus_reasonProxy": "透過本地代理轉發",
   "engineStatus_reasonRhttp": "rhttp 引擎已啟用",
   "engineStatus_webviewSplit": "主站 API 請求走 WebView，其餘請求走{engine}",
   "@engineStatus_webviewSplit": {
@@ -53,7 +51,6 @@
   "networkSettings_maxConcurrentDesc": "同一時刻最多發出的請求數",
   "networkSettings_maxPerWindow": "限流閾值",
   "networkSettings_maxPerWindowDesc": "每個時間視窗內最多發出的請求數",
-  "networkSettings_proxy": "網路代理",
   "networkSettings_title": "網路設定",
   "networkSettings_windowSeconds": "時間視窗",
   "networkSettings_windowSecondsDesc": "限流統計的時間長度",
@@ -74,9 +71,15 @@
   "networkSettings_rateLimitSummary": "每 {windowSeconds} 秒內最多 {maxPerWindow} 個請求，同時進行 {maxConcurrent} 個",
   "@networkSettings_rateLimitSummary": {
     "placeholders": {
-      "windowSeconds": { "type": "int" },
-      "maxPerWindow": { "type": "int" },
-      "maxConcurrent": { "type": "int" }
+      "windowSeconds": {
+        "type": "int"
+      },
+      "maxPerWindow": {
+        "type": "int"
+      },
+      "maxConcurrent": {
+        "type": "int"
+      }
     }
   },
   "network_adapterNativeAndroid": "Cronet 介面卡",
@@ -117,7 +120,7 @@
   "network_serverUnavailableRetry": "伺服器暫時不可用，請稍後再試",
   "network_unauthorized": "未登入或登入已過期",
   "network_unprocessable": "請求無法處理",
-  "rhttpEngine_alwaysUse": "始終使用",
+  "network_vpnDirectHint": "偵測到 VPN，主站連線失敗。請在代理工具中將 openxinsheng.com 和 *.openxinsheng.com 設為 DIRECT。",
   "rhttpEngine_currentAdapter": "當前: {adapter}",
   "@rhttpEngine_currentAdapter": {
     "placeholders": {
@@ -127,10 +130,7 @@
     }
   },
   "rhttpEngine_disabledDesc": "啟用後使用 Rust 網路引擎",
-  "rhttpEngine_echFallbackHint": "ECH 啟用時 WebView 仍透過本地代理兜底；rhttp 直連會優先嚐試自身的 ECH",
   "rhttpEngine_enabledDesc": "HTTP/2 多路複用 · Rust reqwest",
-  "rhttpEngine_proxyDohOnly": "僅代理/DOH",
   "rhttpEngine_title": "rhttp 引擎",
-  "rhttpEngine_useMode": "使用模式",
   "rhttpEngine_initFailedHint": "rhttp 引擎初始化失敗，已退回至備用網路介面卡，下次啟動將自動重試"
 }

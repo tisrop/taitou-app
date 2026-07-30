@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'log/log_writer.dart';
-import 'network/doh/network_settings_service.dart';
 
 /// CF 验证日志服务
 ///
@@ -102,10 +101,14 @@ class CfChallengeLogger {
 
     final clientIp = await _fetchClientIp(uri);
     final serverIps = await _resolveServerIps(host);
-    final clientText = (clientIp == null || clientIp.isEmpty) ? 'unknown' : clientIp;
+    final clientText = (clientIp == null || clientIp.isEmpty)
+        ? 'unknown'
+        : clientIp;
     final serverText = serverIps.isEmpty ? 'unknown' : serverIps.join(', ');
 
-    log('[IP]${_formatContext(context)} host=$host client=$clientText server=$serverText');
+    log(
+      '[IP]${_formatContext(context)} host=$host client=$clientText server=$serverText',
+    );
   }
 
   /// 记录验证检查
@@ -115,14 +118,13 @@ class CfChallengeLogger {
     String? cfClearance,
     bool clearanceChanged = false,
   }) {
-    log('[VERIFY] Check #$checkCount: isChallenge=$isChallenge, hasClearance=${cfClearance != null}, clearanceChanged=$clearanceChanged');
+    log(
+      '[VERIFY] Check #$checkCount: isChallenge=$isChallenge, hasClearance=${cfClearance != null}, clearanceChanged=$clearanceChanged',
+    );
   }
 
   /// 记录验证结果
-  static void logVerifyResult({
-    required bool success,
-    String? reason,
-  }) {
+  static void logVerifyResult({required bool success, String? reason}) {
     if (success) {
       log('[VERIFY] Result: SUCCESS${reason != null ? ' ($reason)' : ''}');
     } else {
@@ -156,10 +158,7 @@ class CfChallengeLogger {
   }
 
   /// 记录冷却期状态
-  static void logCooldown({
-    required bool entering,
-    DateTime? until,
-  }) {
+  static void logCooldown({required bool entering, DateTime? until}) {
     if (entering) {
       log('[COOLDOWN] Entering cooldown until $until', level: 'warning');
     } else {
@@ -176,14 +175,6 @@ class CfChallengeLogger {
     if (host.isEmpty) return const [];
     final parsed = InternetAddress.tryParse(host);
     if (parsed != null) return [parsed.address];
-
-    try {
-      final resolver = NetworkSettingsService.instance.resolver;
-      final addresses = await resolver.resolveAll(host);
-      if (addresses.isNotEmpty) {
-        return addresses.map((a) => a.address).toList();
-      }
-    } catch (_) {}
 
     try {
       final addresses = await InternetAddress.lookup(host);

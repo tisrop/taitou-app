@@ -1,8 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fluxdo/services/network/rhttp/rhttp_settings_service.dart';
-import 'package:fluxdo/services/network/doh/network_settings_service.dart';
-import 'package:fluxdo/services/network/proxy/proxy_settings_service.dart';
 
 /// RhttpSettingsService 单例的单元测试
 ///
@@ -18,10 +16,7 @@ void main() {
       rhttp.resetForTest();
 
       // 使用固定初始值确保每条测试都有独立的 SharedPreferences mock。
-      SharedPreferences.setMockInitialValues({
-        'rhttp_enabled': true,
-        'rhttp_mode': 0,
-      });
+      SharedPreferences.setMockInitialValues({'rhttp_enabled': true});
       prefs = await SharedPreferences.getInstance();
     });
 
@@ -57,7 +52,7 @@ void main() {
       await rhttp.forceDisable();
 
       expect(
-        rhttp.shouldUseRhttp(_networkSettings(), const ProxySettings()),
+        rhttp.shouldUseRhttp(),
         false,
         reason: 'forceDisable 后应阻止使用 rhttp',
       );
@@ -75,15 +70,6 @@ void main() {
       expect(rhttp.current.forceDisabled, true);
     });
 
-    test('setMode 不改变 forceDisabled', () async {
-      await rhttp.initialize(prefs);
-      await rhttp.forceDisable();
-      expect(rhttp.current.forceDisabled, true);
-
-      await rhttp.setMode(RhttpMode.proxyOnly);
-      expect(rhttp.current.forceDisabled, true);
-    });
-
     test(
       'resetForTest 后重新 initialize 恢复 forceDisabled 为 false（模拟重启）',
       () async {
@@ -94,10 +80,7 @@ void main() {
 
         // 模拟重启：重置单例 + 新建 SharedPreferences
         rhttp.resetForTest();
-        SharedPreferences.setMockInitialValues({
-          'rhttp_enabled': true,
-          'rhttp_mode': 0,
-        });
+        SharedPreferences.setMockInitialValues({'rhttp_enabled': true});
         final freshPrefs = await SharedPreferences.getInstance();
 
         // 重新 initialize → 走完整路径，forceDisabled 应为默认值 false
@@ -112,13 +95,4 @@ void main() {
       },
     );
   });
-}
-
-NetworkSettings _networkSettings({bool dohEnabled = false}) {
-  return NetworkSettings(
-    dohEnabled: dohEnabled,
-    selectedServerUrl: 'https://dns.google/dns-query',
-    customServers: const [],
-    proxyPort: null,
-  );
 }

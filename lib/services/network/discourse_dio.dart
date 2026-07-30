@@ -24,6 +24,7 @@ class DiscourseDio {
     Duration receiveTimeout = const Duration(seconds: 30),
     Map<String, dynamic>? defaultHeaders,
     String? baseUrl,
+
     /// null 表示不限制（用于下载、MessageBus 等），非 null 启用调度器。
     /// 实际并发数和速率从 [RequestSchedulerConfig] 动态读取。
     int? maxConcurrent = 3,
@@ -31,9 +32,6 @@ class DiscourseDio {
     bool enableCfChallenge = true,
     bool enableCookies = true,
     bool enableNetworkLog = true,
-    /// true 时强制使用稳定的 NativeAdapter,绕过 _DynamicAdapter 的 rhttp 切换。
-    /// 用于 MessageBus 长轮询等需要长期保持连接、依赖系统级省电的场景。
-    bool useStableAdapter = false,
   }) {
     final dio = Dio(
       BaseOptions(
@@ -55,11 +53,7 @@ class DiscourseDio {
     dio.transformer = BackgroundTransformer();
 
     // 1. 配置平台适配器
-    if (useStableAdapter) {
-      configureStableNativeAdapter(dio);
-    } else {
-      configurePlatformAdapter(dio);
-    }
+    configurePlatformAdapter(dio);
 
     // 2. 会话代守卫（最先执行，确保过期请求不进入后续拦截器）
     dio.interceptors.add(SessionGuardInterceptor());
@@ -123,8 +117,7 @@ class DiscourseDio {
     }
 
     // 11. 网络日志拦截器（最后一个，记录最终结果）
-    // 注意：Gateway URL 改写已移至 HttpClientAdapter 层（_GatewayAdapterWrapper），
-    // 所有拦截器始终看到原始 URL，无需额外处理。
+    // WebView 兼容分流位于 HttpClientAdapter 层，业务拦截器始终看到原始 URL。
     if (enableNetworkLog) {
       dio.interceptors.add(NetworkLogInterceptor());
     }

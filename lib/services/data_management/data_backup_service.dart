@@ -15,7 +15,7 @@ import '../storage/resilient_secure_storage.dart';
 ///
 /// v1 是前缀白名单(pref_/ai_/theme_/…),问题是**持续腐烂**:每加一个
 /// 不在白名单前缀下的配置就静默漏备(实际审计发现主题字体/自定义配色、
-/// 网页收藏、贴纸订阅、代理另一半 upstream_proxy_* 等十余项全漏,主题
+/// 网页收藏、贴纸订阅等十余项全漏,主题
 /// 恢复"一半对一半错")。
 ///
 /// v2 反转:**默认全备,只排除稳定类别**——缓存/派生、会话/凭证、
@@ -65,6 +65,7 @@ class DataBackupService {
   /// 判断 key 是否应该被备份(导出与导入同一套规则)。
   static bool _shouldBackup(String key) {
     if (_includeExactKeys.contains(key)) return true;
+    if (MigrationService.retiredPreferenceKeys.contains(key)) return false;
     // 迁移完成标记:动态从 MigrationService 派生,不抄常量
     if (MigrationService.migrationKeys.contains(key)) return false;
     for (final prefix in _excludeKeyPrefixes) {

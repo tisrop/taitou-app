@@ -32,8 +32,6 @@
   "about_sourceCode": "项目源码",
   "about_tapToDisableDeveloperMode": "点击关闭开发者模式",
   "about_title": "关于",
-  "deviceInfo_dohOff": "DOH: 关闭",
-  "deviceInfo_proxyOff": "代理: 关闭",
   "update_changelog": "更新内容",
   "update_continueInBackground": "后台下载",
   "update_dontRemind": "不再提醒",

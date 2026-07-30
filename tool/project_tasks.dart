@@ -1,12 +1,6 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
-
-import 'package:crypto/crypto.dart';
 
 import '_workspace_cli.dart';
-
-enum _BuildMode { debug, release }
 
 Future<void> main(List<String> args) async {
   enterWorkspaceRoot();
@@ -27,10 +21,7 @@ Future<void> main(List<String> args) async {
       await _testAll(args.sublist(1));
       return;
     case 'run:prepare':
-      await _runPrepare(args.sublist(1));
-      return;
-    case 'native:prepare':
-      await _nativePrepare(args.sublist(1));
+      await _runProjectPrep('app');
       return;
     case 'release:prepare':
       await _releasePrepare(args.sublist(1));
@@ -73,57 +64,13 @@ Future<void> _testAll(List<String> args, {bool includePrep = true}) async {
     await _runProjectPrep('test');
   }
 
-  final testTasks = _buildWorkspaceTestTasks(args);
-  for (final task in testTasks) {
+  for (final task in _buildWorkspaceTestTasks(args)) {
     await runFlutterOrExit(
       title: '执行 ${task.label} flutter test',
       arguments: task.arguments,
       workingDirectory: task.workingDirectory,
     );
   }
-}
-
-Future<void> _nativePrepare(List<String> args) async {
-  final target = _parseNativeTarget(args);
-  final mode = _parseBuildMode(args);
-  final androidTargets = _parseTargetPlatforms(args);
-
-  switch (target) {
-    case 'certs':
-      await _runProjectPrep('certs');
-      return;
-    case 'auto':
-    case 'android':
-      await _runProjectPrep('certs');
-      await _prepareAndroidNative(mode, androidTargets);
-      return;
-    default:
-      stderr.writeln('未知 native:prepare 目标: $target');
-      stderr.writeln(_usage);
-      exit(64);
-  }
-}
-
-Future<void> _runPrepare(List<String> args) async {
-  final mode = _parseBuildMode(args);
-  final androidTargets = _parseTargetPlatforms(args);
-
-  await _runProjectPrep('app');
-  await _prepareAutoNative(mode, androidTargets);
-}
-
-Future<void> _prepareAutoNative(
-  _BuildMode mode,
-  List<String>? requestedAndroidTargets,
-) async {
-  stdout.writeln('==> 按当前已连接的 Android 设备准备原生产物');
-
-  final devices = await _loadFlutterDevices();
-  final androidTargets =
-      requestedAndroidTargets == null || requestedAndroidTargets.isEmpty
-      ? _connectedAndroidTargetPlatforms(devices)
-      : requestedAndroidTargets;
-  await _prepareAndroidAuto(mode, androidTargets);
 }
 
 Future<void> _releasePrepare(List<String> args) async {
@@ -268,9 +215,10 @@ _ExplicitTestTarget? _resolveExplicitTestTarget(
           : Directory(testPackage.workingDirectory!).absolute.path,
     );
     final testRootPath = _normalizeTestPath('$packageRootPath/test');
-    final testRootPrefix = '$testRootPath${Platform.pathSeparator}';
     final isTestRoot = absolutePath == testRootPath;
-    final isUnderTestRoot = absolutePath.startsWith(testRootPrefix);
+    final isUnderTestRoot = absolutePath.startsWith(
+      '$testRootPath${Platform.pathSeparator}',
+    );
     if (!isTestRoot && !isUnderTestRoot) {
       continue;
     }
@@ -278,7 +226,6 @@ _ExplicitTestTarget? _resolveExplicitTestTarget(
     final relativeTarget = absolutePath == testRootPath
         ? 'test'
         : 'test/${absolutePath.substring(testRootPath.length + 1)}';
-
     return _ExplicitTestTarget(
       packagePath: testPackage.packagePath,
       relativeTarget: relativeTarget,
@@ -286,254 +233,6 @@ _ExplicitTestTarget? _resolveExplicitTestTarget(
   }
 
   return null;
-}
-
-String _packageNameFromPath(String path) {
-  final normalized = path.replaceAll('\\', '/');
-  final segments = normalized.split('/');
-  return segments.isEmpty ? path : segments.last;
-}
-
-bool _flutterTestOptionConsumesNextValue(String arg) {
-  return _flutterTestOptionsWithValue.contains(arg);
-}
-
-String _normalizeTestPath(String path) {
-  final normalized = path
-      .replaceAll('/', Platform.pathSeparator)
-      .replaceAll('\\', Platform.pathSeparator);
-  if (Platform.isWindows) {
-    return normalized.replaceAll(RegExp(r'[\\\/]+$'), '').toLowerCase();
-  }
-  return normalized.replaceAll(RegExp(r'[\\\/]+$'), '');
-}
-
-Future<void> _prepareAndroidAuto(
-  _BuildMode mode,
-  List<String> androidTargets,
-) async {
-  if (androidTargets.isEmpty) {
-    stdout.writeln('==> [SKIP] Android 原生产物: 未检测到 Android 设备');
-    return;
-  }
-
-  await _runAutoPrepareStep(
-    label: 'Android 原生产物',
-    check: () => _checkAndroidAutoPrepare(mode, androidTargets),
-    action: () => _prepareAndroidNative(mode, androidTargets),
-  );
-}
-
-Future<void> _runAutoPrepareStep({
-  required String label,
-  required Future<_AutoPrepareCheck> Function() check,
-  required Future<void> Function() action,
-}) async {
-  final result = await check();
-  if (!result.ready) {
-    stdout.writeln('==> [SKIP] $label: ${result.reason}');
-    return;
-  }
-  await action();
-}
-
-String _parseNativeTarget(List<String> args) {
-  for (final arg in args) {
-    if (!arg.startsWith('-')) {
-      return arg;
-    }
-  }
-  return 'android';
-}
-
-_BuildMode _parseBuildMode(List<String> args) {
-  if (args.contains('--debug')) {
-    return _BuildMode.debug;
-  }
-  if (args.contains('--release') || args.contains('--profile')) {
-    return _BuildMode.release;
-  }
-  return _BuildMode.release;
-}
-
-List<String>? _parseTargetPlatforms(List<String> args) {
-  for (var index = 0; index < args.length; index++) {
-    final value = args[index];
-    if (value == '--target-platform') {
-      if (index + 1 < args.length) {
-        return args[index + 1]
-            .split(',')
-            .map((item) => item.trim())
-            .where((item) => item.isNotEmpty)
-            .toList();
-      }
-      return null;
-    }
-    if (value.startsWith('--target-platform=')) {
-      return value
-          .substring('--target-platform='.length)
-          .split(',')
-          .map((item) => item.trim())
-          .where((item) => item.isNotEmpty)
-          .toList();
-    }
-  }
-  return null;
-}
-
-Future<void> _prepareAndroidNative(
-  _BuildMode mode,
-  List<String>? targetPlatforms,
-) async {
-  final androidTargets = _resolveAndroidTargets(targetPlatforms);
-  final stagedOutputs = _androidStagedOutputs(androidTargets);
-  final variantKey = _androidVariantKey(androidTargets);
-
-  if (_nativeStageCurrent(
-    'android',
-    mode,
-    stagedOutputs,
-    variantKey: variantKey,
-  )) {
-    stdout.writeln('==> Android DOH 原生产物已是最新状态');
-    return;
-  }
-
-  final cargoArgs = <String>[
-    'ndk',
-    ...[
-      for (final target in androidTargets) ...['-t', target.androidAbi],
-    ],
-    '--platform',
-    '28',
-    'build',
-    if (mode == _BuildMode.release) '--release',
-    '--features',
-    'ech',
-    '--lib',
-  ];
-  await runOrExit(
-    title: '构建 Android DOH 原生产物',
-    executable: 'cargo',
-    arguments: cargoArgs,
-    workingDirectory: 'core/doh_proxy',
-  );
-
-  final cargoDir = mode == _BuildMode.release ? 'release' : 'debug';
-  for (final target in androidTargets) {
-    _stageFile(
-      'core/doh_proxy/target/${target.rustTarget}/$cargoDir/libdoh_proxy.so',
-      'android/app/src/main/jniLibs/${target.androidAbi}/libdoh_proxy.so',
-    );
-  }
-  _writeNativeStageStamp('android', mode, variantKey: variantKey);
-}
-
-bool _nativeStageCurrent(
-  String target,
-  _BuildMode mode,
-  List<String> outputs, {
-  String? variantKey,
-}) {
-  final stageStamp = File(_nativeStageStampPath(target));
-  if (!stageStamp.existsSync()) {
-    return false;
-  }
-
-  if (outputs.any((path) => !File(path).existsSync())) {
-    return false;
-  }
-
-  return stageStamp.readAsStringSync() ==
-      _nativeStageStampContent(mode, variantKey: variantKey);
-}
-
-void _writeNativeStageStamp(
-  String target,
-  _BuildMode mode, {
-  String? variantKey,
-}) {
-  final stampFile = File(_nativeStageStampPath(target));
-  stampFile.parent.createSync(recursive: true);
-  stampFile.writeAsStringSync(
-    _nativeStageStampContent(mode, variantKey: variantKey),
-  );
-}
-
-String _nativeStageStampPath(String target) =>
-    '.dart_tool/fluxdo_tooling/native/$target.stamp';
-
-String _nativeStageStampContent(_BuildMode mode, {String? variantKey}) {
-  final lines = <String>['mode=${mode.name}'];
-  if (variantKey != null) {
-    lines.add(variantKey);
-  }
-  lines.add(_rustInputStamp());
-  return lines.join('\n');
-}
-
-/// 用源码内容 hash 做 stamp，避免 CI checkout 改变 mtime 导致每次重编。
-/// 路径统一为相对仓库根的 POSIX 形式，保证本机与 CI 结果一致。
-String _rustInputStamp() {
-  final trackedFiles =
-      <File>[
-          File('core/doh_proxy/Cargo.toml'),
-          File('core/doh_proxy/Cargo.lock'),
-          File('core/doh_proxy/build.rs'),
-          ..._collectFiles('core/doh_proxy/src'),
-        ].where((file) => file.existsSync()).toList()
-        ..sort((a, b) => _posixRelativePath(a.path).compareTo(_posixRelativePath(b.path)));
-
-  final bytes = BytesBuilder(copy: false);
-  for (final file in trackedFiles) {
-    bytes.add(utf8.encode(_posixRelativePath(file.path)));
-    bytes.addByte(0);
-    bytes.add(file.readAsBytesSync());
-    bytes.addByte(0);
-  }
-  return 'sha256=${sha256.convert(bytes.takeBytes())}';
-}
-
-String _posixRelativePath(String path) {
-  final root = Directory.current.path;
-  var normalized = path;
-  if (normalized.startsWith(root)) {
-    normalized = normalized.substring(root.length);
-    if (normalized.startsWith(Platform.pathSeparator) ||
-        normalized.startsWith('/')) {
-      normalized = normalized.substring(1);
-    }
-  }
-  return normalized.replaceAll(r'\', '/');
-}
-
-Iterable<File> _collectFiles(String path) sync* {
-  final directory = Directory(path);
-  if (!directory.existsSync()) {
-    return;
-  }
-
-  for (final entity in directory.listSync(
-    recursive: true,
-    followLinks: false,
-  )) {
-    if (entity is File) {
-      yield entity;
-    }
-  }
-}
-
-void _stageFile(String sourcePath, String targetPath) {
-  final source = File(sourcePath);
-  if (!source.existsSync()) {
-    stderr.writeln('缺少构建产物: $sourcePath');
-    exit(1);
-  }
-
-  final target = File(targetPath);
-  target.parent.createSync(recursive: true);
-  source.copySync(target.path);
-  target.setLastModifiedSync(source.lastModifiedSync());
 }
 
 Future<void> _runProjectPrep(String command) {
@@ -544,301 +243,20 @@ Future<void> _runProjectPrep(String command) {
   );
 }
 
-List<_AndroidTarget> _resolveAndroidTargets(List<String>? targetPlatforms) {
-  if (targetPlatforms == null || targetPlatforms.isEmpty) {
-    return _allAndroidTargets;
-  }
-
-  final resolved = <_AndroidTarget>{};
-  for (final targetPlatform in targetPlatforms) {
-    final target = switch (targetPlatform) {
-      'android-arm64' || 'arm64-v8a' => _allAndroidTargets[0],
-      'android-arm' || 'armeabi-v7a' => _allAndroidTargets[1],
-      'android-x64' || 'x86_64' => _allAndroidTargets[2],
-      'android-x86' || 'x86' => _allAndroidTargets[3],
-      _ => null,
-    };
-    if (target != null) {
-      resolved.add(target);
-    }
-  }
-  if (resolved.isEmpty) {
-    return _allAndroidTargets;
-  }
-  return _allAndroidTargets.where(resolved.contains).toList();
+String _packageNameFromPath(String path) {
+  final segments = path.replaceAll('\\', '/').split('/');
+  return segments.isEmpty ? path : segments.last;
 }
 
-Future<_AutoPrepareCheck> _checkAndroidAutoPrepare(
-  _BuildMode mode,
-  List<String> targetPlatforms,
-) async {
-  final androidTargets = _resolveAndroidTargets(targetPlatforms);
-  final stagedOutputs = _androidStagedOutputs(androidTargets);
-  final variantKey = _androidVariantKey(androidTargets);
+bool _flutterTestOptionConsumesNextValue(String arg) =>
+    _flutterTestOptionsWithValue.contains(arg);
 
-  if (_nativeStageCurrent(
-    'android',
-    mode,
-    stagedOutputs,
-    variantKey: variantKey,
-  )) {
-    return const _AutoPrepareCheck.ready();
-  }
-
-  if (!await _canRun('cargo', const ['--version'])) {
-    return const _AutoPrepareCheck.skip('未找到 cargo');
-  }
-  if (!await _canRun('cargo', const ['ndk', '--help'])) {
-    return const _AutoPrepareCheck.skip('未安装 cargo-ndk');
-  }
-  if (_resolveAndroidNdkDirectory() == null) {
-    return const _AutoPrepareCheck.skip('未找到 Android NDK');
-  }
-
-  return _checkRustTargets(androidTargets.map((target) => target.rustTarget));
-}
-
-Future<_AutoPrepareCheck> _checkRustTargets(Iterable<String> targets) async {
-  final result = await _runProcess('rustup', const [
-    'target',
-    'list',
-    '--installed',
-  ]);
-  if (result.exitCode != 0) {
-    return const _AutoPrepareCheck.skip('未找到 rustup，无法确认 Rust 交叉编译 target');
-  }
-
-  final installedTargets = result.combinedOutput
-      .split(RegExp(r'\r?\n'))
-      .map((line) => line.trim())
-      .where((line) => line.isNotEmpty)
-      .toSet();
-  final missingTargets = targets
-      .where((target) => !installedTargets.contains(target))
-      .toList(growable: false);
-  if (missingTargets.isNotEmpty) {
-    return _AutoPrepareCheck.skip(
-      '缺少 Rust target: ${missingTargets.join(', ')}',
-    );
-  }
-
-  return const _AutoPrepareCheck.ready();
-}
-
-Future<bool> _canRun(
-  String executable,
-  List<String> arguments, {
-  String? workingDirectory,
-  Map<String, String>? environment,
-}) async {
-  final result = await _runProcess(
-    executable,
-    arguments,
-    workingDirectory: workingDirectory,
-    environment: environment,
-  );
-  return result.exitCode == 0;
-}
-
-Future<_ProcessResult> _runProcess(
-  String executable,
-  List<String> arguments, {
-  String? workingDirectory,
-  Map<String, String>? environment,
-}) async {
-  try {
-    final result = await Process.run(
-      executable,
-      arguments,
-      runInShell: Platform.isWindows,
-      workingDirectory: workingDirectory,
-      environment: environment,
-    );
-    return _ProcessResult(
-      exitCode: result.exitCode,
-      combinedOutput: '${result.stdout}${result.stderr}',
-    );
-  } on ProcessException catch (error) {
-    return _ProcessResult(exitCode: 1, combinedOutput: error.message);
-  }
-}
-
-Future<List<_FlutterDevice>> _loadFlutterDevices() async {
-  try {
-    final result = await Process.run(
-      flutterExecutable,
-      const ['devices', '--machine'],
-      runInShell: Platform.isWindows,
-      workingDirectory: workspaceRootPath,
-      environment: await androidBuildEnvironment(),
-    );
-    if (result.exitCode != 0) {
-      return const [];
-    }
-
-    final decoded = jsonDecode(result.stdout.toString());
-    if (decoded is! List) {
-      return const [];
-    }
-
-    return decoded
-        .whereType<Map>()
-        .map((item) => _FlutterDevice.fromJson(item.cast<String, dynamic>()))
-        .whereType<_FlutterDevice>()
-        .toList(growable: false);
-  } catch (_) {
-    return const [];
-  }
-}
-
-List<String> _connectedAndroidTargetPlatforms(List<_FlutterDevice> devices) {
-  final resolved = <String>{};
-  for (final device in devices) {
-    if (device.targetPlatform.startsWith('android')) {
-      resolved.add(device.targetPlatform);
-    }
-  }
-  if (resolved.isEmpty) {
-    return const [];
-  }
-  return _resolveAndroidTargets(
-    resolved.toList(),
-  ).map((target) => target.flutterTarget).toList(growable: false);
-}
-
-Directory? _resolveAndroidNdkDirectory() {
-  for (final candidate in _androidNdkCandidates()) {
-    if (candidate.existsSync()) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-Iterable<Directory> _androidNdkCandidates() sync* {
-  for (final envKey in const ['ANDROID_NDK_HOME', 'ANDROID_NDK_ROOT']) {
-    final value = Platform.environment[envKey]?.trim();
-    if (value != null && value.isNotEmpty) {
-      yield Directory(value);
-    }
-  }
-
-  final localPropertiesFile = File('android/local.properties');
-  if (localPropertiesFile.existsSync()) {
-    final properties = _readSimpleProperties(localPropertiesFile);
-    final ndkDirValue = _readNonBlank(properties, 'ndk.dir');
-    if (ndkDirValue != null) {
-      yield Directory(_decodePropertiesPath(ndkDirValue));
-    }
-
-    final sdkDirValue = _readNonBlank(properties, 'sdk.dir');
-    if (sdkDirValue != null) {
-      yield* _androidNdkCandidatesFromSdkRoot(
-        _decodePropertiesPath(sdkDirValue),
-      );
-    }
-  }
-
-  for (final envKey in const ['ANDROID_SDK_ROOT', 'ANDROID_HOME']) {
-    final value = Platform.environment[envKey]?.trim();
-    if (value != null && value.isNotEmpty) {
-      yield* _androidNdkCandidatesFromSdkRoot(value);
-    }
-  }
-
-  final home = Platform
-      .environment[Platform.isWindows ? 'LOCALAPPDATA' : 'HOME']
-      ?.trim();
-  if (Platform.isWindows && home != null && home.isNotEmpty) {
-    yield* _androidNdkCandidatesFromSdkRoot('$home\\Android\\Sdk');
-  } else if (Platform.isMacOS && home != null && home.isNotEmpty) {
-    yield* _androidNdkCandidatesFromSdkRoot('$home/Library/Android/sdk');
-  } else if (Platform.isLinux && home != null && home.isNotEmpty) {
-    yield* _androidNdkCandidatesFromSdkRoot('$home/Android/Sdk');
-    yield* _androidNdkCandidatesFromSdkRoot('$home/Android/sdk');
-  }
-
-  if (Platform.isLinux) {
-    yield* _androidNdkCandidatesFromSdkRoot('/opt/android-sdk');
-    yield* _androidNdkCandidatesFromSdkRoot('/usr/lib/android-sdk');
-  }
-}
-
-Iterable<Directory> _androidNdkCandidatesFromSdkRoot(String sdkRoot) sync* {
-  final ndkBundle = Directory('$sdkRoot${Platform.pathSeparator}ndk-bundle');
-  if (ndkBundle.existsSync()) {
-    yield ndkBundle;
-  }
-
-  final ndkDirectory = Directory('$sdkRoot${Platform.pathSeparator}ndk');
-  if (!ndkDirectory.existsSync()) {
-    return;
-  }
-
-  final versions =
-      ndkDirectory
-          .listSync(followLinks: false)
-          .whereType<Directory>()
-          .toList(growable: false)
-        ..sort((a, b) => b.path.compareTo(a.path));
-  for (final version in versions) {
-    yield version;
-  }
-}
-
-Map<String, String> _readSimpleProperties(File file) {
-  final properties = <String, String>{};
-  for (final rawLine in file.readAsLinesSync()) {
-    final line = rawLine.trim();
-    if (line.isEmpty || line.startsWith('#') || line.startsWith('!')) {
-      continue;
-    }
-
-    final equalIndex = line.indexOf('=');
-    final colonIndex = line.indexOf(':');
-    final separatorIndex = equalIndex == -1
-        ? colonIndex
-        : colonIndex == -1
-        ? equalIndex
-        : equalIndex < colonIndex
-        ? equalIndex
-        : colonIndex;
-    if (separatorIndex <= 0) {
-      continue;
-    }
-
-    final key = line.substring(0, separatorIndex).trim();
-    final value = line.substring(separatorIndex + 1).trim();
-    if (key.isNotEmpty) {
-      properties[key] = value;
-    }
-  }
-  return properties;
-}
-
-String? _readNonBlank(Map<String, String> properties, String key) {
-  final value = properties[key]?.trim();
-  return value == null || value.isEmpty ? null : value;
-}
-
-String _decodePropertiesPath(String path) {
-  return path
-      .replaceAll(r'\:', ':')
-      .replaceAll(r'\=', '=')
-      .replaceAll('\\\\', '\\');
-}
-
-List<String> _androidStagedOutputs(List<_AndroidTarget> targets) {
-  return targets
-      .map(
-        (target) =>
-            'android/app/src/main/jniLibs/${target.androidAbi}/libdoh_proxy.so',
-      )
-      .toList(growable: false);
-}
-
-String _androidVariantKey(List<_AndroidTarget> targets) {
-  return 'targets=${targets.map((target) => target.flutterTarget).join(',')}';
+String _normalizeTestPath(String path) {
+  final normalized = path
+      .replaceAll('/', Platform.pathSeparator)
+      .replaceAll('\\', Platform.pathSeparator);
+  final trimmed = normalized.replaceAll(RegExp(r'[\\\/]+$'), '');
+  return Platform.isWindows ? trimmed.toLowerCase() : trimmed;
 }
 
 const _usage = '''
@@ -846,10 +264,34 @@ const _usage = '''
   dart tool/project_tasks.dart app:clean
   dart tool/project_tasks.dart app:rebuild <flutter build args...>
   dart tool/project_tasks.dart test:all [flutter test args...]
-  dart tool/project_tasks.dart run:prepare [--debug|--release|--profile] [--target-platform=<platforms>]
-  dart tool/project_tasks.dart native:prepare [certs|auto|android] [--debug|--release|--profile] [--target-platform=<platforms>]
+  dart tool/project_tasks.dart run:prepare
   dart tool/project_tasks.dart release:prepare [--skip-analyze] [--skip-test] [--strict-analyze]
 ''';
+
+const _flutterTestOptionsWithValue = <String>{
+  '-n',
+  '--name',
+  '-N',
+  '--plain-name',
+  '-t',
+  '--tags',
+  '-x',
+  '--exclude-tags',
+  '-p',
+  '--platform',
+  '-j',
+  '--concurrency',
+  '-r',
+  '--reporter',
+  '--file-reporter',
+  '--timeout',
+  '--total-shards',
+  '--shard-index',
+  '--dart-define',
+  '--dart-define-from-file',
+  '--coverage-path',
+  '--test-randomize-ordering-seed',
+};
 
 class _WorkspaceTestPackage {
   const _WorkspaceTestPackage({
@@ -883,81 +325,4 @@ class _ExplicitTestTarget {
 
   final String packagePath;
   final String relativeTarget;
-}
-
-const _flutterTestOptionsWithValue = <String>{
-  '-n',
-  '--name',
-  '-N',
-  '--plain-name',
-  '-t',
-  '--tags',
-  '-x',
-  '--exclude-tags',
-  '-p',
-  '--platform',
-  '-j',
-  '--concurrency',
-  '-r',
-  '--reporter',
-  '--file-reporter',
-  '--timeout',
-  '--total-shards',
-  '--shard-index',
-  '--dart-define',
-  '--dart-define-from-file',
-  '--coverage-path',
-  '--test-randomize-ordering-seed',
-};
-
-const _allAndroidTargets = <_AndroidTarget>[
-  _AndroidTarget('android-arm64', 'arm64-v8a', 'aarch64-linux-android'),
-  _AndroidTarget('android-arm', 'armeabi-v7a', 'armv7-linux-androideabi'),
-  _AndroidTarget('android-x64', 'x86_64', 'x86_64-linux-android'),
-  _AndroidTarget('android-x86', 'x86', 'i686-linux-android'),
-];
-
-class _AutoPrepareCheck {
-  const _AutoPrepareCheck._(this.ready, this.reason);
-
-  const _AutoPrepareCheck.ready() : this._(true, '');
-
-  const _AutoPrepareCheck.skip(String reason) : this._(false, reason);
-
-  final bool ready;
-  final String reason;
-}
-
-class _AndroidTarget {
-  const _AndroidTarget(this.flutterTarget, this.androidAbi, this.rustTarget);
-
-  final String flutterTarget;
-  final String androidAbi;
-  final String rustTarget;
-}
-
-class _FlutterDevice {
-  const _FlutterDevice({required this.id, required this.targetPlatform});
-
-  final String id;
-  final String targetPlatform;
-
-  static _FlutterDevice? fromJson(Map<String, dynamic> json) {
-    final id = json['id']?.toString().trim();
-    final targetPlatform = json['targetPlatform']?.toString().trim();
-    if (id == null ||
-        id.isEmpty ||
-        targetPlatform == null ||
-        targetPlatform.isEmpty) {
-      return null;
-    }
-    return _FlutterDevice(id: id, targetPlatform: targetPlatform);
-  }
-}
-
-class _ProcessResult {
-  const _ProcessResult({required this.exitCode, required this.combinedOutput});
-
-  final int exitCode;
-  final String combinedOutput;
 }

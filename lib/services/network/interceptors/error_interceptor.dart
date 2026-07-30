@@ -1,11 +1,15 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
+import '../../../constants.dart';
 import '../../../l10n/s.dart';
 import '../../cf_challenge_service.dart';
 import '../../toast_service.dart';
 import '../exceptions/api_exception.dart';
+import '../vpn_connectivity_state.dart';
 
 /// 错误拦截器
 /// 处理 429/502/503/504 错误，转换为自定义异常
@@ -14,12 +18,15 @@ import '../exceptions/api_exception.dart';
 class ErrorInterceptor extends Interceptor {
   /// 操作性请求方法，默认显示错误提示
   static const _mutationMethods = {'POST', 'PUT', 'DELETE', 'PATCH'};
+  static const _vpnHintCooldown = Duration(minutes: 5);
+  static DateTime? _lastVpnHintAt;
 
   @override
-  void onError(DioException err, ErrorInterceptorHandler handler) {
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
     final statusCode = err.response?.statusCode;
     final method = err.requestOptions.method.toUpperCase();
     final extra = err.requestOptions.extra;
+    final vpnFailureHandled = await _handleVpnConnectionFailure(err);
 
     // CF 盾 403/429 由 CfChallengeInterceptor 统一决定展示形态:
     // 页面数据走错误态按钮,操作请求走明确提示,静默请求不打扰。
@@ -81,7 +88,7 @@ class ErrorInterceptor extends Interceptor {
     }
 
     // 其他错误
-    if (showErrorToast) {
+    if (showErrorToast && !vpnFailureHandled) {
       if (errorMessage != null) {
         ToastService.showError(errorMessage);
       } else {
@@ -100,6 +107,82 @@ class ErrorInterceptor extends Interceptor {
     }
 
     handler.next(err);
+  }
+
+  Future<bool> _handleVpnConnectionFailure(DioException err) async {
+    if (!_isVpnDirectHintCandidate(err)) {
+      return false;
+    }
+
+    final vpnActive = await VpnConnectivityState.instance.resolveIsActive();
+    if (!vpnActive) return false;
+
+    final now = DateTime.now();
+    final lastShownAt = _lastVpnHintAt;
+    if (lastShownAt == null ||
+        now.difference(lastShownAt) >= _vpnHintCooldown) {
+      _lastVpnHintAt = now;
+      ToastService.show(
+        S.current.network_vpnDirectHint,
+        type: ToastType.error,
+        duration: const Duration(seconds: 8),
+        maxLines: null,
+      );
+      return true;
+    }
+    return false;
+  }
+
+  @visibleForTesting
+  static bool shouldShowVpnDirectHint(
+    DioException err, {
+    required bool vpnActive,
+  }) {
+    return vpnActive && _isVpnDirectHintCandidate(err);
+  }
+
+  static bool _isVpnDirectHintCandidate(DioException err) {
+    if (err.response != null) return false;
+    if (err.requestOptions.extra['isSilent'] == true) return false;
+    if (!AppConstants.isSiteHost(err.requestOptions.uri.host)) return false;
+
+    return switch (err.type) {
+      DioExceptionType.connectionError ||
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.sendTimeout => true,
+      DioExceptionType.unknown =>
+        err.error is SocketException || _isCronetConnectionFailure(err.error),
+      DioExceptionType.badCertificate ||
+      DioExceptionType.badResponse ||
+      DioExceptionType.cancel => false,
+    };
+  }
+
+  @visibleForTesting
+  static void resetVpnHintCooldown() {
+    _lastVpnHintAt = null;
+  }
+
+  static bool _isCronetConnectionFailure(Object? error) {
+    if (error is! http.ClientException) return false;
+
+    final message = error.message.toUpperCase();
+    if (!message.contains('CRONET')) return false;
+
+    const connectionErrors = <String>{
+      'ERR_CONNECTION_CLOSED',
+      'ERR_CONNECTION_RESET',
+      'ERR_CONNECTION_ABORTED',
+      'ERR_CONNECTION_REFUSED',
+      'ERR_CONNECTION_TIMED_OUT',
+      'ERR_TIMED_OUT',
+      'ERR_INTERNET_DISCONNECTED',
+      'ERR_NETWORK_CHANGED',
+      'ERR_ADDRESS_UNREACHABLE',
+      'ERR_NAME_NOT_RESOLVED',
+    };
+    return connectionErrors.any(message.contains);
   }
 
   int? _extractRetryAfterSeconds(Response? response) {

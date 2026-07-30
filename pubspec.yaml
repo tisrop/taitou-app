@@ -186,7 +186,6 @@ flutter:
     - assets/logo_modern.svg
     - assets/logo_modern_light.svg
     - assets/images/
-    - assets/certs/
     - assets/ai_brands/
     - assets/icons/thinking/
     - assets/polyfill/
@@ -199,7 +198,6 @@ flutter:
         # Flutter 3.41+ FontWeight 会映射到 wght variation axis，因此即使
         # 不显式声明 weight，TextStyle(fontWeight: FontWeight.wXXX) 也能精准命中。
         - asset: assets/fonts/MiSansVF.ttf
-
 
 
 

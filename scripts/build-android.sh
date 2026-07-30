@@ -9,8 +9,8 @@
 #   ./scripts/build-android.sh --x64          # 仅构建 x86_64 APK
 #   ./scripts/build-android.sh --universal    # 单个全 ABI APK（体积大，便于分发）
 #
-# 环境要求见 README：Flutter 3.44+、JDK 17、Android SDK 36、NDK 27 与 28、Rust
-# Android 靶子。release 签名读 android/key.properties，缺失时 Gradle 会回退到
+# 环境要求见 README：Flutter 3.44+、JDK 17、Android SDK 36、NDK 28。
+# release 签名读 android/key.properties，缺失时 Gradle 会回退到
 # debug 签名并在日志里打印，不会静默出一个假的 release 包。
 set -euo pipefail
 
@@ -19,7 +19,7 @@ cd "$(dirname "$0")/.."
 MODE=release
 ARTIFACT=apk
 SPLIT=--split-per-abi
-# 默认只编三个发布用 ABI；不带 x86，避免 cargo-ndk 拉 i686 靶子。
+# 默认只编三个发布用 ABI。
 TARGET_PLATFORM=android-arm,android-arm64,android-x64
 
 for arg in "$@"; do
@@ -34,8 +34,8 @@ for arg in "$@"; do
     esac
 done
 
-if [ ! -f core/doh_proxy/Cargo.toml ] || [ ! -f packages/fluxdo_render/pubspec.yaml ]; then
-    echo "submodule 没拉全，先执行： git submodule update --init --recursive" >&2
+if [ ! -f packages/fluxdo_render/pubspec.yaml ]; then
+    echo "本地 package 不完整：缺少 packages/fluxdo_render。" >&2
     exit 1
 fi
 
@@ -55,7 +55,7 @@ if [ -n "$TARGET_PLATFORM" ]; then
 fi
 
 echo "==> dart run tool/flutterw.dart ${BUILD_ARGS[*]}"
-# flutterw 统一完成 pub get、l10n、DOH 原生库准备和 Flutter 构建，避免重复预处理。
+# flutterw 统一完成 pub get、l10n 和 Flutter 构建，避免重复预处理。
 dart run tool/flutterw.dart "${BUILD_ARGS[@]}"
 
 echo

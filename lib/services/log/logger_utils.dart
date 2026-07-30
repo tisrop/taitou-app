@@ -7,9 +7,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../constants.dart';
 import '../network/adapters/cronet_fallback_service.dart';
-import '../network/doh/network_settings_service.dart';
-import '../network/proxy/proxy_settings_service.dart';
-import '../../l10n/s.dart';
 import 'log_writer.dart';
 
 /// 日志文件管理工具
@@ -127,25 +124,6 @@ class LoggerUtils {
     final cronet = CronetFallbackService.instance;
     lines.add('适配器: ${cronet.hasFallenBack ? 'Dart IO' : 'Cronet'}');
 
-    // DOH 配置
-    final doh = NetworkSettingsService.instance.current;
-    if (doh.dohEnabled) {
-      final serverName = _findDohServerName(doh.selectedServerUrl);
-      final parts = <String>[serverName];
-      if (doh.preferIPv6) parts.add('IPv6');
-      lines.add('DOH: ${parts.join(', ')}');
-    } else {
-      lines.add(S.current.deviceInfo_dohOff);
-    }
-
-    // HTTP 代理
-    final proxy = ProxySettingsService.instance.current;
-    if (proxy.isValid) {
-      lines.add('代理: ${proxy.host}:${proxy.port}');
-    } else {
-      lines.add(S.current.deviceInfo_proxyOff);
-    }
-
     return lines;
   }
 
@@ -156,29 +134,7 @@ class LoggerUtils {
     final cronet = CronetFallbackService.instance;
     map['adapter'] = cronet.hasFallenBack ? 'Dart IO' : 'Cronet';
 
-    final doh = NetworkSettingsService.instance.current;
-    map['dohEnabled'] = doh.dohEnabled;
-    if (doh.dohEnabled) {
-      map['dohServer'] = doh.selectedServerUrl;
-      map['preferIPv6'] = doh.preferIPv6;
-    }
-
-    final proxy = ProxySettingsService.instance.current;
-    map['proxyEnabled'] = proxy.isValid;
-    if (proxy.isValid) {
-      map['proxyHost'] = '${proxy.host}:${proxy.port}';
-    }
-
     return map;
-  }
-
-  /// 根据 DOH 服务器 URL 查找名称
-  static String _findDohServerName(String url) {
-    final servers = NetworkSettingsService.instance.servers;
-    for (final server in servers) {
-      if (server.url == url) return server.name;
-    }
-    return url;
   }
 
   /// 读取并解析 JSONL，逆序返回（最新在前）。

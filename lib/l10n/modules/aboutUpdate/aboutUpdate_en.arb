@@ -18,8 +18,6 @@
   "about_sourceCode": "Source code",
   "about_tapToDisableDeveloperMode": "Tap to disable developer mode",
   "about_title": "About",
-  "deviceInfo_dohOff": "DOH: Off",
-  "deviceInfo_proxyOff": "Proxy: Off",
   "update_changelog": "What's new",
   "update_continueInBackground": "Download in background",
   "update_dontRemind": "Don't remind",

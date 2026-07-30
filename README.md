@@ -75,7 +75,7 @@ Dart 包名与 MethodChannel 名等历史内部标识暂不作为兼容性迁移
 - 完整论坛功能：浏览话题、发帖回复、搜索、通知、私信
 - 内容管理：书签、浏览历史、关注列表、徽章
 - Markdown 编辑器，图片上传与查看，投票
-- 基于 Rust 的 DoH（DNS over HTTPS）代理，防 DNS 污染劫持
+- 支持 HTTP/SOCKS5 上游代理和多网络引擎切换
 - MessageBus 实时消息推送
 
 ## 快速开始
@@ -85,25 +85,18 @@ Dart 包名与 MethodChannel 名等历史内部标识暂不作为兼容性迁移
 - Flutter SDK 3.44+（Dart ^3.10.4）
 - JDK 17（AGP 要求；JDK 21+ 会构建失败）
 - Android SDK：platform 36、build-tools 36.0.0、NDK 28.2.13676358
-- Rust 工具链及 Android 靶子（编译 DoH 代理）：
-  ```bash
-  rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android
-  ```
 
 ### 构建
 
 ```bash
-git clone --recurse-submodules <本仓库地址> taitou-app
+git clone <本仓库地址> taitou-app
 cd taitou-app
 
 flutter pub get
-dart run tool/project_prep.dart app   # l10n 生成 + DoH 代理证书
+dart run tool/project_prep.dart app   # 生成 l10n
 
 flutter build apk --release
 ```
-
-仅 `core/doh_proxy` 使用 git submodule，克隆时务必带
-`--recurse-submodules`。`packages/fluxdo_render` 已纳入本仓库，由本项目手工维护。
 
 ### 签名
 
@@ -135,9 +128,8 @@ taitou-app/
 │   ├── providers/           # Riverpod 状态管理
 │   ├── services/
 │   │   ├── discourse/       # Discourse API 封装
-│   │   └── network/         # 网络层（DoH、代理、cookie）
+│   │   └── network/         # 网络层（代理、网络引擎、cookie）
 │   └── widgets/
-├── core/doh_proxy/          # Rust DoH 代理（submodule）
 ├── packages/                # 本地依赖包
 └── android/
 ```

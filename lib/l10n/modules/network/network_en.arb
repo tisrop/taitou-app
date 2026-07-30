@@ -12,9 +12,7 @@
   "enginePreset_standardDesc": "Let the app pick the best engine",
   "engineStatus_currentEngine": "Current engine",
   "engineStatus_reasonFallback": "Cronet fell back to the backup adapter",
-  "engineStatus_reasonGateway": "DoH direct mode (saves a TLS layer)",
   "engineStatus_reasonNative": "System default direct connection",
-  "engineStatus_reasonProxy": "Forwarded via local proxy",
   "engineStatus_reasonRhttp": "rhttp engine enabled",
   "engineStatus_webviewSplit": "Main-site API requests use WebView, others use {engine}",
   "@engineStatus_webviewSplit": {
@@ -53,7 +51,6 @@
   "networkSettings_maxConcurrentDesc": "How many requests can run at the same time",
   "networkSettings_maxPerWindow": "Rate limit",
   "networkSettings_maxPerWindowDesc": "Max requests within each time window",
-  "networkSettings_proxy": "Network Proxy",
   "networkSettings_title": "Network Settings",
   "networkSettings_windowSeconds": "Time window",
   "networkSettings_windowSecondsDesc": "Length of the rate-limit window",
@@ -74,9 +71,15 @@
   "networkSettings_rateLimitSummary": "Up to {maxPerWindow} requests every {windowSeconds}s, {maxConcurrent} in parallel",
   "@networkSettings_rateLimitSummary": {
     "placeholders": {
-      "windowSeconds": { "type": "int" },
-      "maxPerWindow": { "type": "int" },
-      "maxConcurrent": { "type": "int" }
+      "windowSeconds": {
+        "type": "int"
+      },
+      "maxPerWindow": {
+        "type": "int"
+      },
+      "maxConcurrent": {
+        "type": "int"
+      }
     }
   },
   "network_adapterNativeAndroid": "Cronet adapter",
@@ -96,7 +99,7 @@
   "network_serverUnavailableRetry": "Server temporarily unavailable, please retry",
   "network_unauthorized": "Not logged in or session expired",
   "network_unprocessable": "Request cannot be processed",
-  "rhttpEngine_alwaysUse": "Always",
+  "network_vpnDirectHint": "VPN detected and the main site could not be reached. Set openxinsheng.com and *.openxinsheng.com to DIRECT in your proxy app.",
   "rhttpEngine_currentAdapter": "Current: {adapter}",
   "@rhttpEngine_currentAdapter": {
     "placeholders": {
@@ -106,11 +109,8 @@
     }
   },
   "rhttpEngine_disabledDesc": "Enable to use Rust network engine",
-  "rhttpEngine_echFallbackHint": "When ECH is on, WebView still falls back to local proxy; rhttp direct connection tries its own ECH first",
   "rhttpEngine_enabledDesc": "HTTP/2 Multiplexing · Rust reqwest",
-  "rhttpEngine_proxyDohOnly": "Proxy/DOH Only",
   "rhttpEngine_title": "rhttp Engine",
-  "rhttpEngine_useMode": "Usage Mode",
   "rhttpEngine_initFailedHint": "rhttp engine initialization failed, fallback adapter in use, will retry on next launch",
   "webviewAdapter_disabledDesc": "Use browser engine for requests, may improve login stability",
   "webviewAdapter_enabledDesc": "Main site API requests sent via browser engine",

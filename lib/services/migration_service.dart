@@ -39,6 +39,21 @@ class Migration {
 class MigrationService {
   MigrationService._();
 
+  /// 已移除功能留下的 SharedPreferences 键。
+  ///
+  /// 启动时清理，同时供备份服务阻止旧备份重新导入。
+  static const retiredPreferenceKeys = <String>[
+    'http_proxy_enabled',
+    'upstream_proxy_protocol',
+    'http_proxy_host',
+    'http_proxy_port',
+    'http_proxy_username',
+    'http_proxy_password',
+    'vpn_auto_toggle_enabled',
+    'vpn_suppressed_proxy',
+    'rhttp_mode',
+  ];
+
   /// 本次启动是否需要重新登录（供 UI 弹 Dialog 用）
   static bool requiresRelogin = false;
 
@@ -400,6 +415,12 @@ class MigrationService {
   /// 在 main() 中调用，在所有网络服务启动之前执行
   static Future<void> runAll(SharedPreferences prefs) async {
     requiresRelogin = false;
+
+    for (final key in retiredPreferenceKeys) {
+      if (prefs.containsKey(key)) {
+        await prefs.remove(key);
+      }
+    }
 
     for (final m in _migrations) {
       if (prefs.getBool(m.key) == true) continue;

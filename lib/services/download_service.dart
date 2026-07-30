@@ -6,7 +6,7 @@ import 'network/discourse_dio.dart';
 /// 文件下载服务（单例）
 ///
 /// 使用 DiscourseDio.create() 创建 Dio 实例，
-/// 自动继承代理/DOH/rhttp/Cookie 等所有网络设置。
+/// 自动继承代理、rhttp、Cookie 等网络设置。
 class DownloadService {
   DownloadService._();
   static final DownloadService instance = DownloadService._();
@@ -66,9 +66,10 @@ class DownloadService {
   /// 回退到 filename="xxx"
   static String? parseContentDisposition(String header) {
     // 优先匹配 filename*=UTF-8''encoded_name
-    final starMatch =
-        RegExp(r"""filename\*\s*=\s*UTF-8''(.+?)(?:;|$)""", caseSensitive: false)
-            .firstMatch(header);
+    final starMatch = RegExp(
+      r"""filename\*\s*=\s*UTF-8''(.+?)(?:;|$)""",
+      caseSensitive: false,
+    ).firstMatch(header);
     if (starMatch != null) {
       final encoded = starMatch.group(1)!.trim();
       try {
@@ -76,9 +77,10 @@ class DownloadService {
       } catch (_) {}
     }
     // 回退：filename="name" 或 filename=name
-    final match =
-        RegExp(r'filename\s*=\s*"?([^";]+)"?', caseSensitive: false)
-            .firstMatch(header);
+    final match = RegExp(
+      r'filename\s*=\s*"?([^";]+)"?',
+      caseSensitive: false,
+    ).firstMatch(header);
     if (match != null) {
       return match.group(1)!.trim();
     }

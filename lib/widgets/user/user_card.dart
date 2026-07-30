@@ -624,7 +624,7 @@ class _UserCardContentState extends ConsumerState<_UserCardContent> {
       clipBehavior: Clip.antiAlias,
       // 背景图与内容蒙版放在同一层（child 内嵌套），保证两者矩形完全重合：
       // border 会让 Container 给 child 加内边距，若图放在外层 decoration 会比蒙版多出一圈露边。
-      // 背景图走项目图片层以支持 DoH/CF/缓存；蒙版顶部较透出背景，向下过渡到接近不透明保证可读（对齐 .card-content 半透明）。
+      // 背景图走项目图片层以支持 CF/缓存；蒙版顶部较透出背景，向下过渡到接近不透明保证可读（对齐 .card-content 半透明）。
       child: hasBg
           ? DecoratedBox(
               decoration: BoxDecoration(

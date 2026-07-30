@@ -4,7 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'network/discourse_dio.dart';
-import 'network/vpn_auto_toggle_service.dart';
+import 'network/vpn_connectivity_state.dart';
 
 /// 网络连通性检测服务
 ///
@@ -90,7 +90,7 @@ class ConnectivityService {
 
   Future<void> _onConnectivityChanged(List<ConnectivityResult> results) async {
     debugPrint('[Connectivity] onConnectivityChanged: $results');
-    VpnAutoToggleService.instance.handleConnectivityChanged(results);
+    VpnConnectivityState.instance.update(results);
     final hasNetwork =
         results.isNotEmpty &&
         !results.every((r) => r == ConnectivityResult.none);
@@ -170,14 +170,16 @@ class ConnectivityService {
       _retryInFlight = true;
       try {
         final result = await safeCheckConnectivity();
+        VpnConnectivityState.instance.update(result);
         final hasNetwork =
             result.isNotEmpty &&
             !result.every((r) => r == ConnectivityResult.none);
         if (hasNetwork) {
           if (enableServerPing) {
             final reachable = await pingServer();
-            if (reachable)
+            if (reachable) {
               _setConnected(true); // _setConnected(true) 内部会调用 _stopRetry
+            }
           } else {
             _setConnected(true);
           }
@@ -212,6 +214,7 @@ class ConnectivityService {
       _setConnected(reachable);
     } else {
       final result = await safeCheckConnectivity();
+      VpnConnectivityState.instance.update(result);
       final hasNetwork =
           result.isNotEmpty &&
           !result.every((r) => r == ConnectivityResult.none);
@@ -224,6 +227,7 @@ class ConnectivityService {
     _disconnectDebounce?.cancel();
     _stopRetry();
     _controller.close();
+    VpnConnectivityState.instance.reset();
     _initialized = false;
   }
 }

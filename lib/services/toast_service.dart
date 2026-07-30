@@ -65,6 +65,7 @@ class ToastService {
     String message, {
     ToastType type = ToastType.info,
     Duration duration = const Duration(seconds: 3),
+    int? maxLines = 2,
     String? actionLabel,
     VoidCallback? onAction,
   }) {
@@ -86,6 +87,7 @@ class ToastService {
         return _ToastWidget(
           message: message,
           type: type,
+          maxLines: maxLines,
           actionLabel: actionLabel,
           onAction: onAction,
           onControllerCreated: (c) {
@@ -182,6 +184,7 @@ class ToastService {
 class _ToastWidget extends StatefulWidget {
   final String message;
   final ToastType type;
+  final int? maxLines;
   final String? actionLabel;
   final VoidCallback? onAction;
   final void Function(AnimationController) onControllerCreated;
@@ -190,6 +193,7 @@ class _ToastWidget extends StatefulWidget {
   const _ToastWidget({
     required this.message,
     required this.type,
+    required this.maxLines,
     this.actionLabel,
     this.onAction,
     required this.onControllerCreated,
@@ -220,9 +224,10 @@ class _ToastWidgetState extends State<_ToastWidget>
       begin: const Offset(0, -1),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     _iconAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(
         parent: _controller,
@@ -258,9 +263,13 @@ class _ToastWidgetState extends State<_ToastWidget>
     final colorScheme = theme.colorScheme;
     final mediaQuery = MediaQuery.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isMultiline = widget.maxLines == null || widget.maxLines! > 2;
 
     final (icon, iconColor) = switch (widget.type) {
-      ToastType.success => (Symbols.check_circle_rounded, const Color(0xFF10B981)), // Emerald
+      ToastType.success => (
+        Symbols.check_circle_rounded,
+        const Color(0xFF10B981),
+      ), // Emerald
       ToastType.error => (Symbols.error_rounded, colorScheme.error),
       ToastType.info => (Symbols.info_rounded, colorScheme.primary),
     };
@@ -290,17 +299,23 @@ class _ToastWidgetState extends State<_ToastWidget>
                     child: Container(
                       decoration: BoxDecoration(
                         color: colorScheme.inverseSurface,
-                        borderRadius: BorderRadius.circular(100),
+                        borderRadius: BorderRadius.circular(
+                          isMultiline ? 24 : 100,
+                        ),
                         boxShadow: [
                           // Base dark shadow
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                            color: Colors.black.withValues(
+                              alpha: isDark ? 0.3 : 0.08,
+                            ),
                             blurRadius: 20,
                             offset: const Offset(0, 8),
                           ),
                           // Colored glow shadow
                           BoxShadow(
-                            color: iconColor.withValues(alpha: isDark ? 0.25 : 0.15),
+                            color: iconColor.withValues(
+                              alpha: isDark ? 0.25 : 0.15,
+                            ),
                             blurRadius: 24,
                             spreadRadius: -2,
                             offset: const Offset(0, 8),
@@ -310,11 +325,16 @@ class _ToastWidgetState extends State<_ToastWidget>
                       padding: const EdgeInsets.fromLTRB(10, 10, 20, 10),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: isMultiline
+                            ? CrossAxisAlignment.start
+                            : CrossAxisAlignment.center,
                         children: [
                           Container(
                             padding: const EdgeInsets.all(6),
                             decoration: BoxDecoration(
-                              color: iconColor.withValues(alpha: 0.15), // Colored circle behind icon
+                              color: iconColor.withValues(
+                                alpha: 0.15,
+                              ), // Colored circle behind icon
                               shape: BoxShape.circle,
                             ),
                             child: widget.type == ToastType.success
@@ -333,12 +353,15 @@ class _ToastWidgetState extends State<_ToastWidget>
                             child: Text(
                               widget.message,
                               style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onInverseSurface, // Adapt text color
+                                color: colorScheme
+                                    .onInverseSurface, // Adapt text color
                                 fontWeight: FontWeight.w500,
                                 letterSpacing: 0.2,
                               ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                              maxLines: widget.maxLines,
+                              overflow: widget.maxLines == null
+                                  ? TextOverflow.visible
+                                  : TextOverflow.ellipsis,
                             ),
                           ),
                           if (widget.actionLabel != null) ...[
@@ -346,7 +369,9 @@ class _ToastWidgetState extends State<_ToastWidget>
                             Container(
                               width: 1,
                               height: 16,
-                              color: colorScheme.onInverseSurface.withValues(alpha: 0.2),
+                              color: colorScheme.onInverseSurface.withValues(
+                                alpha: 0.2,
+                              ),
                               margin: const EdgeInsets.symmetric(horizontal: 4),
                             ),
                             TextButton(
@@ -356,7 +381,9 @@ class _ToastWidgetState extends State<_ToastWidget>
                               },
                               style: TextButton.styleFrom(
                                 foregroundColor: iconColor,
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
                                 minimumSize: const Size(0, 32),
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 shape: RoundedRectangleBorder(
@@ -365,7 +392,9 @@ class _ToastWidgetState extends State<_ToastWidget>
                               ),
                               child: Text(
                                 widget.actionLabel!,
-                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],
@@ -420,9 +449,10 @@ class _DownloadToastWidgetState extends State<_DownloadToastWidget>
       begin: const Offset(0, -1),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-    _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _fadeAnimation = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
     widget.onControllerCreated(_controller);
   }
 
@@ -479,12 +509,16 @@ class _DownloadToastWidgetState extends State<_DownloadToastWidget>
                         borderRadius: BorderRadius.circular(100),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                            color: Colors.black.withValues(
+                              alpha: isDark ? 0.3 : 0.08,
+                            ),
                             blurRadius: 20,
                             offset: const Offset(0, 8),
                           ),
                           BoxShadow(
-                            color: progressColor.withValues(alpha: isDark ? 0.25 : 0.15),
+                            color: progressColor.withValues(
+                              alpha: isDark ? 0.25 : 0.15,
+                            ),
                             blurRadius: 24,
                             spreadRadius: -2,
                             offset: const Offset(0, 8),
@@ -569,10 +603,7 @@ class _AnimatedCheckmark extends StatelessWidget {
   final Animation<double> progress;
   final Color color;
 
-  const _AnimatedCheckmark({
-    required this.progress,
-    required this.color,
-  });
+  const _AnimatedCheckmark({required this.progress, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -580,10 +611,7 @@ class _AnimatedCheckmark extends StatelessWidget {
       animation: progress,
       builder: (context, child) {
         return CustomPaint(
-          painter: _CheckmarkPainter(
-            progress: progress.value,
-            color: color,
-          ),
+          painter: _CheckmarkPainter(progress: progress.value, color: color),
         );
       },
     );
@@ -594,10 +622,7 @@ class _CheckmarkPainter extends CustomPainter {
   final double progress;
   final Color color;
 
-  _CheckmarkPainter({
-    required this.progress,
-    required this.color,
-  });
+  _CheckmarkPainter({required this.progress, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -633,8 +658,7 @@ class _CheckmarkPainter extends CustomPainter {
       path.lineTo(mid.dx, mid.dy);
       // Draw second segment (the long tail upwards)
       final remainingLength = currentLength - pathLength1;
-      final currentEnd =
-          Offset.lerp(mid, end, remainingLength / pathLength2)!;
+      final currentEnd = Offset.lerp(mid, end, remainingLength / pathLength2)!;
       path.lineTo(currentEnd.dx, currentEnd.dy);
     }
 

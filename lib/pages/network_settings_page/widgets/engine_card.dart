@@ -2,13 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
-import 'package:m3e_ui/m3e_ui.dart';
 
 import '../../../l10n/s.dart';
 import '../../../services/network/adapters/cronet_fallback_service.dart';
 import '../../../services/network/adapters/platform_adapter.dart';
-import '../../../services/network/doh/network_settings_service.dart';
-import '../../../services/network/proxy/proxy_settings_service.dart';
 import '../../../services/network/rhttp/rhttp_settings_service.dart';
 import '../../../services/network/webview/webview_adapter_settings_service.dart';
 import '../../../services/toast_service.dart';
@@ -41,9 +38,6 @@ class _EngineCardState extends State<EngineCard> {
     return AnimatedBuilder(
       animation: Listenable.merge([
         rhttp.notifier,
-        NetworkSettingsService.instance.notifier,
-        NetworkSettingsService.instance.isApplying,
-        ProxySettingsService.instance.notifier,
         webview.notifier,
         webview.effectiveNotifier,
         fallbackService,
@@ -53,11 +47,7 @@ class _EngineCardState extends State<EngineCard> {
         final rhttpEnabled = rhttpSettings.enabled;
         final webviewEnabled = webview.enabled;
 
-        final autoPreset = _presetOf(
-          rhttpEnabled,
-          rhttpSettings.mode,
-          webviewEnabled,
-        );
+        final autoPreset = _presetOf(rhttpEnabled, webviewEnabled);
         final isCustom = _customExpanded || autoPreset == _EnginePreset.custom;
         final shownPreset = isCustom ? _EnginePreset.custom : autoPreset;
 
@@ -158,7 +148,6 @@ class _EngineCardState extends State<EngineCard> {
       case _EnginePreset.performance:
         setState(() => _customExpanded = false);
         webview.disableSessionFallback();
-        rhttp.setMode(RhttpMode.always);
         rhttp.setEnabled(true);
         webview.setEnabled(false);
       case _EnginePreset.compat:
@@ -171,9 +160,9 @@ class _EngineCardState extends State<EngineCard> {
     }
   }
 
-  _EnginePreset _presetOf(bool rhttpOn, RhttpMode mode, bool webviewOn) {
+  _EnginePreset _presetOf(bool rhttpOn, bool webviewOn) {
     if (!rhttpOn && !webviewOn) return _EnginePreset.standard;
-    if (rhttpOn && mode == RhttpMode.always && !webviewOn) {
+    if (rhttpOn && !webviewOn) {
       return _EnginePreset.performance;
     }
     if (!rhttpOn && webviewOn) return _EnginePreset.compat;
@@ -295,10 +284,6 @@ class _EngineCardState extends State<EngineCard> {
   ) {
     final l10n = context.l10n;
     final rhttpEnabled = rhttpSettings.enabled;
-    final ns = NetworkSettingsService.instance.current;
-    final echFallback =
-        rhttpEnabled && ns.dohEnabled && ns.echServerUrl != null;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -316,38 +301,13 @@ class _EngineCardState extends State<EngineCard> {
           value: rhttpEnabled,
           onChanged: (value) => rhttp.setEnabled(value),
         ),
-        if (rhttpEnabled)
+        if (rhttpEnabled && rhttpSettings.forceDisabled)
           Padding(
             padding: const EdgeInsets.fromLTRB(56, 0, 16, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: double.infinity,
-                  child: M3eButtonGroup<RhttpMode>(
-                    items: [
-                      M3eButtonGroupItem(
-                        value: RhttpMode.always,
-                        label: Text(l10n.rhttpEngine_alwaysUse),
-                      ),
-                      M3eButtonGroupItem(
-                        value: RhttpMode.proxyOnly,
-                        label: Text(l10n.rhttpEngine_proxyDohOnly),
-                      ),
-                    ],
-                    selected: rhttpSettings.mode,
-                    onSelected: (mode) => rhttp.setMode(mode),
-                  ),
-                ),
-                if (echFallback)
-                  _miniHint(theme, l10n.rhttpEngine_echFallbackHint),
-                if (rhttpSettings.forceDisabled)
-                  _miniHint(
-                    theme,
-                    l10n.rhttpEngine_initFailedHint,
-                    color: theme.colorScheme.error,
-                  ),
-              ],
+            child: _miniHint(
+              theme,
+              l10n.rhttpEngine_initFailedHint,
+              color: theme.colorScheme.error,
             ),
           ),
         _divider(theme),
@@ -479,8 +439,6 @@ class _EngineCardState extends State<EngineCard> {
     final l10n = context.l10n;
     return switch (reason) {
       AdapterReason.rhttp => l10n.engineStatus_reasonRhttp,
-      AdapterReason.gateway => l10n.engineStatus_reasonGateway,
-      AdapterReason.proxy => l10n.engineStatus_reasonProxy,
       AdapterReason.fallback => l10n.engineStatus_reasonFallback,
       AdapterReason.native => l10n.engineStatus_reasonNative,
     };

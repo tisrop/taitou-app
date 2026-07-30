@@ -39,18 +39,15 @@ just analyze -- --no-fatal-infos --no-fatal-warnings
 ```bash
 dart run tool/flutterw.dart run -d android
 dart run tool/flutterw.dart build apk --release --split-per-abi
-dart run tool/project_tasks.dart native:prepare android --release
 dart run tool/project_tasks.dart release:prepare
 ```
 
-`tool/flutterw.dart` 只接受 Android 的 `apk`、`appbundle` 和 `aar` 构建目标。运行或驱动测试时，原生产物准备逻辑也只处理 Android 设备。
-
 ## 自动预处理
 
-- `just run`、`just build`、`just drive`：同步依赖、生成 l10n 和证书，并按 Android ABI 准备 Rust DoH 库。
+- `just run`、`just build`、`just drive`：同步依赖并生成 l10n。
 - `just test`：执行测试所需的依赖和 l10n 预处理。
 - `just sync`：显式同步项目状态。
-- `just doctor`：检查 Flutter、Dart、Cargo、Android SDK/NDK、JDK、证书和签名状态。
+- `just doctor`：检查 Flutter、Dart、Android SDK、JDK、l10n 和签名状态。
 
 ## Android 签名
 

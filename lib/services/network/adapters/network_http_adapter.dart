@@ -1,25 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/services.dart';
-
-import '../../network_logger.dart';
-import '../doh/network_settings_service.dart';
-import '../proxy/proxy_settings_service.dart';
 
 class NetworkHttpAdapter implements HttpClientAdapter {
-  NetworkHttpAdapter(this._settings, this._proxySettings);
-
-  final NetworkSettingsService _settings;
-  final ProxySettingsService _proxySettings;
   HttpClient? _cachedClient;
-  int _cachedVersion = -1;
-  int _cachedProxyVersion = -1;
   bool _closed = false;
-  bool _cachedProxyCaEnabled = false;
-  Uint8List? _proxyCaBytes;
-  Future<void>? _proxyCaLoad;
 
   @override
   Future<ResponseBody> fetch(
@@ -28,7 +15,9 @@ class NetworkHttpAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) async {
     if (_closed) {
-      throw StateError("Can't establish connection after the adapter was closed.");
+      throw StateError(
+        "Can't establish connection after the adapter was closed.",
+      );
     }
     return _fetch(options, requestStream, cancelFuture);
   }
@@ -38,7 +27,6 @@ class NetworkHttpAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
-    await _ensureProxyCaLoaded();
     final httpClient = _configHttpClient(options.connectTimeout);
     final reqFuture = httpClient.openUrl(options.method, options.uri);
     late HttpClientRequest request;
@@ -143,7 +131,8 @@ class NetworkHttpAdapter implements HttpClientAdapter {
       responseStream.cast(),
       responseStream.statusCode,
       headers: headers,
-      isRedirect: responseStream.isRedirect || responseStream.redirects.isNotEmpty,
+      isRedirect:
+          responseStream.isRedirect || responseStream.redirects.isNotEmpty,
       redirects: responseStream.redirects
           .map((e) => RedirectRecord(e.statusCode, e.method, e.location))
           .toList(),
@@ -152,19 +141,7 @@ class NetworkHttpAdapter implements HttpClientAdapter {
   }
 
   HttpClient _configHttpClient(Duration? connectionTimeout) {
-    final currentVersion = _settings.version;
-    final currentProxyVersion = _proxySettings.version;
-    final proxyCaEnabled = _shouldTrustProxyCa();
-    if (_cachedClient == null ||
-        _cachedVersion != currentVersion ||
-        _cachedProxyVersion != currentProxyVersion ||
-        _cachedProxyCaEnabled != proxyCaEnabled) {
-      _cachedClient?.close(force: false);
-      _cachedClient = _createHttpClient();
-      _cachedVersion = currentVersion;
-      _cachedProxyVersion = currentProxyVersion;
-      _cachedProxyCaEnabled = proxyCaEnabled;
-    }
+    _cachedClient ??= _createHttpClient();
     connectionTimeout ??= Duration.zero;
     if (connectionTimeout > Duration.zero) {
       _cachedClient!.connectionTimeout = connectionTimeout;
@@ -175,70 +152,12 @@ class NetworkHttpAdapter implements HttpClientAdapter {
   }
 
   HttpClient _createHttpClient() {
-    final context = _buildSecurityContext();
-    final client = HttpClient(context: context)
-      ..idleTimeout = const Duration(seconds: 30);
-    final dohSettings = _settings.current;
-    if (_shouldUseLocalGateway) {
-      final proxyPort = dohSettings.proxyPort;
-      if (proxyPort != null) {
-        client.findProxy = (_) => 'PROXY 127.0.0.1:$proxyPort';
-      }
-      return client;
-    }
-
-    return client;
-  }
-
-  bool _shouldTrustProxyCa() {
-    return _shouldUseLocalGateway &&
-        _settings.current.dohEnabled &&
-        _proxyCaBytes != null;
-  }
-
-  SecurityContext? _buildSecurityContext() {
-    if (!_shouldTrustProxyCa()) {
-      return null;
-    }
-    final context = SecurityContext(withTrustedRoots: true);
-    try {
-      context.setTrustedCertificatesBytes(_proxyCaBytes!);
-    } catch (e) {
-      NetworkLogger.log('[DOH] 导入代理 CA 失败: $e');
-      return null;
-    }
-    return context;
-  }
-
-  Future<void> _ensureProxyCaLoaded() async {
-    if (!_shouldUseLocalGateway) {
-      return;
-    }
-    if (_proxyCaBytes != null) {
-      return;
-    }
-    _proxyCaLoad ??= _loadProxyCa();
-    await _proxyCaLoad;
-  }
-
-  Future<void> _loadProxyCa() async {
-    try {
-      final data = await rootBundle.load('assets/certs/proxy_ca.pem');
-      _proxyCaBytes = data.buffer.asUint8List();
-    } catch (e) {
-      NetworkLogger.log('[DOH] 读取代理 CA 失败: $e');
-    }
+    return HttpClient()..idleTimeout = const Duration(seconds: 30);
   }
 
   @override
   void close({bool force = false}) {
     _closed = true;
     _cachedClient?.close(force: force);
-  }
-
-  bool get _shouldUseLocalGateway {
-    final settings = _settings.current;
-    return settings.proxyPort != null &&
-        (settings.dohEnabled || _proxySettings.current.isValid);
   }
 }

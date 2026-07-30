@@ -50,10 +50,6 @@ test *args:
 drive *args:
   @dart run tool/flutterw.dart drive {{args}}
 
-# 显式准备平台原生产物；额外参数透传给 native:prepare
-native *args:
-  @dart run tool/project_tasks.dart native:prepare {{args}}
-
 # 执行 flutter analyze；额外参数透传给 flutter analyze
 analyze *args:
   @flutter analyze {{args}}

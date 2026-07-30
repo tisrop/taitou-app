@@ -6,28 +6,15 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../constants.dart';
 import 'eruda_settings_service.dart';
 import 'log/log_writer.dart';
-import 'network/doh/network_settings_service.dart';
 
 /// WebView 配置工具类
 /// 区分 Headless（后台同步）和 Visible（用户可见页面）两种场景
 class WebViewSettings {
   WebViewSettings._();
 
-  /// Gateway 模式下 WebView 的 SSL 信任回调
-  ///
-  /// 代理做 MITM 时会用自签 CA 签发证书，Android WebView 默认不信任它。
-  /// 仅在本地代理网关模式运行时放行，其他情况走系统默认验证。
   static Future<ServerTrustAuthResponse?> handleServerTrustAuthRequest(
     URLAuthenticationChallenge challenge,
-  ) async {
-    // Android gateway MITM 模式下放行代理 CA 证书。
-    if (NetworkSettingsService.instance.isGatewayMode) {
-      return ServerTrustAuthResponse(
-        action: ServerTrustAuthResponseAction.PROCEED,
-      );
-    }
-    return null;
-  }
+  ) async => null;
 
   /// Headless WebView 配置（后台同步用，轻量）
   /// 用于 CsrfTokenService、WebViewHttpAdapter、会话 bootstrap 等

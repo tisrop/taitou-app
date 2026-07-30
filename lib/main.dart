@@ -34,14 +34,10 @@ import 'services/toast_service.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import 'l10n/s.dart';
 
-import 'services/network/doh/network_settings_service.dart';
-import 'services/network/proxy/proxy_settings_service.dart';
 import 'services/network/rhttp/rhttp_settings_service.dart';
 import 'services/network/webview/webview_adapter_settings_service.dart';
 import 'services/eruda_settings_service.dart';
 import 'package:rhttp/rhttp.dart' as rhttp;
-import 'services/network/vpn_auto_toggle_service.dart';
-import 'services/network/doh_proxy/proxy_certificate.dart';
 import 'services/cf_challenge_logger.dart';
 import 'services/browser_trust_coordinator.dart';
 import 'services/update_service.dart';
@@ -216,7 +212,6 @@ Future<void> main() async {
     SharedPreferences.getInstance(),
     AppConstants.initUserAgent(),
     LogWriter.init(),
-    ProxyCertificate.initialize(),
     CookieJarService().initialize(),
     CsrfTokenService().init(),
     BackgroundNotificationService().initialize(),
@@ -251,12 +246,11 @@ Future<void> main() async {
   AppLogger.setVerbose(developerMode);
   await Future.wait([
     CronetFallbackService.instance.initialize(prefs),
-    ProxySettingsService.instance.initialize(prefs),
     MethodChannel(
       'com.github.lingyan000.fluxdo/crashlytics',
     ).invokeMethod('setCrashlyticsEnabled', {'enabled': crashlyticsEnabled}),
   ]);
-  // rhttp (Rust reqwest) 初始化：在 ProxySettingsService 之后、NetworkSettingsService 之前
+  // rhttp (Rust reqwest) 初始化。
   await RhttpSettingsService.instance.initialize(prefs);
   // WebView 适配器设置
   await WebViewAdapterSettingsService.instance.initialize(prefs);
@@ -276,16 +270,6 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('[rhttp] 初始化异常: $e');
     await RhttpSettingsService.instance.forceDisable();
-  }
-
-  await NetworkSettingsService.instance.initialize(prefs);
-  VpnAutoToggleService.instance.initialize(prefs);
-  try {
-    final initialConnectivity =
-        await ConnectivityService.safeCheckConnectivity();
-    await VpnAutoToggleService.instance.syncInitialState(initialConnectivity);
-  } catch (e) {
-    debugPrint('[Main] 初始 VPN 状态同步失败: $e');
   }
 
   // 初始化下载服务（依赖网络栈已就绪）
@@ -1052,8 +1036,6 @@ class _MainPageState extends ConsumerState<MainPage>
       MessageBusService().exitBackgroundMode();
       if (!mounted) return;
       ref.invalidate(notificationListProvider);
-      // 检查 DOH 代理是否在后台期间失效，若失效则自动重启
-      NetworkSettingsService.instance.ensureProxyAlive();
       // 回到前台时主动检查连通性（等同 Discourse 的 visibilitychange）
       unawaited(ConnectivityService().check());
       unawaited(_checkClipboardTopicLink());
