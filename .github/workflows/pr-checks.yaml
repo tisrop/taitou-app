@@ -1,0 +1,60 @@
+name: PR Checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+# 同一个 PR 有新提交时取消旧任务，避免重复占用 runner。
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.44.8'
+
+jobs:
+  quality:
+    name: 生成代码与静态分析
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+          pub-cache: true
+
+      - name: 准备项目
+        run: dart run tool/project_prep.dart test
+
+      - name: 校验生成代码已提交
+        run: git diff --exit-code -- lib/l10n
+
+      # 与 docs/development.md 中的项目约定保持一致：错误仍会阻断 PR，
+      # 现有 info 和 warning 暂不升级为失败。
+      - name: 静态分析
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+  test:
+    name: 工作区全量测试
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+          pub-cache: true
+
+      # test:all 会完成依赖与 l10n 预处理，并依次测试主应用及所有带
+      # test/ 目录的 workspace package。
+      - name: 运行测试
+        run: dart run tool/project_tasks.dart test:all --no-pub --reporter expanded

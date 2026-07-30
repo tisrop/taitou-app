@@ -1,7 +1,7 @@
 source: https://example.com/t/sample/1/img6
 fetched_at: 2026-06-23
 primary_node: image
-sha256: a85f4bbed5098f3e07b2e798c636a4b391ccaf43ac9e9e51fe49f12b1400ec46
+sha256: 3acb7b16a6bec20cef46e9d8f82ee48e7fa58247cfe4db186b6deb88f0391d57
 also_contains: [paragraph]
 edge_case: true
 notes: |
