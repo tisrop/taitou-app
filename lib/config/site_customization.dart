@@ -86,6 +86,17 @@ class UserTitleStyleRule {
 
 /// 站点自定义配置
 class SiteCustomization {
+  /// 站点是否启用 discourse-reactions。
+  final bool discourseReactionsEnabled;
+
+  /// 站点是否启用 discourse-gamification。
+  final bool gamificationEnabled;
+
+  /// discourse-gamification 默认排行榜 ID。
+  ///
+  /// 部分站点的 `/leaderboard.json` 不提供数据接口，必须请求带 ID 的路径。
+  final int? gamificationLeaderboardId;
+
   /// 头像光晕规则列表
   final List<AvatarGlowRule> avatarGlowRules;
 
@@ -96,6 +107,9 @@ class SiteCustomization {
   final LinkSecurityConfig? linkSecurityConfig;
 
   const SiteCustomization({
+    this.discourseReactionsEnabled = false,
+    this.gamificationEnabled = false,
+    this.gamificationLeaderboardId,
     this.avatarGlowRules = const [],
     this.userTitleStyleRules = const [],
     this.linkSecurityConfig,

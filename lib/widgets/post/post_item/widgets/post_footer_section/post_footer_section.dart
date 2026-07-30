@@ -153,8 +153,22 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
   }
 
   void _syncState() {
-    _reactions = List.from(widget.post.reactions ?? []);
-    _currentUserReaction = widget.post.currentUserReaction;
+    final usesPluginReactions =
+        AppConstants.siteCustomization.discourseReactionsEnabled ||
+        widget.post.reactions != null;
+    if (usesPluginReactions) {
+      _reactions = List.from(widget.post.reactions ?? []);
+      _currentUserReaction = widget.post.currentUserReaction;
+    } else {
+      final liked = _hasStandardLike(widget.post);
+      final count = widget.post.likeCount;
+      _reactions = count > 0
+          ? [PostReaction(id: 'heart', type: 'emoji', count: count)]
+          : [];
+      _currentUserReaction = liked
+          ? PostReaction(id: 'heart', type: 'emoji', count: count)
+          : null;
+    }
     _isBookmarked = widget.post.bookmarked;
     _bookmarkId = widget.post.bookmarkId;
     _bookmarkName = widget.post.bookmarkName;
@@ -329,6 +343,9 @@ class _PostFooterSectionState extends ConsumerState<PostFooterSection> {
             isLiking: _isLiking,
             reactions: _reactions,
             currentUserReaction: _currentUserReaction,
+            reactionsEnabled:
+                AppConstants.siteCustomization.discourseReactionsEnabled ||
+                widget.post.reactions != null,
             likeButtonKey: _likeButtonKey,
             replies: _replies,
             isLoadingRepliesNotifier: _isLoadingRepliesNotifier,

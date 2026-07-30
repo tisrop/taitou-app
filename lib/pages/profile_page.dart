@@ -31,6 +31,7 @@ import 'drafts_page.dart';
 import 'pending_posts_page.dart';
 import 'private_messages_page.dart';
 import 'invite_links_page.dart';
+import 'gamification_leaderboard_page.dart';
 import '../widgets/profile_stats_card.dart';
 import '../widgets/common/spotlight_overlay.dart';
 import 'profile_stats_edit_page.dart';
@@ -704,6 +705,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }) {
     return SegmentedCardGroup(
       children: [
+        if (AppConstants.siteCustomization.gamificationEnabled)
+          _buildOptionTile(
+            icon: Symbols.emoji_events_rounded,
+            iconColor: const Color(0xFFC28B00),
+            title: context.l10n.gamification_title,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const GamificationLeaderboardPage(),
+              ),
+            ),
+          ),
         _buildOptionTile(
           icon: Symbols.mail_rounded,
           iconColor: Colors.indigo,

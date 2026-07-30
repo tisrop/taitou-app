@@ -1,0 +1,9 @@
+{
+  "@@locale": "en",
+  "gamification_empty": "No leaderboard results yet",
+  "gamification_loadMoreFailed": "Couldn't load more rankings",
+  "gamification_points": "points",
+  "gamification_preparing": "The leaderboard is being prepared. Try refreshing shortly.",
+  "gamification_title": "Leaderboard",
+  "gamification_yourRank": "Your rank"
+}

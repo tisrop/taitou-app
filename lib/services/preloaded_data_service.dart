@@ -301,13 +301,19 @@ class PreloadedDataService {
   /// 获取可用的回应表情列表
   Future<List<String>> getEnabledReactions() async {
     await _ensureLoaded();
-    return _enabledReactions ?? ['heart', '+1', 'laughing', 'open_mouth'];
+    return enabledReactionsSync;
   }
+
+  /// 站点是否支持 discourse-reactions。
+  bool get discourseReactionsEnabled =>
+      AppConstants.siteCustomization.discourseReactionsEnabled ||
+      _enabledReactions?.isNotEmpty == true;
 
   /// 同步获取可用回应表情列表（仅返回已 preload 结果，未 preload 时返回兜底）
   /// 用于"按下立即弹出"等零延迟场景
-  List<String> get enabledReactionsSync =>
-      _enabledReactions ?? const ['heart', '+1', 'laughing', 'open_mouth'];
+  List<String> get enabledReactionsSync => discourseReactionsEnabled
+      ? _enabledReactions ?? const ['heart', '+1', 'laughing', 'open_mouth']
+      : const [];
 
   /// 获取 MessageBus 跨域认证 key（仅独立域名时有值）
   String? get sharedSessionKey => _sharedSessionKey;
