@@ -295,33 +295,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           SafeArea(
             child: Stack(
               children: [
-                // 左上返回
-                Positioned(
-                  top: 4,
-                  left: 4,
-                  child: _entry(
-                    0,
-                    AmbientIconButton(
-                      icon: Symbols.arrow_back_rounded,
-                      tooltip: '返回',
-                      onPressed: () => Navigator.of(context).maybePop(),
-                    ),
-                  ),
-                ),
-                // 右上清除保存的账号
-                if (_credentialsLoaded && _savedUsername != null)
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: _entry(
-                      0,
-                      AmbientIconButton(
-                        icon: Symbols.delete_rounded,
-                        tooltip: '清除保存的账号',
-                        onPressed: _clearSavedCredentials,
-                      ),
-                    ),
-                  ),
                 // 主内容
                 Center(
                   child: SingleChildScrollView(
@@ -380,6 +353,32 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
+                // 角落操作必须位于滚动内容之上，否则全屏滚动层会截获点击。
+                Positioned(
+                  top: 4,
+                  left: 4,
+                  child: _entry(
+                    0,
+                    AmbientIconButton(
+                      icon: Symbols.arrow_back_rounded,
+                      tooltip: '返回',
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                  ),
+                ),
+                if (_credentialsLoaded && _savedUsername != null)
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: _entry(
+                      0,
+                      AmbientIconButton(
+                        icon: Symbols.delete_rounded,
+                        tooltip: '清除保存的账号',
+                        onPressed: _clearSavedCredentials,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
