@@ -3,7 +3,18 @@
 part of '../post_footer_section.dart';
 
 extension _PostFooterReactionActions on _PostFooterSectionState {
-  void _syncReactionToProvider(List<PostReaction> reactions, PostReaction? currentUserReaction) {
+  bool _hasStandardLike(Post post) {
+    return post.actionsSummary?.any((item) {
+          if (item is! Map) return false;
+          return item['id'] == 2 && item['acted'] == true;
+        }) ??
+        false;
+  }
+
+  void _syncReactionToProvider(
+    List<PostReaction> reactions,
+    PostReaction? currentUserReaction,
+  ) {
     // 经活跃实例注册表找回页面 provider:页面 params 带 UUID instanceId,
     // 这里凭 topicId 直接 new 一个空 instanceId 的 params 只会命中(并
     // 凭空创建+全量拉取)一个孤儿实例,更新落不到在显示的数据上。
@@ -28,6 +39,32 @@ extension _PostFooterReactionActions on _PostFooterSectionState {
     setState(() => _isLiking = true);
 
     try {
+      final usesPluginReactions =
+          AppConstants.siteCustomization.discourseReactionsEnabled ||
+          widget.post.reactions != null;
+      if (!usesPluginReactions) {
+        final wasLiked = _currentUserReaction != null;
+        if (wasLiked) {
+          await _service.unlikePost(widget.post.id);
+        } else {
+          await _service.likePost(widget.post.id);
+        }
+        if (!mounted) return;
+
+        final oldCount = _reactions.isEmpty ? 0 : _reactions.first.count;
+        final newCount = (oldCount + (wasLiked ? -1 : 1)).clamp(0, 1 << 30);
+        setState(() {
+          _reactions = newCount > 0
+              ? [PostReaction(id: 'heart', type: 'emoji', count: newCount)]
+              : [];
+          _currentUserReaction = wasLiked
+              ? null
+              : PostReaction(id: 'heart', type: 'emoji', count: newCount);
+        });
+        _syncReactionToProvider(_reactions, _currentUserReaction);
+        return;
+      }
+
       final reactionId = _currentUserReaction?.id ?? 'heart';
       final result = await _service.toggleReaction(widget.post.id, reactionId);
       if (!mounted) return;

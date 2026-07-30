@@ -5,6 +5,9 @@ import '../site_customization.dart';
 /// 头像光晕与头衔特效依赖站点自建的群组/头衔命名，openxinsheng 的群组结构
 /// 站点群组结构尚未稳定，暂不配置；后续按需补 [AvatarGlowRule]。
 final openxinshengCustomization = SiteCustomization(
+  discourseReactionsEnabled: true,
+  gamificationEnabled: true,
+  gamificationLeaderboardId: 1,
   linkSecurityConfig: _openxinshengLinkSecurityConfig,
 );
 

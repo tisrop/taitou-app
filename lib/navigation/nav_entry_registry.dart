@@ -3,10 +3,12 @@ import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/s.dart';
+import '../constants.dart';
 import '../models/user.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/browsing_history_page.dart';
 import '../pages/drafts_page.dart';
+import '../pages/gamification_leaderboard_page.dart';
 import '../pages/private_messages_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/topics_screen.dart';
@@ -89,6 +91,17 @@ class NavEntryRegistry {
             PrivateMessagesPage(isActive: isActive),
         requiresLogin: true,
       ),
+      if (AppConstants.siteCustomization.gamificationEnabled)
+        NavEntry(
+          id: NavEntryIds.leaderboard,
+          kind: NavEntryKind.page,
+          iconData: Symbols.emoji_events_rounded,
+          selectedIconData: Symbols.emoji_events_rounded,
+          label: (ctx) => ctx.l10n.nav_leaderboard,
+          pageBuilder: (ctx, isActive) =>
+              GamificationLeaderboardPage(isActive: isActive),
+          requiresLogin: true,
+        ),
       NavEntry(
         id: NavEntryIds.notifications,
         kind: NavEntryKind.panel,

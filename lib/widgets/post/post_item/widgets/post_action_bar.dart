@@ -26,6 +26,7 @@ class PostActionBar extends StatefulWidget {
   final bool isLiking;
   final List<PostReaction> reactions;
   final PostReaction? currentUserReaction;
+  final bool reactionsEnabled;
   final GlobalKey likeButtonKey;
   final List<Post> replies;
   final ValueNotifier<bool> isLoadingRepliesNotifier;
@@ -49,6 +50,7 @@ class PostActionBar extends StatefulWidget {
     required this.isLiking,
     required this.reactions,
     required this.currentUserReaction,
+    this.reactionsEnabled = true,
     required this.likeButtonKey,
     required this.replies,
     required this.isLoadingRepliesNotifier,
@@ -486,7 +488,9 @@ class _PostActionBarState extends State<PostActionBar>
 
     Widget? reactionStack;
     if (reactionStackContent != null) {
-      if (widget.isOwnPost) {
+      if (!widget.reactionsEnabled) {
+        reactionStack = reactionStackContent;
+      } else if (widget.isOwnPost) {
         reactionStack = GestureDetector(
           onTap: () => widget.onShowReactionUsers(null),
           behavior: HitTestBehavior.opaque,
@@ -535,13 +539,21 @@ class _PostActionBarState extends State<PostActionBar>
       ),
       alignment: Alignment.center,
       child: widget.currentUserReaction != null
-          ? Image(
-              image:
-                  emojiImageProvider(_getEmojiUrl(widget.currentUserReaction!.id)),
-              width: 20,
-              height: 20,
-              errorBuilder: (_, _, _) => const Icon(Symbols.favorite_rounded, size: 20),
-            )
+          ? widget.reactionsEnabled
+                ? Image(
+                    image: emojiImageProvider(
+                      _getEmojiUrl(widget.currentUserReaction!.id),
+                    ),
+                    width: 20,
+                    height: 20,
+                    errorBuilder: (_, _, _) =>
+                        const Icon(Symbols.favorite_rounded, size: 20),
+                  )
+                : Icon(
+                    Symbols.favorite_rounded,
+                    size: 20,
+                    color: theme.colorScheme.primary,
+                  )
           : Icon(
               Symbols.favorite_rounded,
               size: 20,
@@ -568,7 +580,7 @@ class _PostActionBarState extends State<PostActionBar>
             },
           ),
           // 桌面端通过 hover 触发 picker,不再注册长按避免与 hover 路径打架
-          if (!PlatformUtils.isDesktop)
+          if (widget.reactionsEnabled && !PlatformUtils.isDesktop)
             LongPressGestureRecognizer:
                 GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
               () => LongPressGestureRecognizer(
@@ -612,7 +624,9 @@ class _PostActionBarState extends State<PostActionBar>
 
     // 触摸端:dead zone 内做更严格的 slop 检测,
     // 滚动列表时手指即使只移动几像素也立即 cancel timer,picker 完全不显形
-    if (!PlatformUtils.isDesktop && !widget.isOwnPost) {
+    if (widget.reactionsEnabled &&
+        !PlatformUtils.isDesktop &&
+        !widget.isOwnPost) {
       area = Listener(
         behavior: HitTestBehavior.translucent,
         onPointerDown: _onAreaPointerDown,
@@ -624,7 +638,9 @@ class _PostActionBarState extends State<PostActionBar>
     }
 
     // 桌面端：hover 延迟触发表情选择器
-    if (PlatformUtils.isDesktop && !widget.isOwnPost) {
+    if (widget.reactionsEnabled &&
+        PlatformUtils.isDesktop &&
+        !widget.isOwnPost) {
       area = MouseRegion(
         onEnter: (_) => _onHoverEnter(),
         onExit: (_) => _onHoverExit(),

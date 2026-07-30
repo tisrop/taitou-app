@@ -22,6 +22,7 @@ import '../../models/invite_link.dart';
 import '../../models/template.dart';
 import '../../models/post_revision.dart';
 import '../../models/pending_post.dart';
+import '../../models/gamification.dart';
 
 import '../../constants.dart';
 import '../../providers/message_bus_providers.dart';
@@ -70,6 +71,7 @@ part '_policy.dart';
 part '_revisions.dart';
 part '_onebox.dart';
 part '_reviewables.dart';
+part '_gamification.dart';
 
 /// 基类，包含所有共享字段
 abstract class _DiscourseServiceBase {
@@ -133,7 +135,8 @@ class DiscourseService extends _DiscourseServiceBase
         _PolicyMixin,
         _RevisionsMixin,
         _OneboxMixin,
-        _ReviewablesMixin {
+        _ReviewablesMixin,
+        _GamificationMixin {
   static const String baseUrl = AppConstants.baseUrl;
   static const String _usernameKey = 'linux_do_username';
   static const _summaryCacheDuration = Duration(minutes: 5);

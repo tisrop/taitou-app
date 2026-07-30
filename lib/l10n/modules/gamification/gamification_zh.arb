@@ -1,0 +1,9 @@
+{
+  "@@locale": "zh",
+  "gamification_empty": "排行榜暂无数据",
+  "gamification_loadMoreFailed": "加载更多排名失败",
+  "gamification_points": "积分",
+  "gamification_preparing": "排行榜正在生成，请稍后刷新",
+  "gamification_title": "积分排行",
+  "gamification_yourRank": "你的排名"
+}
