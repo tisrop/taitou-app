@@ -114,13 +114,18 @@ class AppConstants {
   /// 站点若以后启用 hcaptcha，把 key 填进来即可恢复完整流程，无需改其他代码。
   static const String hcaptchaSiteKey = '';
 
+  /// 指定 site key 是否启用了登录验证码。
+  static bool isLoginCaptchaEnabled(String siteKey) =>
+      siteKey.trim().isNotEmpty;
+
   /// 登录前是否强制取到 Cloudflare `cf_clearance` 才允许提交。
   ///
   /// 有验证码的站点可能需要先取得 Cloudflare clearance；本站登录流程不要求。
   /// 本站登录三个请求全部由 WebView 内核发出，TLS 指纹天然一致，不需要这道
   /// 前置；真被 CF 拦了也会在 csrf 阶段暴露，由 `_handleCsrfFailure` 弹人机
   /// 验证重试。有验证码的站点才需要打开。
-  static bool get requireCfClearanceBeforeLogin => hcaptchaSiteKey.isNotEmpty;
+  static bool get requireCfClearanceBeforeLogin =>
+      isLoginCaptchaEnabled(hcaptchaSiteKey);
 
   /// 是否启用 Firebase Crashlytics 崩溃上报。
   ///

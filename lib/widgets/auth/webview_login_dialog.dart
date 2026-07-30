@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -19,6 +20,30 @@ import '../../services/webview_settings.dart';
 
 /// 登录对话框结果状态。
 enum WebViewLoginStatus { success, failure, canceled }
+
+const Duration webViewLoginTimeout = Duration(seconds: 30);
+
+@visibleForTesting
+final class WebViewLoginTimeoutGuard {
+  WebViewLoginTimeoutGuard({required this.timeout, required this.onTimeout});
+
+  final Duration timeout;
+  final VoidCallback onTimeout;
+  Timer? _timer;
+
+  void start() {
+    cancel();
+    _timer = Timer(timeout, () {
+      _timer = null;
+      onTimeout();
+    });
+  }
+
+  void cancel() {
+    _timer?.cancel();
+    _timer = null;
+  }
+}
 
 /// [showWebViewLoginDialog] 的返回结果。
 class WebViewLoginDialogResult {
@@ -68,6 +93,7 @@ class WebViewLoginNeed2FA {
 /// 返回结构化结果; 取消返回 [WebViewLoginStatus.canceled]。
 /// [onNeedSecondFactor] 在检测到 2FA 时回调出去 (由 caller 弹 TOTP 对话框),
 /// 返回 6 位 code (null=取消)。
+/// [siteKey] 为空时 WebView 在后台不可见运行，不展示人机验证窗口。
 Future<WebViewLoginDialogResult?> showWebViewLoginDialog(
   BuildContext context, {
   required String siteKey,
@@ -77,9 +103,10 @@ Future<WebViewLoginDialogResult?> showWebViewLoginDialog(
   onNeedSecondFactor,
   String? hcaptchaCreateEndpoint,
 }) {
+  final showCaptchaDialog = AppConstants.isLoginCaptchaEnabled(siteKey);
   return showDialog<WebViewLoginDialogResult>(
     context: context,
-    barrierColor: Colors.black54,
+    barrierColor: showCaptchaDialog ? Colors.black54 : Colors.transparent,
     barrierDismissible: false,
     builder: (_) => _WebViewLoginDialog(
       siteKey: siteKey,
@@ -113,7 +140,7 @@ class _WebViewLoginDialog extends StatefulWidget {
 class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
   /// sitekey 为空 = 站点没装验证码插件，走"无验证码"分支：
   /// 页面不加载 hcaptcha，就绪后直接跑 csrf → /session.json。
-  bool get _useCaptcha => widget.siteKey.trim().isNotEmpty;
+  bool get _useCaptcha => AppConstants.isLoginCaptchaEnabled(widget.siteKey);
 
   InAppWebViewController? _controller;
   bool _loading = true;
@@ -121,6 +148,7 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
   bool _finished = false; // 防止重复 pop / 回调重入
   bool _cookiesPrimed = false; // 方案 A: 是否已从 jar 预灌 cookie
   bool _cfRetryUsed = false; // CSRF 403 自动重验证只做一次, 避免死循环
+  late final WebViewLoginTimeoutGuard _loginTimeoutGuard;
   final int _flowGeneration = AuthSession().generation;
   // 最近一次 _runLogin 的参数, CSRF 403 重新过 CF 后用同样参数重跑。
   // CSRF 失败发生在 JS __fluxdoLogin 第一步 (fetch /session/csrf), 此时
@@ -128,6 +156,19 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
   // 也未用过。
   String? _lastHcaptchaToken;
   String? _lastSecondFactorToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _loginTimeoutGuard = WebViewLoginTimeoutGuard(
+      timeout: webViewLoginTimeout,
+      onTimeout: () {
+        if (_finished) return;
+        debugPrint('[WebViewLogin] 登录流程超时');
+        _finishFailure(LoginErrorKind.network, '登录超时，请重试');
+      },
+    );
+  }
 
   /// data:url 内嵌页面: hcaptcha widget + 登录全流程 JS。
   /// baseUrl=本站主域让文档 origin 为本站主域, JS fetch 相对路径同源,
@@ -371,6 +412,7 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
   }) async {
     final controller = _controller;
     if (controller == null || _finished) return;
+    _armLoginTimeout();
     if (mounted) setState(() => _processing = true);
 
     // 记录参数, CSRF 403 自动重验证后用同样参数重跑
@@ -399,6 +441,7 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
 
   Future<void> _onLoginResult(String raw) async {
     if (_finished) return;
+    _cancelLoginTimeout();
 
     Map<String, dynamic> payload;
     try {
@@ -534,6 +577,7 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
   Future<void> _finishSuccess() async {
     if (_finished) return;
     _finished = true;
+    _cancelLoginTimeout();
     if (!AuthSession().isValid(_flowGeneration)) {
       debugPrint('[WebViewLogin] 登录对话框流程已过期，跳过会话同步');
       if (mounted) {
@@ -595,6 +639,7 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
   void _finishFailure(LoginErrorKind kind, String? message) {
     if (_finished) return;
     _finished = true;
+    _cancelLoginTimeout();
     if (mounted) {
       Navigator.of(
         context,
@@ -605,15 +650,43 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
   void _finishCanceled() {
     if (_finished) return;
     _finished = true;
+    _cancelLoginTimeout();
     if (mounted) {
       Navigator.of(context).pop(const WebViewLoginDialogResult.canceled());
     }
+  }
+
+  void _armLoginTimeout() {
+    _loginTimeoutGuard.start();
+  }
+
+  void _cancelLoginTimeout() {
+    _loginTimeoutGuard.cancel();
+  }
+
+  @override
+  void dispose() {
+    _cancelLoginTimeout();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+
+    if (!_useCaptcha) {
+      return Material(
+        type: MaterialType.transparency,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox.square(
+            dimension: 1,
+            child: _buildWebView(theme, scheme, showProgress: false),
+          ),
+        ),
+      );
+    }
 
     return Material(
       type: MaterialType.transparency,
@@ -660,81 +733,7 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
                         child: Column(
                           children: [
                             _Header(onClose: _finishCanceled, scheme: scheme),
-                            Expanded(
-                              child: Stack(
-                                children: [
-                                  Positioned.fill(
-                                    child: InAppWebView(
-                                      initialData: InAppWebViewInitialData(
-                                        data: _inlineHtml,
-                                        baseUrl: WebUri(AppConstants.baseUrl),
-                                        mimeType: 'text/html',
-                                        encoding: 'utf-8',
-                                      ),
-                                      initialSettings: InAppWebViewSettings(
-                                        javaScriptEnabled: true,
-                                        transparentBackground: true,
-                                        supportZoom: false,
-                                        sharedCookiesEnabled: true,
-                                        thirdPartyCookiesEnabled: true,
-                                        userAgent: AppConstants
-                                            .webViewUserAgentOverride,
-                                      ),
-                                      initialUserScripts:
-                                          WebViewSettings.compatPolyfillScripts,
-                                      onReceivedServerTrustAuthRequest:
-                                          (_, challenge) =>
-                                              WebViewSettings.handleServerTrustAuthRequest(
-                                                challenge,
-                                              ),
-                                      onWebViewCreated: (controller) {
-                                        _controller = controller;
-                                        WebViewSettings.registerJsErrorReporter(
-                                          controller,
-                                        );
-                                        _setupHandlers(controller);
-                                      },
-                                      onLoadStop: (_, _) {
-                                        if (mounted) {
-                                          setState(() => _loading = false);
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                  if (_loading)
-                                    Positioned.fill(
-                                      child: ColoredBox(
-                                        color: scheme.surface,
-                                        child: const Center(
-                                          child: CircularProgressIndicator(),
-                                        ),
-                                      ),
-                                    ),
-                                  if (_processing)
-                                    Positioned.fill(
-                                      child: ColoredBox(
-                                        color: scheme.surface.withValues(
-                                          alpha: 0.92,
-                                        ),
-                                        child: Center(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const CircularProgressIndicator(),
-                                              const SizedBox(height: 16),
-                                              Text(
-                                                '正在登录…',
-                                                style:
-                                                    theme.textTheme.bodyMedium,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
+                            Expanded(child: _buildWebView(theme, scheme)),
                           ],
                         ),
                       ),
@@ -746,6 +745,71 @@ class _WebViewLoginDialogState extends State<_WebViewLoginDialog> {
           },
         ),
       ),
+    );
+  }
+
+  Widget _buildWebView(
+    ThemeData theme,
+    ColorScheme scheme, {
+    bool showProgress = true,
+  }) {
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: InAppWebView(
+            initialData: InAppWebViewInitialData(
+              data: _inlineHtml,
+              baseUrl: WebUri(AppConstants.baseUrl),
+              mimeType: 'text/html',
+              encoding: 'utf-8',
+            ),
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              transparentBackground: true,
+              supportZoom: false,
+              sharedCookiesEnabled: true,
+              thirdPartyCookiesEnabled: true,
+              userAgent: AppConstants.webViewUserAgentOverride,
+            ),
+            initialUserScripts: WebViewSettings.compatPolyfillScripts,
+            onReceivedServerTrustAuthRequest: (_, challenge) =>
+                WebViewSettings.handleServerTrustAuthRequest(challenge),
+            onWebViewCreated: (controller) {
+              _controller = controller;
+              WebViewSettings.registerJsErrorReporter(controller);
+              _setupHandlers(controller);
+            },
+            onLoadStop: (_, _) {
+              if (mounted) {
+                setState(() => _loading = false);
+              }
+            },
+          ),
+        ),
+        if (showProgress && _loading)
+          Positioned.fill(
+            child: ColoredBox(
+              color: scheme.surface,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+          ),
+        if (showProgress && _processing)
+          Positioned.fill(
+            child: ColoredBox(
+              color: scheme.surface.withValues(alpha: 0.92),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    Text('正在登录…', style: theme.textTheme.bodyMedium),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
