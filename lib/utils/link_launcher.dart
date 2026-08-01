@@ -132,6 +132,7 @@ Future<void> launchContentLink(
   if (url.startsWith('upload://')) {
     url = await DiscourseService().resolveShortUrlForLink(url) ?? url;
   }
+  if (!context.mounted) return;
 
   // 1. 识别用户链接 /u/username
   final userInfo = DiscourseUrlParser.parseUser(url);

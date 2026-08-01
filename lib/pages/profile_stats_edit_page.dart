@@ -143,8 +143,9 @@ class _PreviewSectionState extends ConsumerState<_PreviewSection> {
     if (old.config.dataSource != widget.config.dataSource) {
       _debounce?.cancel();
       _debounce = Timer(const Duration(milliseconds: 300), () {
-        if (mounted)
+        if (mounted) {
           setState(() => _effectiveSource = widget.config.dataSource);
+        }
       });
     }
   }

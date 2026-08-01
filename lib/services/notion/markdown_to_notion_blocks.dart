@@ -393,7 +393,7 @@ Map<String, dynamic> _richFromText(String text, _Annotations ann, String? href) 
       'content': text,
       if (normalizedHref != null) 'link': {'url': normalizedHref},
     },
-    if (annJson != null) 'annotations': annJson,
+    'annotations': ?annJson,
   };
 }
 

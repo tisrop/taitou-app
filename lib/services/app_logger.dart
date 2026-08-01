@@ -72,7 +72,7 @@ class AppLogger {
       'level': 'error',
       'type': 'general',
       'message': message,
-      if (tag != null) 'tag': tag,
+      'tag': ?tag,
       'error': error?.toString() ?? message,
       'errorType': error?.runtimeType.toString(),
       'stackTrace': trace.toString(),
@@ -98,7 +98,7 @@ class AppLogger {
       'level': level,
       'type': 'general',
       'message': message,
-      if (tag != null) 'tag': tag,
+      'tag': ?tag,
       ...?fields,
     });
   }

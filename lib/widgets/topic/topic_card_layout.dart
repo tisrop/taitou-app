@@ -414,8 +414,9 @@ class TopicCardLayout {
     final out = <(String, bool)>[];
     var last = 0;
     for (final m in matches) {
-      if (m.start > last)
+      if (m.start > last) {
         out.add((clean(html.substring(last, m.start)), false));
+      }
       out.add((m.group(1) ?? '', true));
       last = m.end;
     }

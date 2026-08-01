@@ -17,5 +17,5 @@ Future<void> main() async {
   ]);
 
   final cookies = await jar.loadForRequest(uri);
-  stdout.writeln('cookies=' + cookies.map((e) => e.name).join(','));
+  stdout.writeln('cookies=${cookies.map((e) => e.name).join(',')}');
 }

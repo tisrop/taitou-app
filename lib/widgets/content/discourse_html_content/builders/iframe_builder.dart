@@ -144,10 +144,6 @@ class _IframeWidgetState extends State<IframeWidget> with RouteAware {
   bool _hasError = false;
   bool _didLockLayout = false;
 
-  /// 桌面平台：是否进入交互模式
-  bool _interacting = false;
-  OverlayEntry? _overlayEntry;
-
   /// 上层路由（对话框/BottomSheet）出现时隐藏 WebView，
   /// 避免 hybrid composition 持续脏帧触发 BackdropFilter 全屏重算。
   bool _routeOverlayed = false;
@@ -179,67 +175,8 @@ class _IframeWidgetState extends State<IframeWidget> with RouteAware {
   @override
   void dispose() {
     appRouteObserver.unsubscribe(this);
-    _removeOverlay();
     _unlockLayoutIfNeeded();
     super.dispose();
-  }
-
-  void _enterInteractMode() {
-    setState(() => _interacting = true);
-    _showOverlay();
-  }
-
-  void _exitInteractMode() {
-    _removeOverlay();
-    setState(() => _interacting = false);
-  }
-
-  void _showOverlay() {
-    _removeOverlay();
-    _overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        top: MediaQuery.of(context).padding.top + 8,
-        left: 0,
-        right: 0,
-        child: Center(
-          child: Material(
-            color: Colors.black87,
-            borderRadius: BorderRadius.circular(20),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: _exitInteractMode,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Symbols.close_rounded,
-                      size: 18,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      S.current.iframe_exitInteraction,
-                      style: TextStyle(color: Colors.white, fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    Overlay.of(context).insert(_overlayEntry!);
-  }
-
-  void _removeOverlay() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
   }
 
   @override
@@ -361,23 +298,6 @@ class _IframeWidgetState extends State<IframeWidget> with RouteAware {
                       ),
                     ),
                   ],
-                ),
-              ),
-            ),
-          // 桌面平台：交互遮罩
-          if (false && !_interacting && _isLoaded && !_hasError)
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: _enterInteractMode,
-                child: Container(
-                  color: Colors.black38,
-                  child: const Center(
-                    child: Icon(
-                      Symbols.touch_app_rounded,
-                      size: 48,
-                      color: Colors.white70,
-                    ),
-                  ),
                 ),
               ),
             ),

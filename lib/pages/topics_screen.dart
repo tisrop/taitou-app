@@ -11,7 +11,6 @@ import '../providers/shortcut_provider.dart';
 import '../providers/discourse_providers.dart';
 import '../utils/platform_utils.dart';
 import '../utils/blur_config.dart';
-import '../utils/responsive.dart';
 import '../widgets/layout/master_detail_layout.dart';
 import 'topics_page.dart';
 import 'topic_detail_page/topic_detail_page.dart';

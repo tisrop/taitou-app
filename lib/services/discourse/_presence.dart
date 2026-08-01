@@ -32,7 +32,7 @@ mixin _PresenceMixin on _DiscourseServiceBase {
               'topicId': topicId,
               'topicTime': topicTime,
               'timingsCount': timings.length,
-              if (logContext != null) ...logContext,
+              ...?logContext,
             },
           },
         ),

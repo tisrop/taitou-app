@@ -1,4 +1,4 @@
-library paper_shaders;
+library;
 
 export 'src/grain_gradient_shape.dart';
 export 'src/grain_gradient_widget.dart' show GrainGradient;
