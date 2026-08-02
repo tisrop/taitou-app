@@ -15,7 +15,7 @@ import '../../providers/preferences_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/toast_service.dart';
 import '../../utils/dialog_utils.dart';
-import '../../widgets/common/app_bottom_sheet.dart';
+import '../../widgets/common/overlay/app_bottom_sheet.dart';
 import '../../utils/platform_utils.dart';
 import '../settings_model.dart';
 

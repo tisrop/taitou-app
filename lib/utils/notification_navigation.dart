@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/notification.dart';
 import '../providers/discourse_providers.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
-import '../pages/user_profile_page.dart';
+import '../pages/user_profile_page/user_profile_page.dart';
 import '../pages/badge_page.dart';
 import '../services/local_notification_service.dart';
 

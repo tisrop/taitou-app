@@ -7,10 +7,10 @@ import '../../models/sticker.dart';
 import '../../providers/sticker_provider.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../utils/load_more_coordinator.dart';
-import '../common/app_bottom_sheet.dart';
-import '../common/cached_image.dart';
+import '../common/overlay/app_bottom_sheet.dart';
+import '../common/visual/cached_image.dart';
 import 'package:m3e_ui/m3e_ui.dart';
-import '../common/paged_list_footer.dart';
+import '../common/layout/paged_list_footer.dart';
 import '../../../../../l10n/s.dart';
 
 /// 表情包市场浏览面板 (Bottom Sheet)

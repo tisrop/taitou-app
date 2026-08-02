@@ -6,7 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../browser_trust_coordinator.dart';
-import '../../cf_challenge_service.dart';
+import '../../../services/cf/cf_challenge_service.dart';
 import '../exceptions/api_exception.dart';
 import '../cookie/cookie_jar_service.dart';
 import '../request_scheduler_config.dart';

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import '../../../../utils/time_utils.dart';
-import '../../../common/smart_avatar.dart';
+import '../../../common/visual/smart_avatar.dart';
 import '../../../../l10n/s.dart';
 
 /// 构建 Chat Transcript 聊天记录引用卡片

@@ -30,7 +30,7 @@ import '../post_replies_list.dart';
 import '../post_solution_banner.dart';
 import '../../../../post/post_replies_sheet.dart';
 import '../../../../../utils/dialog_utils.dart';
-import '../../../../common/app_bottom_sheet.dart';
+import '../../../../common/overlay/app_bottom_sheet.dart';
 
 part 'actions/bookmark_actions.dart';
 part 'actions/manage_actions.dart';

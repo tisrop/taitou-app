@@ -16,7 +16,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../l10n/s.dart';
 import '../../../models/topic.dart';
 import '../../../utils/dialog_utils.dart';
-import '../../../widgets/common/app_bottom_sheet.dart';
+import '../../../widgets/common/overlay/app_bottom_sheet.dart';
 import '../../../services/discourse/discourse_service.dart';
 import '../../../services/toast_service.dart';
 import '../../../widgets/ai/ai_model_select_sheet.dart';

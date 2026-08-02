@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
-import '../../../../../pages/user_profile_page.dart';
+import '../../../../../pages/user_profile_page/user_profile_page.dart';
 import 'onebox_base.dart';
 
 /// 构建用户 onebox 卡片

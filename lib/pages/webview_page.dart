@@ -11,7 +11,7 @@ import '../services/app_link_service.dart';
 import '../services/network/cookie/cookie_store_observer.dart';
 import '../services/network/cookie/webview_cookie_priming.dart';
 import '../services/webview_settings.dart';
-import '../widgets/common/app_link_confirm_dialog.dart';
+import '../widgets/common/overlay/app_link_confirm_dialog.dart';
 import '../providers/web_bookmark_provider.dart';
 import '../providers/web_history_provider.dart';
 import '../providers/download_provider.dart';

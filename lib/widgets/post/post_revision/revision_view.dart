@@ -15,7 +15,7 @@ import '../../../utils/responsive.dart';
 import '../../../utils/time_utils.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import 'package:common_ui/common_ui.dart';
-import '../../common/smart_avatar.dart';
+import '../../common/visual/smart_avatar.dart';
 
 /// 帖子编辑历史主视图(放入 modal/page 内)。
 ///

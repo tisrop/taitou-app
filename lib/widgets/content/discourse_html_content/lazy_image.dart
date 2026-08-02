@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:m3e_ui/m3e_ui.dart';
-import '../../../services/blob_image_cache.dart';
-import '../../../services/image_decode_spec_memo.dart';
-import '../../../services/media_geometry_memo.dart';
+import '../../../services/image/blob_image_cache.dart';
+import '../../../services/image/image_decode_spec_memo.dart';
+import '../../../services/image/media_geometry_memo.dart';
 import '../../../utils/frame_jank_monitor.dart';
 import '../../../utils/image_paint_gate.dart';
-import '../../common/anchor_guard_sliver.dart';
-import '../../common/first_paint_probe.dart';
-import '../../common/hero_image.dart';
+import '../../common/layout/anchor_guard_sliver.dart';
+import '../../common/layout/first_paint_probe.dart';
+import '../../common/visual/hero_image.dart';
 import '../svg_view.dart';
 
 /// 帖子正文内容图组件:固定占位尺寸 + 解码分辨率约束 + 重绘隔离 + Hero。

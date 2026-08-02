@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show ZLibCodec;
 
-import 'package:archive/archive.dart' show ZLibEncoder;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,7 +19,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 import '../l10n/s.dart';
 import '../pages/image_viewer_page.dart';
 import '../pages/mermaid_viewer_page.dart';
-import '../pages/user_profile_page.dart';
+import '../pages/user_profile_page/user_profile_page.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../models/topic.dart' show Post, MentionedUser, LinkCount;
 import '../providers/download_provider.dart';
@@ -32,8 +32,8 @@ import '../utils/discourse_url_parser.dart';
 import '../utils/link_launcher.dart';
 import '../utils/svg_utils.dart';
 import '../utils/url_helper.dart';
-import '../widgets/common/image_context_menu.dart';
-import '../widgets/common/smart_avatar.dart';
+import '../widgets/common/visual/image_context_menu.dart';
+import '../widgets/common/visual/smart_avatar.dart';
 import '../widgets/post/quote_image_scope.dart';
 import '../widgets/content/animated_svg_view.dart';
 import '../widgets/content/audio/discourse_audio_player.dart';
@@ -1557,10 +1557,10 @@ class _MermaidBlockState extends State<_MermaidBlock> {
   /// PNG 只有 1x(公共实例 scale/width 不生效),高清查看走 [svg] 矢量
   /// (含 foreignObject,只能 WebView 渲,见 MermaidViewerPage)。
   String _buildKrokiUrl(String code, bool isDark, {bool svg = false}) {
-    final compressed = const ZLibEncoder().encodeBytes(
-      utf8.encode(code),
-      level: 9,
-    );
+    // dart:io 的 ZLibCodec 与 archive 的 ZLibEncoder 输出字节一致(已验证),
+    // kroki.io 要求 zlib(level 9) + base64url 编码。
+    final zlib = ZLibCodec(level: 9);
+    final compressed = zlib.encode(utf8.encode(code));
     final encoded = base64Url.encode(compressed);
     final theme = isDark ? 'dark' : 'default';
     final format = svg ? 'svg' : 'png';

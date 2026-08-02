@@ -6,7 +6,7 @@ import '../../models/search_filter.dart';
 import '../../providers/user_content_search_provider.dart';
 import '../../utils/load_more_coordinator.dart';
 import '../../utils/dialog_utils.dart';
-import '../common/paged_list_footer.dart';
+import '../common/layout/paged_list_footer.dart';
 import '../../pages/topic_detail_page/topic_detail_page.dart';
 import 'search_filter_panel.dart';
 import 'search_list_skeleton.dart';

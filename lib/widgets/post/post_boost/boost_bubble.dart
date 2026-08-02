@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import '../../../models/topic.dart';
-import '../../common/emoji_text.dart';
-import '../../common/smart_avatar.dart';
+import '../../common/text/emoji_text.dart';
+import '../../common/visual/smart_avatar.dart';
 import '../../../utils/url_helper.dart';
 import 'boost_content.dart';
 

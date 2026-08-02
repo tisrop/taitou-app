@@ -8,7 +8,7 @@ import '../providers/discourse_providers.dart';
 import '../services/discourse_cache_manager.dart';
 import '../utils/url_helper.dart';
 import '../widgets/badge/my_badges_skeleton.dart';
-import '../widgets/common/error_view.dart';
+import '../widgets/common/misc/error_view.dart';
 import '../utils/font_awesome_helper.dart';
 import '../widgets/badge/badge_ui_utils.dart';
 import 'badge_page.dart';

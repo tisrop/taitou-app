@@ -6,7 +6,7 @@ import '../../../../models/topic.dart';
 import '../../../../utils/fluxdo_render_callbacks.dart';
 import '../../../../utils/time_utils.dart';
 import '../../../../utils/url_helper.dart';
-import '../../../common/smart_avatar.dart';
+import '../../../common/visual/smart_avatar.dart';
 
 /// 解决方案横幅(仅在主贴下方展示)
 ///

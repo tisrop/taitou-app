@@ -15,7 +15,7 @@ import '../../services/toast_service.dart';
 import '../../storage/export_history_dao.dart';
 import '../../utils/dialog_utils.dart';
 import '../../utils/export_utils.dart';
-import '../common/app_bottom_sheet.dart';
+import '../common/overlay/app_bottom_sheet.dart';
 
 /// 用户在 sheet 上选的"目标"。
 /// 本地 MD/HTML 走 ExportUtils.exportTopic；Notion 走 NotionSyncService。

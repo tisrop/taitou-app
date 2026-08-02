@@ -5,7 +5,7 @@ import 'package:app_icons/app_icons.dart';
 
 import '../../../l10n/s.dart';
 import '../../../models/topic.dart';
-import '../../common/smart_avatar.dart';
+import '../../common/visual/smart_avatar.dart';
 
 /// 用户在 Boost 作者 popover 中点选的操作
 enum BoostAuthorPopoverAction {

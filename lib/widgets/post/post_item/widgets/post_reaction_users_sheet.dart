@@ -6,8 +6,8 @@ import '../../../../models/topic.dart';
 import '../../../../services/discourse/discourse_service.dart';
 import '../../../../services/discourse_cache_manager.dart';
 import '../../../../services/emoji_handler.dart';
-import '../../../common/app_bottom_sheet.dart';
-import '../../../common/smart_avatar.dart';
+import '../../../common/overlay/app_bottom_sheet.dart';
+import '../../../common/visual/smart_avatar.dart';
 import '../../../user/user_card.dart';
 
 /// 获取 emoji 图片 URL（未加载完成时返回空字符串，由 errorBuilder 处理）

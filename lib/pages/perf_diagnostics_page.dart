@@ -10,7 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/toast_service.dart';
 import '../utils/frame_jank_monitor.dart';
 import '../utils/jank_profiler.dart';
-import '../widgets/common/perf_overlay.dart';
+import '../widgets/common/layout/perf_overlay.dart';
 
 /// 性能诊断页:查看/导出 [FrameJankMonitor] 采集的掉帧记录与场景事件,
 /// 不依赖 adb/logcat。开发者向工具页,文案暂不接入 l10n。

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../common/skeleton.dart';
+import '../common/overlay/skeleton.dart';
 
 /// 搜索结果列表骨架屏 — 匹配 SearchPostCard 的标题置顶布局:
 /// 标题两行 / 摘要两行 / 头像跨两行 + 用户名·时间 / 分类·统计

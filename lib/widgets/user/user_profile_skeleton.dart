@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../common/grain_gradient_background.dart';
-import '../common/skeleton.dart';
+import '../common/visual/grain_gradient_background.dart';
+import '../common/overlay/skeleton.dart';
 
 /// 用户资料页骨架屏
 class UserProfileSkeleton extends StatelessWidget {

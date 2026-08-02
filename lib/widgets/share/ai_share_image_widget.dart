@@ -10,7 +10,7 @@ import '../../services/emoji_handler.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/url_helper.dart';
 import '../../utils/time_utils.dart';
-import '../common/emoji_text.dart';
+import '../common/text/emoji_text.dart';
 import 'share_image_preview.dart';
 
 /// AI 分享图片 Widget

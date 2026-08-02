@@ -7,7 +7,7 @@ import '../models/topic.dart';
 import '../models/pending_post.dart';
 import '../models/user.dart';
 import '../services/preloaded_data_service.dart';
-import '../widgets/common/anchor_guard_sliver.dart';
+import '../widgets/common/layout/anchor_guard_sliver.dart';
 import 'core_providers.dart';
 import 'message_bus/models.dart';
 

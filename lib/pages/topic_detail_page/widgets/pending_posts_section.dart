@@ -3,7 +3,7 @@ import 'package:app_icons/app_icons.dart';
 
 import '../../../l10n/s.dart';
 import '../../../models/pending_post.dart';
-import '../../../widgets/common/relative_time_text.dart';
+import '../../../widgets/common/text/relative_time_text.dart';
 import '../../../widgets/markdown_editor/markdown_renderer.dart';
 
 /// 主题页帖子流底部的「待审核回复」区块

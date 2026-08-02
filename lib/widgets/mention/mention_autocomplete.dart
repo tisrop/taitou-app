@@ -5,7 +5,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 
 import '../../models/mention_user.dart';
 import '../../constants.dart';
-import '../common/smart_avatar.dart';
+import '../common/visual/smart_avatar.dart';
 import '../../../../../l10n/s.dart';
 
 /// 搜索用户的数据源类型

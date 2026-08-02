@@ -3,7 +3,7 @@ import 'package:app_icons/app_icons.dart';
 
 import '../../l10n/s.dart';
 import '../../utils/dialog_utils.dart';
-import '../common/app_bottom_sheet.dart';
+import '../common/overlay/app_bottom_sheet.dart';
 
 /// 弹出 AI 输入区的"+"号工具菜单
 ///

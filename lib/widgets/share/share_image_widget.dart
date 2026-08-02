@@ -9,9 +9,9 @@ import '../../l10n/s.dart';
 import '../../models/topic.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/time_utils.dart';
-import '../common/smart_avatar.dart';
-import '../common/flair_badge.dart';
-import '../common/emoji_text.dart';
+import '../common/visual/smart_avatar.dart';
+import '../common/visual/flair_badge.dart';
+import '../common/text/emoji_text.dart';
 import 'share_image_preview.dart';
 
 /// 分享图片 Widget

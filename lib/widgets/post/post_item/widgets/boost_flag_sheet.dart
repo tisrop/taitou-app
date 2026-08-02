@@ -7,7 +7,7 @@ import '../../../../models/topic.dart';
 import '../../../../services/preloaded_data_service.dart';
 import '../../../../services/toast_service.dart';
 import '../../../../utils/fluxdo_render_callbacks.dart';
-import '../../../common/app_bottom_sheet.dart';
+import '../../../common/overlay/app_bottom_sheet.dart';
 
 typedef BoostFlagTypesLoader = Future<List<FlagType>> Function();
 typedef BoostFlagSubmitter =

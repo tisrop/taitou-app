@@ -8,7 +8,7 @@ import 'package:video_player/video_player.dart' as lib;
 import '../../../../providers/preferences_provider.dart';
 import '../../../../services/navigation/app_route_observer.dart';
 import '../../../../utils/layout_lock.dart';
-import '../../../common/anchor_guard_sliver.dart';
+import '../../../common/layout/anchor_guard_sliver.dart';
 
 /// 自定义视频播放器，基于 fwfh_chewie 的 VideoPlayer，
 /// 增加全屏时 LayoutLock 保护，防止横屏导致底层页面重新布局。

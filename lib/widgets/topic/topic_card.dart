@@ -11,15 +11,15 @@ import '../../utils/font_awesome_helper.dart';
 import '../../utils/frame_jank_monitor.dart';
 import '../../utils/platform_utils.dart';
 import '../../utils/url_helper.dart';
-import '../common/smart_avatar.dart';
-import '../common/animated_avatar_overlay.dart';
-import '../common/perf_span_box.dart';
+import '../common/visual/smart_avatar.dart';
+import '../common/visual/animated_avatar_overlay.dart';
+import '../common/layout/perf_span_box.dart';
 import '../../services/discourse_cache_manager.dart';
-import '../common/category_tags_line.dart';
-import '../common/icon_glyph_span.dart';
-import '../common/relative_time_text.dart';
+import '../common/misc/category_tags_line.dart';
+import '../common/text/icon_glyph_span.dart';
+import '../common/text/relative_time_text.dart';
 import '../../utils/number_utils.dart';
-import '../common/emoji_text.dart';
+import '../common/text/emoji_text.dart';
 
 Widget _withDesktopTertiaryTap(Widget child, VoidCallback? onMiddleClick) {
   if (!PlatformUtils.isDesktop || onMiddleClick == null) return child;

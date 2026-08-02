@@ -8,7 +8,7 @@ import '../../providers/nested_topic_provider.dart';
 import '../../providers/preferences_provider.dart';
 import '../../utils/blocked_user_filter.dart';
 import '../../utils/dialog_utils.dart';
-import '../common/app_bottom_sheet.dart';
+import '../common/overlay/app_bottom_sheet.dart';
 import 'nested_post_card.dart';
 
 /// 打开深层嵌套子树弹框

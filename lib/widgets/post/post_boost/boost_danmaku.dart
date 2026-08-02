@@ -6,8 +6,8 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../../models/topic.dart';
 import '../../../utils/url_helper.dart';
-import '../../common/emoji_text.dart';
-import '../../common/smart_avatar.dart';
+import '../../common/text/emoji_text.dart';
+import '../../common/visual/smart_avatar.dart';
 import 'boost_content.dart';
 
 typedef BoostDanmakuTapCallback = void Function(Boost boost, Rect? anchorRect);

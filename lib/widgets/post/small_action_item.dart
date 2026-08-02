@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import '../../l10n/s.dart';
 import '../../models/topic.dart';
-import '../common/relative_time_text.dart';
-import '../common/smart_avatar.dart';
+import '../common/text/relative_time_text.dart';
+import '../common/visual/smart_avatar.dart';
 import 'post_item/widgets/post_segment_frame.dart';
 
 /// 帖子类型常量

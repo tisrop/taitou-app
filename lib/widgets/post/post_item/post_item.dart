@@ -11,7 +11,7 @@ import '../../../utils/blocked_user_filter.dart';
 import '../../../utils/code_selection_context.dart';
 import '../../../utils/fluxdo_render_callbacks.dart';
 import '../../../utils/frame_jank_monitor.dart';
-import '../../common/perf_span_box.dart';
+import '../../common/layout/perf_span_box.dart';
 import '../post_boost/boost_actions.dart';
 import '../post_boost/boost_danmaku.dart';
 import '../post_signature_block.dart';

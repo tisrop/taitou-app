@@ -4,12 +4,12 @@ import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/s.dart';
-import '../../pages/user_profile_page.dart';
+import '../../pages/user_profile_page/user_profile_page.dart';
 import '../../providers/discourse_providers.dart';
 import '../../providers/preferences_provider.dart';
 import '../../services/toast_service.dart';
 import '../../utils/share_utils.dart';
-import '../common/radial_long_press_menu.dart';
+import '../common/overlay/radial_long_press_menu.dart';
 import '../post/reply_sheet.dart';
 
 /// 复制用户名到剪贴板并 toast + 轻触觉（长按菜单/用户卡片/用户主页共用）

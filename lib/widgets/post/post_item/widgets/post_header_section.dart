@@ -9,7 +9,7 @@ import 'package:dio/dio.dart';
 import '../../../../services/app_error_handler.dart';
 import '../../../../services/discourse/discourse_service.dart';
 import '../../../../utils/frame_jank_monitor.dart';
-import '../../../common/relative_time_text.dart';
+import '../../../common/text/relative_time_text.dart';
 import '../../post_revision/edits_indicator.dart';
 import '../../post_revision/revision_modal.dart';
 import '../../small_action_item.dart';

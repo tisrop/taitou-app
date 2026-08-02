@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../l10n/s.dart';
 import '../../../providers/message_bus_providers.dart';
-import '../../../widgets/common/smart_avatar.dart';
+import '../../../widgets/common/visual/smart_avatar.dart';
 
 /// 正在输入动画指示器
 class TypingIndicator extends StatefulWidget {

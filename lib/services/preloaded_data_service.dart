@@ -8,8 +8,8 @@ import '../models/topic.dart';
 import '../models/category.dart';
 import 'network/discourse_dio.dart';
 import 'network/cookie/csrf_token_service.dart';
-import 'cf_challenge_service.dart';
-import 'cf_clearance_refresh_service.dart';
+import '../services/cf/cf_challenge_service.dart';
+import '../services/cf/cf_clearance_refresh_service.dart';
 
 /// 预加载数据服务
 /// 从首页 HTML 中提取 Discourse 预加载数据，避免额外 API 请求。

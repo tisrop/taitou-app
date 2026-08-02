@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../common/skeleton.dart';
+import '../common/overlay/skeleton.dart';
 
 /// 帖子骨架屏
 class PostItemSkeleton extends StatelessWidget {

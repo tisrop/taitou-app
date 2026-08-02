@@ -16,7 +16,7 @@ import '../../services/app_error_handler.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/toast_service.dart';
 import '../../utils/platform_utils.dart';
-import '../common/fading_edge_scroll_view.dart';
+import '../common/layout/fading_edge_scroll_view.dart';
 import '../content/discourse_html_content/image_utils.dart';
 import 'composer_shortcuts.dart';
 import 'editor_tools.dart';

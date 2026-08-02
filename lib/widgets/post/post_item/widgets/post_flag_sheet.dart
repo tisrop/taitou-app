@@ -7,7 +7,7 @@ import '../../../../utils/fluxdo_render_callbacks.dart';
 import '../../../../services/preloaded_data_service.dart';
 import '../../../../services/discourse/discourse_service.dart';
 import '../../../../services/toast_service.dart';
-import '../../../common/app_bottom_sheet.dart';
+import '../../../common/overlay/app_bottom_sheet.dart';
 
 /// 举报底部弹窗
 class PostFlagSheet extends StatefulWidget {
