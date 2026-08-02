@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import '../l10n/s.dart';
 import '../services/deep_link_service.dart';
-import '../widgets/common/ambient_background.dart';
-import '../widgets/common/floating_logo.dart';
+import '../widgets/common/visual/ambient_background.dart';
+import '../widgets/common/visual/floating_logo.dart';
 import 'login_page.dart';
 import 'network_settings_page/network_settings_page.dart';
 

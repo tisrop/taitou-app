@@ -17,7 +17,7 @@ import '../../../utils/frame_jank_monitor.dart';
 import '../../../utils/responsive.dart';
 import '../../../utils/scroll_busy_signal.dart';
 import '../../../utils/time_utils.dart';
-import '../../../widgets/common/anchor_guard_sliver.dart';
+import '../../../widgets/common/layout/anchor_guard_sliver.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import 'package:fluxdo_render/fluxdo_render.dart'
     show BlockNode, HtmlChunk, ParagraphWarmup, ParagraphWarmupProbe;

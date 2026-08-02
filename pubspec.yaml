@@ -94,8 +94,6 @@ dependencies:
     path: packages/fluxdo_render
   flutter_local_notifications: ^21.0.0
   jovial_svg: ^1.1.29
-  # kroki.io mermaid 出图使用的 zlib + base64url 编码。
-  archive: ^4.0.9
   html: ^0.15.5
   dio_smart_retry: ^7.0.1
   extended_nested_scroll_view: ^6.2.1

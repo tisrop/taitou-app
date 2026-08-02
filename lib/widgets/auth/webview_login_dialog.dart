@@ -8,7 +8,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../constants.dart';
 import '../../services/auth_session.dart';
-import '../../services/cf_challenge_service.dart';
+import '../../services/cf/cf_challenge_service.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/network/cookie/boundary_sync_service.dart';
 import '../../services/network/cookie/cookie_jar_service.dart';

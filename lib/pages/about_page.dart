@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/app_logger.dart';
-import '../services/cf_challenge_logger.dart';
+import '../services/cf/cf_challenge_logger.dart';
 import '../services/toast_service.dart';
 import '../services/update_checker_helper.dart';
 import '../services/update_service.dart';

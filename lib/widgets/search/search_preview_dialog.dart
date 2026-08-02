@@ -15,8 +15,8 @@ import '../../utils/share_utils.dart';
 import '../../utils/url_helper.dart';
 import '../../utils/number_utils.dart';
 import '../../services/discourse_cache_manager.dart';
-import '../common/smart_avatar.dart';
-import '../common/topic_badges.dart';
+import '../common/visual/smart_avatar.dart';
+import '../common/misc/topic_badges.dart';
 
 /// 搜索结果预览弹窗 - 长按搜索卡片时显示
 class SearchPreviewDialog extends ConsumerWidget {

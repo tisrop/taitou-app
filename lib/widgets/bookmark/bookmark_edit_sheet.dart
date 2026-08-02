@@ -12,7 +12,7 @@ import '../../services/toast_service.dart';
 import '../../services/app_error_handler.dart';
 import '../../utils/dialog_utils.dart';
 import '../../utils/time_utils.dart';
-import '../common/app_bottom_sheet.dart';
+import '../common/overlay/app_bottom_sheet.dart';
 import 'bookmark_name_edit_panel.dart';
 
 /// 书签编辑结果

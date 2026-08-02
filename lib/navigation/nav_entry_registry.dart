@@ -13,7 +13,7 @@ import '../pages/private_messages_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/topics_screen.dart';
 import '../providers/discourse_providers.dart';
-import '../widgets/common/smart_avatar.dart';
+import '../widgets/common/visual/smart_avatar.dart';
 import '../widgets/notification/notification_quick_panel.dart';
 import 'nav_action_bus.dart';
 import 'nav_entry.dart';

@@ -7,8 +7,8 @@ import 'package:flutter/painting.dart';
 import 'package:native_animated_image/native_animated_image.dart'
     show NativeAnimatedImageFfi, NativeAnimatedImageException;
 
-import 'avif_image_provider.dart';
-import 'blob_image_cache.dart';
+import '../services/image/avif_image_provider.dart';
+import '../services/image/blob_image_cache.dart';
 
 // 与 native_animated_image 内部定义的错误码保持一致(Rust 端 ERR_UNSUPPORTED = -2),
 // dart 端没单独 export 这个常量,我们直接复用数字 — 这是 stable FFI contract。

@@ -8,7 +8,7 @@ import '../../services/discourse_cache_manager.dart';
 import '../../services/emoji_handler.dart';
 import '../../utils/relative_time_clock.dart';
 import '../../utils/svg_utils.dart';
-import '../common/animated_avatar_overlay.dart';
+import '../common/visual/animated_avatar_overlay.dart';
 import 'topic_card.dart' show TopicCardInteractiveSurface;
 import 'topic_card_layout.dart';
 

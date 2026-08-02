@@ -9,7 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../widgets/common/perf_overlay.dart';
+import '../widgets/common/layout/perf_overlay.dart';
 import 'frame_scheduler_probe.dart';
 import 'jank_profiler.dart';
 import 'perf_layer_inventory.dart';

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import 'cf_challenge_service.dart';
+import '../services/cf/cf_challenge_service.dart';
 import 'discourse/discourse_service.dart';
 
 /// 阅读时间上报成功后的回调

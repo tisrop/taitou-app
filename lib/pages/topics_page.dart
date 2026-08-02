@@ -4,10 +4,8 @@ import 'dart:ui' as ui show lerpDouble;
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart' show SpringDescription, SpringSimulation;
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
-import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ignore: depend_on_referenced_packages
 import 'package:flutter_riverpod/legacy.dart';
@@ -22,29 +20,28 @@ import 'login_page.dart';
 import 'topic_detail_page/topic_detail_page.dart';
 import 'search_page.dart';
 import '../models/search_filter.dart';
-import '../widgets/common/notification_icon_button.dart';
-import '../widgets/common/anchor_guard_sliver.dart';
+import '../widgets/common/misc/notification_icon_button.dart';
+import '../widgets/common/layout/anchor_guard_sliver.dart';
 import '../widgets/topic/topic_list_skeleton.dart';
 import '../widgets/topic/keyword_filter_hint_bar.dart';
 import '../widgets/topic/topic_filter_menu.dart';
-import '../widgets/common/topic_badges.dart';
-import '../widgets/common/search_capsule.dart';
+import '../widgets/common/misc/topic_badges.dart';
+import '../widgets/common/misc/search_capsule.dart';
 import '../widgets/topic/category_drawer.dart';
 import '../widgets/topic/topic_item_builder.dart';
-import '../widgets/common/tag_selection_sheet.dart';
-import '../widgets/common/paged_list_footer.dart';
+import '../widgets/common/overlay/tag_selection_sheet.dart';
+import '../widgets/common/layout/paged_list_footer.dart';
 import '../navigation/nav_action_bus.dart';
 import '../providers/app_state_refresher.dart';
 import '../providers/preferences_provider.dart';
 import '../utils/load_more_coordinator.dart';
-import '../utils/motion_springs.dart';
 import '../utils/topic_keyword_filter.dart';
 import '../utils/frame_jank_monitor.dart';
 import '../utils/responsive.dart';
 import '../widgets/layout/master_detail_layout.dart';
-import '../widgets/common/error_view.dart';
-import '../widgets/common/loading_dialog.dart';
-import '../widgets/common/fading_edge_scroll_view.dart';
+import '../widgets/common/misc/error_view.dart';
+import '../widgets/common/overlay/loading_dialog.dart';
+import '../widgets/common/layout/fading_edge_scroll_view.dart';
 import '../widgets/offline_indicator.dart';
 import '../l10n/s.dart';
 import '../models/shortcut_binding.dart';
@@ -53,6 +50,7 @@ import '../widgets/desktop_refresh_indicator.dart';
 import '../services/toast_service.dart';
 import '../utils/dialog_utils.dart';
 import '../utils/platform_utils.dart';
+import 'topics_page/header_logic.dart';
 
 class ScrollToTopNotifier extends StateNotifier<int> {
   ScrollToTopNotifier() : super(0);
@@ -77,580 +75,6 @@ final fabRefreshSignalProvider =
     StateNotifierProvider<ScrollToTopNotifier, int>((ref) {
       return ScrollToTopNotifier();
     });
-
-/// Header 区域常量。
-///
-/// 顶部 = 常驻工具栏 48px（☰ + 聚合筛选菜单标题「最新 ▾」+ 右簇
-/// 🔕(条件)·搜索落位·🔔）。可折叠段三段式：搜索胶囊行 48（折叠时
-/// 胶囊 Rect.lerp 连续 morph 缩进常驻行右簇的落位格 —— 头部内
-/// "一镜到底"）→ 分类 chips 行 40 → 条件标签行 36。
-const _toolbarRowHeight = 48.0;
-const _capsuleRowHeight = 48.0;
-const _navRowHeight = 40.0;
-const _tagsRowHeight = 36.0;
-
-/// 首页运动系统统一弹簧,定义与说明见 [kHeaderMotionSpring]。
-final SpringDescription _kHeaderSpring = kHeaderSpringDescription;
-
-/// 顶栏收放控制器。两种收放语义分治（iOS/Telegram 搜索栏范式）：
-///
-/// - **胶囊段 = 位置驱动**：`capsuleOffset = pixels.clamp(0, 48)`，是
-///   滚动位置的纯函数 —— 搜索胶囊只在列表顶部 48px 内擦洗展开/收起，
-///   深处上滑不会冒出来（搜索是"内容的一部分"，随内容离场回场）。
-/// - **工具段（chips 行 + 底栏联动）= enterAlways 增量驱动**：深处
-///   上滑即回、下滑即走（chips/底栏是"工具"）;近顶被位置钳制强制
-///   全展开，与胶囊段无缝衔接。
-///
-/// snap/展开只动本 controller 或驱动列表，头部是 overlay 层自行收放。
-class _HeaderCollapseController extends ChangeNotifier {
-  _HeaderCollapseController({
-    required TickerProvider vsync,
-    required this.onVisibilityChanged,
-    required bool locked,
-    required double extent,
-  }) : _vsync = vsync,
-       _locked = locked {
-    _applyExtent(extent);
-  }
-
-  final TickerProvider _vsync;
-
-  /// 可见性联动（1 - barOffset/barExtent），供底栏滑出等外部消费。
-  /// 通知发生在滚动回调/动画 tick（build 之外），可同步写 provider。
-  final ValueChanged<double> onVisibilityChanged;
-
-  AnimationController? _snapAnim;
-  double _capsuleOffset = 0.0;
-  double _barOffset = 0.0;
-  double _barExtent = _capsuleRowHeight;
-  double _extent = _capsuleRowHeight;
-  bool _locked;
-  double _lastReportedVisibility = 1.0;
-
-  /// 本次手势/滚轮会话起点的列表位置与工具段收起量（ScrollStart
-  /// (drag)/滚轮会话首事件写入）。顶带吸附按起点分治迟滞;工具段
-  /// 回滚判定需要起点收起量（区分"收起态被蹭开"与"展开态收到一半"，
-  /// 见 _settleBarAfterScroll）。
-  double gestureStartPixels = 0.0;
-  double gestureStartBarOffset = 0.0;
-
-  void noteGestureStart(double pixels) {
-    gestureStartPixels = pixels;
-    gestureStartBarOffset = _barOffset;
-  }
-
-  // —— 胶囊 morph 弹簧跟随器 ——
-  // morph 若被滚动 1:1 擦洗，整段飞行只映射在头 48px 滚动距离里：快甩
-  // 两三帧滚完 = 胶囊瞬移进角落;方向微抖 = 整段横飞反复。跟随器让
-  // 滚动只改目标值，morph 以临界阻尼弹簧趋近 —— 带速度状态，目标
-  // 反向时运动连续无折角（一阶指数滤波在反向瞬间有可感的"折"）。
-  Ticker? _morphTicker;
-  double _morph = 0.0;
-  double _morphVelocity = 0.0;
-  Duration? _lastMorphTick;
-
-  /// 平滑后的胶囊 morph 进度（0=整行胶囊，1=落位图标）。
-  /// **只驱动胶囊 rect 飞行与落位 spacer**（快甩不瞬移）;布局占位
-  /// 用 [rowProgress]。
-  double get morphProgress => _morph;
-
-  /// 胶囊行**布局**进度：收起方向跟随滚动位置 1:1（raw），展开方向
-  /// 跟随 morph 弹簧（平滑）。收起时行高与内容严格同步 —— 内容顶边
-  /// 全程贴着头部下缘 8px 呼吸位滑行，首卡圆角"顶上去"清晰可见
-  /// （行高若吃 morph 平滑值，快收时行还没让开、内容已到，被下缘
-  /// 直线拦腰斩 = "动画开始就是直角线"）;展开时内容在远离下缘，
-  /// 平滑无副作用。
-  double get rowProgress {
-    final raw = (_capsuleOffset / _capsuleRowHeight).clamp(0.0, 1.0);
-    return raw > _morph ? raw : _morph;
-  }
-
-  double get _morphTarget =>
-      (_capsuleOffset / _capsuleRowHeight).clamp(0.0, 1.0);
-
-  void _syncMorph() {
-    if ((_morphTarget - _morph).abs() < 0.001) return;
-    final ticker = _morphTicker ??= _vsync.createTicker(_onMorphTick);
-    if (!ticker.isActive) {
-      _lastMorphTick = null;
-      ticker.start();
-    }
-  }
-
-  void _onMorphTick(Duration elapsed) {
-    final last = _lastMorphTick;
-    _lastMorphTick = elapsed;
-    final dt =
-        ((last == null ? 16.7 : (elapsed - last).inMicroseconds / 1000.0) /
-                1000.0)
-            .clamp(0.0, 0.05);
-    final target = _morphTarget;
-    // 临界阻尼弹簧半隐式积分（ω=√(stiffness/mass)，与全局弹簧
-    // _kHeaderSpring 同参 kHeaderMotionSpring）：a = ω²·(target-x) − 2ω·v
-    const omega = 22.4; // sqrt(kHeaderMotionSpring.stiffness / 1)
-    final accel =
-        omega * omega * (target - _morph) - 2 * omega * _morphVelocity;
-    _morphVelocity += accel * dt;
-    _morph = (_morph + _morphVelocity * dt).clamp(0.0, 1.0);
-    if ((target - _morph).abs() < 0.003 && _morphVelocity.abs() < 0.05) {
-      _morph = target;
-      _morphVelocity = 0.0;
-      _morphTicker?.stop();
-      _lastMorphTick = null;
-    }
-    notifyListeners();
-  }
-
-  /// 胶囊段收起量（位置驱动，0 = 全展开胶囊，48 = 已 morph 成图标）
-  double get capsuleOffset => _capsuleOffset;
-
-  /// 工具段收起量（enterAlways 累计，0 = chips/底栏全显）
-  double get barOffset => _barOffset;
-
-  /// 工具段总量（chips+标签行高;无 chips 时退化为 48，保证底栏联动
-  /// 仍有收放行程）
-  double get barExtent => _barExtent;
-
-  /// 工具段收起进度 0..1（chips 行 heightFactor 与底栏可见性共用）
-  double get barProgress =>
-      _barExtent <= 0 ? 0.0 : (_barOffset / _barExtent).clamp(0.0, 1.0);
-
-  /// chip→标题飞行进度（barProgress 的语义别名：单列出来方便日后
-  /// 独立调曲线而不牵动布局口径）
-  double get chipFlightProgress => barProgress;
-
-  /// 可折叠总高（胶囊 48 + chips/标签行;列表 topInset 同源）
-  double get extent => _extent;
-
-  set extent(double value) {
-    if (_extent == value) return;
-    // setter 在 build 期被调（_syncTabsIfNeeded 路径），不能同步
-    // notify/写 provider;夹紧与可见性重报推迟到帧末。
-    _applyExtent(value);
-    stopSnap();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _setBarOffset(_barOffset.clamp(0.0, _barExtent), force: true);
-    });
-  }
-
-  void _applyExtent(double value) {
-    _extent = value;
-    final rest = value - _capsuleRowHeight;
-    _barExtent = rest > 0 ? rest : _capsuleRowHeight;
-  }
-
-  bool get isSnapping => _snapAnim?.isAnimating ?? false;
-
-  /// hideBarOnScroll 关闭时锁定全展开
-  set locked(bool value) {
-    if (_locked == value) return;
-    _locked = value;
-    if (value) {
-      stopSnap();
-      _setCapsuleOffset(0.0, instantMorph: true);
-      _setBarOffset(0.0);
-    }
-  }
-
-  /// 消化一次列表滚动：胶囊段位置驱动 + **单向粘滞**——收起方向随
-  /// 位置立即走;展开方向仅在用户上滑（delta<0）进入顶部区时随位置。
-  /// tab 切换遗留的"胶囊已折叠、列表在顶部"失配不会被下滑/惯性误
-  /// 展开（折叠状态跨 tab 粘滞），上滑到顶自然长回。
-  /// 工具段按增量累计（[accumulateBar] false = 越界回弹段不喂）;
-  /// 近顶钳制：pixels < 48 时工具段强制全展开。
-  void handleScroll(double delta, double pixels, {bool accumulateBar = true}) {
-    if (_locked) return;
-    stopSnap();
-    final posOffset = pixels.clamp(0.0, _capsuleRowHeight);
-    if (posOffset > _capsuleOffset || delta < 0) {
-      _setCapsuleOffset(posOffset);
-    }
-    final cap = (pixels - _capsuleRowHeight).clamp(0.0, _barExtent);
-    final next = accumulateBar
-        ? (_barOffset + delta).clamp(0.0, cap)
-        : _barOffset.clamp(0.0, cap);
-    _setBarOffset(next);
-  }
-
-  /// 工具段 snap 到全显(0)或全隐([barExtent])。只动 overlay 的 chips
-  /// 行与底栏，列表内容不动。统一弹簧 + 继承 [velocity]（px/s，
-  /// barOffset 增大方向为正）——快甩快收、慢松缓归，跟手段与动画段
-  /// 速度连续。[duration] Duration.zero = 立即跳变（外部状态同步用）。
-  void snapBar(double target, {double velocity = 0, Duration? duration}) {
-    if (_locked) return;
-    stopSnap();
-    if (duration == Duration.zero) {
-      _setBarOffset(target);
-      return;
-    }
-    if (_barOffset == target && velocity == 0) return;
-    final controller = AnimationController.unbounded(vsync: _vsync);
-    _snapAnim = controller;
-    controller.addListener(() {
-      _setBarOffset(controller.value.clamp(0.0, _barExtent));
-    });
-    controller
-        .animateWith(
-          SpringSimulation(_kHeaderSpring, _barOffset, target, velocity),
-        )
-        .whenComplete(() {
-          if (identical(_snapAnim, controller)) {
-            _snapAnim = null;
-            _setBarOffset(target);
-          }
-          controller.dispose();
-        });
-  }
-
-  /// 工具段兜底吸附（正常路径下物理层耦合收尾已把工具段送到边，
-  /// 这里恒 no-op;只兜 extent 突变/短列表滚不动等物理层覆盖不到的
-  /// 残余半开）。规则从简：过半收、不过半开;[listPixels] 提供收起
-  /// 可达性门禁——内容没滚过锚位时强收会在头部下缘与内容顶边间
-  /// 凭空造出空白带，一律反转为回开。
-  void snapBarToNearest({double velocity = 0, double? listPixels}) {
-    if (_locked) return;
-    if (_barOffset <= 0 || _barOffset >= _barExtent) return;
-    double target = _barOffset > _barExtent / 2 ? _barExtent : 0.0;
-    if (target >= _barExtent && listPixels != null) {
-      final cap = (listPixels - _capsuleRowHeight).clamp(0.0, _barExtent);
-      if (cap < _barExtent) target = 0.0;
-    }
-    snapBar(target, velocity: velocity);
-  }
-
-  /// 可折叠段当前**可见高度**（tab 自己的折叠总量 [tabExtent] 口径）：
-  /// 骨架屏/错误页等非滚动态的顶部让位用 —— 它们没有滚动位置可与
-  /// 头部互动，让位必须实时贴着头部下缘（胶囊折叠时少让 48px，
-  /// 否则头部与内容之间露空洞）。与头部布局同源：胶囊段吃
-  /// rowProgress（收起 1:1/展开平滑，与胶囊行占位一致）、工具段吃
-  /// barProgress，收放/吸附全程贴合。
-  double visibleExtentFor(double tabExtent) {
-    final capsuleVisible = _capsuleRowHeight * (1.0 - rowProgress);
-    final rest = tabExtent - _capsuleRowHeight;
-    final barVisible = rest > 0 ? rest * (1.0 - barProgress) : 0.0;
-    return capsuleVisible + barVisible;
-  }
-
-  /// 折叠锚位：内容顶边不露空洞所需的最小滚动位置 = 头部收起总量
-  /// （胶囊段 + 工具段，按 tab 自己的 [tabExtent] 折算）。列表 attach
-  /// /切 tab 适配用 —— 只对齐 capsuleOffset 会漏工具段收起量
-  /// （chips 折叠时 pill 上方露 40px，截图实锤）。
-  double collapsedAnchorFor(double tabExtent) {
-    final rest = tabExtent - _capsuleRowHeight;
-    final barCollapsed = rest > 0 ? rest * barProgress : 0.0;
-    return _capsuleOffset + barCollapsed;
-  }
-
-  /// 展开头部（切 tab 横滑起步、scrollToTop、关闭折叠偏好时调用）。
-  /// 胶囊一并展开：位置驱动下一旦列表滚动会立即重新对齐，仅作为
-  /// 过渡期的视觉兜底（避免相邻贴顶 tab 在横滑中露出 48px 空隙）。
-  void expand({bool animate = true}) {
-    if (_locked) {
-      _setCapsuleOffset(0.0, instantMorph: true);
-      _setBarOffset(0.0);
-      return;
-    }
-    _setCapsuleOffset(0.0, instantMorph: !animate);
-    if (animate) {
-      snapBar(0.0);
-    } else {
-      stopSnap();
-      _setBarOffset(0.0);
-    }
-  }
-
-  void stopSnap() {
-    final anim = _snapAnim;
-    if (anim == null) return;
-    _snapAnim = null;
-    anim.stop();
-    anim.dispose();
-  }
-
-  void _setCapsuleOffset(double value, {bool instantMorph = false}) {
-    if (_capsuleOffset != value) {
-      _capsuleOffset = value;
-      if (instantMorph) {
-        _morphTicker?.stop();
-        _lastMorphTick = null;
-        _morph = _morphTarget;
-      } else {
-        _syncMorph();
-      }
-      notifyListeners();
-    } else if (instantMorph && _morph != _morphTarget) {
-      _morphTicker?.stop();
-      _lastMorphTick = null;
-      _morph = _morphTarget;
-      notifyListeners();
-    }
-  }
-
-  void _setBarOffset(double value, {bool force = false}) {
-    if (_barOffset == value && !force) return;
-    _barOffset = value;
-    notifyListeners();
-    final visibility = (1.0 - barProgress).clamp(0.0, 1.0);
-    // 0.01 节流；端点必须精确送达（底栏全隐/全显判定依赖 0.0/1.0）
-    if (visibility != _lastReportedVisibility &&
-        ((visibility - _lastReportedVisibility).abs() > 0.01 ||
-            visibility == 0.0 ||
-            visibility == 1.0)) {
-      _lastReportedVisibility = visibility;
-      onVisibilityChanged(visibility);
-    }
-  }
-
-  @override
-  void dispose() {
-    stopSnap();
-    _morphTicker?.dispose();
-    super.dispose();
-  }
-}
-
-// ─── TopicsPage ───
-
-/// 顶带 + 深区工具段的吸附物理（**耦合收尾**定案）。
-///
-/// 两个战场，一个原则：**settle 期间栏与内容一体移动**——位移要么
-/// 顺着手势方向补完（≤剩余行程），要么整段撤销（净位移归零），
-/// 永不出现"栏自己动、内容留在原地"的错位。
-///
-/// 1. **胶囊带**：弹道落点停进 (0, 48) 时按手势起点分治迟滞——
-///    顶部起手落点 > 36 才 commit 收起，否则回滚展开;深处起手落点
-///    < 12 才 assist 全开，否则回滚收起锚位。胶囊是位置纯函数，
-///    驱动列表即一体。
-/// 2. **深区工具段**：chips/底栏 half-open 且弹道自己送不到边时，
-///    弹簧把**列表**滚到"工具段恰好到边"的位置——增量经 enterAlways
-///    记账自然驱动工具段同步，栏沿与内容行相对静止（此前 ScrollEnd
-///    → snapBar 是 overlay-only：栏收回去、列表下滑位移留在原地，
-///    每次短滑内容凭空多出栏漏出的高度 —— 本次翻车实锤）。同一套
-///    起手锚定迟滞（75% 行程才换状态，不足全撤）。
-///
-/// 越界（下拉刷新）走平台物理。
-class _TopSnapScrollPhysics extends ScrollPhysics {
-  const _TopSnapScrollPhysics({required this.controller, super.parent});
-
-  /// 读手势起点快照与工具段状态（noteGestureStart 维护）
-  final _HeaderCollapseController controller;
-
-  @override
-  _TopSnapScrollPhysics applyTo(ScrollPhysics? ancestor) {
-    return _TopSnapScrollPhysics(
-      controller: controller,
-      parent: buildParent(ancestor),
-    );
-  }
-
-  @override
-  Simulation? createBallisticSimulation(
-    ScrollMetrics position,
-    double velocity,
-  ) {
-    final base = super.createBallisticSimulation(position, velocity);
-    // 越界（下拉刷新回弹等）交给平台物理
-    if (position.outOfRange) return base;
-
-    // 弹道落点（取大有限时刻：所有模拟均已收敛;不用 infinity ——
-    // spring 解析解含 t·e^{-ωt} 项，无穷时刻是 inf·0 = NaN）
-    final endPixels = base?.x(100.0) ?? position.pixels;
-    if (!endPixels.isFinite) return base;
-    const band = _capsuleRowHeight;
-
-    // —— 胶囊带：落点停进 (0, 48) ——
-    if (endPixels > 0 && endPixels < band) {
-      final fromDeep = controller.gestureStartPixels >= band;
-      double target;
-      if (fromDeep) {
-        target = endPixels < band / 4 ? 0.0 : band;
-      } else {
-        target = endPixels > band * 3 / 4 ? band : 0.0;
-      }
-      if (target > position.maxScrollExtent) target = 0.0;
-      if (target == position.pixels &&
-          velocity.abs() < toleranceFor(position).velocity) {
-        return null;
-      }
-      return ScrollSpringSimulation(
-        _kHeaderSpring,
-        position.pixels,
-        target,
-        velocity,
-        tolerance: toleranceFor(position),
-      );
-    }
-
-    // —— 深区工具段耦合收尾 ——
-    final barExtent = controller.barExtent;
-    final barOffset = controller.barOffset;
-    if (position.pixels >= band &&
-        barExtent > 0 &&
-        barOffset > 0.5 &&
-        barOffset < barExtent - 0.5) {
-      // 弹道行程足以把工具段送到边（记账器吃满 delta）则不干预
-      final predicted = (barOffset + (endPixels - position.pixels)).clamp(
-        0.0,
-        barExtent,
-      );
-      if (predicted <= 0.5 || predicted >= barExtent - 0.5) return base;
-
-      // 起手锚定迟滞：从收起态起手要拉出 75% 才 commit 展开;从
-      // 展开态起手要推进 75% 才 commit 收起;不足一律原路撤销
-      final startBar = controller.gestureStartBarOffset;
-      double targetBar;
-      if (startBar >= barExtent - 0.5) {
-        targetBar = barOffset <= barExtent * 0.25 ? 0.0 : barExtent;
-      } else if (startBar <= 0.5) {
-        targetBar = barOffset >= barExtent * 0.75 ? barExtent : 0.0;
-      } else {
-        targetBar = barOffset > barExtent / 2 ? barExtent : 0.0;
-      }
-      var listTarget = position.pixels + (targetBar - barOffset);
-      // 收起可达性：滚动余量不足则反转为展开（防底部强收露空白）
-      if (targetBar > barOffset && listTarget > position.maxScrollExtent) {
-        listTarget = position.pixels - barOffset;
-      }
-      // 不越入胶囊带：expand-commit 压到 48 为止（缺口由近顶钳制
-      // cap = pixels-48 收编，工具段照样到边），否则弹簧停进带内
-      // 会触发二次 goBallistic 的反向修正 = 可感的二段抖
-      listTarget = listTarget.clamp(band, position.maxScrollExtent);
-      if (listTarget == position.pixels &&
-          velocity.abs() < toleranceFor(position).velocity) {
-        return null;
-      }
-      return ScrollSpringSimulation(
-        _kHeaderSpring,
-        position.pixels,
-        listTarget,
-        velocity,
-        tolerance: toleranceFor(position),
-      );
-    }
-
-    return base;
-  }
-}
-
-/// 抽屉拖拽桥：TabBarView 的 physics（随 build 重建、不可变）与
-/// State 间的可变状态通道。
-class _DrawerPullBridge {
-  /// 手指按下的拖拽会话中（ScrollStart.dragDetails != null 维护;
-  /// 挡住 ballistic 越界误触发抽屉）
-  bool dragging = false;
-
-  /// 本次手势已进入"拉抽屉"模式（首缘越界触发，手势结束前锁存：
-  /// 期间全部水平位移归抽屉，含往回滑 —— 否则回滑会被 PageView
-  /// 接手直接切 tab）
-  bool pulling = false;
-}
-
-/// 首页 TabBarView 常驻 physics：首缘（"全部"页再向右拖）把越界量
-/// 转交抽屉跟手拖出，PageView 自身**永不越界**（首缘表现为 clamping，
-/// iOS 无橡皮筋残留）;进入拉抽屉模式后本次手势位移全量归抽屉。
-/// 其余方向/页面完全走平台默认物理。
-class _DrawerPullPagerPhysics extends ScrollPhysics {
-  const _DrawerPullPagerPhysics({
-    required this.bridge,
-    required this.onPull,
-    required this.onPullEnd,
-    super.parent,
-  });
-
-  final _DrawerPullBridge bridge;
-
-  /// 位移增量（正 = 手指向右 = 抽屉拉出方向）
-  final ValueChanged<double> onPull;
-
-  /// 手势结束（velocityDx 正 = 向右甩）
-  final ValueChanged<double> onPullEnd;
-
-  @override
-  _DrawerPullPagerPhysics applyTo(ScrollPhysics? ancestor) {
-    return _DrawerPullPagerPhysics(
-      bridge: bridge,
-      onPull: onPull,
-      onPullEnd: onPullEnd,
-      parent: buildParent(ancestor),
-    );
-  }
-
-  @override
-  bool shouldAcceptUserOffset(ScrollMetrics position) {
-    // 无收藏分类时 TabBarView 只有"全部"一页（min==max），默认物理
-    // 拒绝手势 → 拖拽会话不建立，首缘桥永远无法介入（"没有分类栏
-    // 就不能右滑"）。始终收下手势：单页下所有位移都走首缘越界分支
-    // 转给抽屉。
-    return true;
-  }
-
-  @override
-  double applyPhysicsToUserOffset(ScrollMetrics position, double offset) {
-    // 拉抽屉模式：手势位移全量转交（offset 正 = 手指向右）
-    if (bridge.pulling) {
-      onPull(offset);
-      return 0;
-    }
-    return super.applyPhysicsToUserOffset(position, offset);
-  }
-
-  @override
-  double applyBoundaryConditions(ScrollMetrics position, double value) {
-    // 首缘越界（已在第一页仍向右拖）→ 进入拉抽屉模式：越界量转交
-    // 抽屉，PageView 钉在 minScrollExtent（不产生 iOS 橡皮筋）
-    if (bridge.dragging &&
-        value < position.minScrollExtent &&
-        position.pixels <= position.minScrollExtent + precisionErrorTolerance) {
-      if (!bridge.pulling) bridge.pulling = true;
-      onPull(position.minScrollExtent - value);
-      return value - position.minScrollExtent;
-    }
-    if (bridge.pulling) {
-      // 模式中冻结页面（含往回滑）
-      return value - position.pixels;
-    }
-    return super.applyBoundaryConditions(position, value);
-  }
-
-  @override
-  Simulation? createBallisticSimulation(
-    ScrollMetrics position,
-    double velocity,
-  ) {
-    if (bridge.pulling) {
-      bridge.pulling = false;
-      // scroll velocity 正 = pixels 增大 = 手指向左;抽屉口径取反
-      onPullEnd(-velocity);
-      return null;
-    }
-    return super.createBallisticSimulation(position, velocity);
-  }
-}
-
-/// tab 列表滚动控制器：初始滚动位置动态跟随胶囊折叠态。
-///
-/// 骨架屏 ↔ 数据列表切换会销毁/重建 Scrollable（position detach 后
-/// 重新 attach），`initialScrollOffset` 是构造期快照满足不了"attach
-/// 那一刻的胶囊态"——用 resolver 每次 attach 现取;attach 回调再做
-/// 帧末校验兜底（PageStorage 恢复陈旧位置等杂例）。
-class _TabListScrollController extends ScrollController {
-  _TabListScrollController({
-    required this.initialOffsetResolver,
-    required this.onAttachPosition,
-  });
-
-  final double Function() initialOffsetResolver;
-  final void Function(ScrollPosition position) onAttachPosition;
-
-  @override
-  double get initialScrollOffset => initialOffsetResolver();
-
-  @override
-  void attach(ScrollPosition position) {
-    super.attach(position);
-    onAttachPosition(position);
-  }
-}
 
 /// 帖子列表页面 - 分类 Tab + 排序下拉 + 标签 Chips
 class TopicsPage extends ConsumerStatefulWidget {
@@ -677,7 +101,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
   int _currentTabIndex = 0;
   List<int> _visiblePinnedIds = []; // 过滤后的可见分类 ID
 
-  late final _HeaderCollapseController _headerController;
+  late final HeaderCollapseController _headerController;
   bool _invalidateScheduled = false;
   Timer? _pointerScrollIdleTimer;
   bool _pointerScrolling = false;
@@ -686,9 +110,9 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
   /// 滚动对收放的驱动（两个 tab 列表同时在场，事件源混杂）
   bool _pageTransitioning = false;
 
-  /// 首页整块区域右滑拖出侧栏：物理层桥（见 _DrawerPullPagerPhysics）
-  final _DrawerPullBridge _drawerPullBridge = _DrawerPullBridge();
-  late final _DrawerPullPagerPhysics _pagerPhysics = _DrawerPullPagerPhysics(
+  /// 首页整块区域右滑拖出侧栏：物理层桥（见 DrawerPullPagerPhysics）
+  final DrawerPullBridge _drawerPullBridge = DrawerPullBridge();
+  late final DrawerPullPagerPhysics _pagerPhysics = DrawerPullPagerPhysics(
     bridge: _drawerPullBridge,
     onPull: CategoryDrawerHost.dragBy,
     onPullEnd: CategoryDrawerHost.settle,
@@ -714,7 +138,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
     );
     return _listControllers.putIfAbsent(
       categoryId,
-      () => _TabListScrollController(
+      () => TabListScrollController(
         initialOffsetResolver: anchor,
         onAttachPosition: (position) {
           // attach 时布局未完成，帧末校验（覆盖 PageStorage 恢复出
@@ -742,7 +166,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
     _tabLength = 1 + _visiblePinnedIds.length;
     _tabController = TabController(length: _tabLength, vsync: this);
     _tabController.addListener(_handleTabChange);
-    _headerController = _HeaderCollapseController(
+    _headerController = HeaderCollapseController(
       vsync: this,
       locked: !ref.read(preferencesProvider).hideBarOnScroll,
       extent: _collapsibleExtentFor(
@@ -759,9 +183,9 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
   /// 可折叠量：胶囊行恒在；chips 导航行仅有收藏分类时存在（无收藏时
   /// 只有"全部"+"＋"是空壳，不值得占一行）；标签行仅选了标签时存在
   static double _collapsibleExtentFor(List<int> pinnedIds, List<String> tags) =>
-      _capsuleRowHeight +
-      (pinnedIds.isEmpty ? 0.0 : _navRowHeight) +
-      (tags.isEmpty ? 0.0 : _tagsRowHeight);
+      capsuleRowHeight +
+      (pinnedIds.isEmpty ? 0.0 : navRowHeight) +
+      (tags.isEmpty ? 0.0 : tagsRowHeight);
 
   void _registerTabShortcuts() {
     if (!mounted) return;
@@ -1157,7 +581,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
               // 高度;可折叠段（chips 导航行/标签行）悬浮在列表上方，
               // 收放只动 overlay 自身，不牵动列表布局
               Positioned.fill(
-                top: topPadding + _toolbarRowHeight,
+                top: topPadding + toolbarRowHeight,
                 child: TabBarView(
                   controller: _tabController,
                   // 首缘越界转交抽屉跟手拖出（拉抽屉模式中 PageView
@@ -1215,7 +639,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
   /// compact 按钮内边 8 = glyph 距屏 16（M3 基线）。
   Widget _buildToolbar(bool isLoggedIn, Widget filterMenu) {
     return SizedBox(
-      height: _toolbarRowHeight,
+      height: toolbarRowHeight,
       child: Row(
         children: [
           const SizedBox(width: 8),
@@ -1290,7 +714,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
   /// （分类主入口，订阅设置也在侧栏分类行上）。
   Widget _buildNavRow(List<int> pinnedIds, Map<int, Category>? categoryMap) {
     return SizedBox(
-      height: _navRowHeight,
+      height: navRowHeight,
       child: FadingEdgeScrollView(
         child: _CategoryChipsRow(
           tabController: _tabController,
@@ -1310,7 +734,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
     final colorScheme = Theme.of(context).colorScheme;
     final currentCategoryId = _currentCategoryId();
     return SizedBox(
-      height: _tagsRowHeight,
+      height: tagsRowHeight,
       child: Align(
         alignment: Alignment.topLeft,
         child: SingleChildScrollView(
@@ -1529,7 +953,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
     }
 
     if (notification is ScrollEndNotification) {
-      // 顶带与深区工具段的吸附都已下沉到 _TopSnapScrollPhysics
+      // 顶带与深区工具段的吸附都已下沉到 TopSnapScrollPhysics
       // （弹道级耦合收尾：驱动列表、栏随记账复位，栏与内容一体）。
       // 这里只剩兜底：物理层覆盖不到的残余半开（如 extent 突变、
       // 短列表滚不动）——guard 在 snapBarToNearest 内，正常路径下
@@ -1599,7 +1023,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
   }
 
   /// macOS 滚轮/触控板的 idle 收口：滚轮驱动没有弹道（每个事件都是
-  /// 离散 jump），_TopSnapScrollPhysics 拦不到 —— 顶带停在半开时由
+  /// 离散 jump），TopSnapScrollPhysics 拦不到 —— 顶带停在半开时由
   /// 这里驱动列表吸附;深区兜工具段。带内规则与触摸路径同一套起手
   /// 分治迟滞（gestureStartPixels 由滚轮会话首事件写入）。
   void _snapAfterPointerScroll() {
@@ -1614,15 +1038,15 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
     if (hasList) {
       final position = controller.position;
       final pixels = position.pixels;
-      if (pixels > 0 && pixels < _capsuleRowHeight) {
+      if (pixels > 0 && pixels < capsuleRowHeight) {
         // 胶囊带：起手分治迟滞（与触摸物理层同规则）
         final fromDeep =
-            _headerController.gestureStartPixels >= _capsuleRowHeight;
+            _headerController.gestureStartPixels >= capsuleRowHeight;
         double target;
         if (fromDeep) {
-          target = pixels < _capsuleRowHeight / 4 ? 0.0 : _capsuleRowHeight;
+          target = pixels < capsuleRowHeight / 4 ? 0.0 : capsuleRowHeight;
         } else {
-          target = pixels > _capsuleRowHeight * 3 / 4 ? _capsuleRowHeight : 0.0;
+          target = pixels > capsuleRowHeight * 3 / 4 ? capsuleRowHeight : 0.0;
         }
         if (target > position.maxScrollExtent) target = 0.0;
         if (target != pixels) {
@@ -1639,7 +1063,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
       // snapBar 会让内容留在原地 = 净位移凭空多出栏高）
       final barExtent = _headerController.barExtent;
       final barOffset = _headerController.barOffset;
-      if (pixels >= _capsuleRowHeight &&
+      if (pixels >= capsuleRowHeight &&
           barExtent > 0 &&
           barOffset > 0.5 &&
           barOffset < barExtent - 0.5) {
@@ -1657,7 +1081,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
           listTarget = pixels - barOffset;
         }
         listTarget = listTarget.clamp(
-          _capsuleRowHeight,
+          capsuleRowHeight,
           position.maxScrollExtent,
         );
         if (listTarget != pixels) {
@@ -1729,7 +1153,7 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
 ///   [🔔 40] + 4(间隔) → 落位格右缘；top = 状态栏+(48-40)/2。
 ///   落位格是否有 🔔/debug 由 [bellVisible] 传入。
 ///
-/// 收放由 [_HeaderCollapseController] 驱动，ListenableBuilder 每帧只
+/// 收放由 [HeaderCollapseController] 驱动，ListenableBuilder 每帧只
 /// 重组轻壳与 rect；工具栏/chips 等重 child 由 State.build 预构建，
 /// identical 短路。
 class _CollapsibleHeader extends StatelessWidget {
@@ -1744,7 +1168,7 @@ class _CollapsibleHeader extends StatelessWidget {
     this.flightLabel,
   });
 
-  final _HeaderCollapseController controller;
+  final HeaderCollapseController controller;
   final double statusBarHeight;
 
   /// 常驻工具栏（含 40×40 搜索落位空格）
@@ -1785,7 +1209,7 @@ class _CollapsibleHeader extends StatelessWidget {
             // morph 两端 rect（常量推算，见类文档）
             final expandedRect = Rect.fromLTWH(
               12,
-              statusBarHeight + _toolbarRowHeight + 4,
+              statusBarHeight + toolbarRowHeight + 4,
               width - 24,
               40,
             );
@@ -1797,7 +1221,7 @@ class _CollapsibleHeader extends StatelessWidget {
             final slotRight = width - 8 - debugW - bellW;
             final collapsedRect = Rect.fromLTWH(
               slotRight - 40,
-              statusBarHeight + (_toolbarRowHeight - 40) / 2,
+              statusBarHeight + (toolbarRowHeight - 40) / 2,
               40,
               40,
             );
@@ -1819,7 +1243,7 @@ class _CollapsibleHeader extends StatelessWidget {
                           toolbarChild,
                           // 胶囊行占位：高度随 pRow 收缩（胶囊本体在
                           // overlay 层随 p1 飞行）
-                          SizedBox(height: _capsuleRowHeight * (1.0 - pRow)),
+                          SizedBox(height: capsuleRowHeight * (1.0 - pRow)),
                           // chips/标签段（完全折叠后跳过子树构建）：
                           // **滑入式折叠**——窗口收缩时内容锚定底部，
                           // 顶端被上方 bar 覆盖裁掉，读作"chips 滑入
@@ -1898,7 +1322,7 @@ class _ChipFlightLabel extends StatelessWidget {
     required this.headerKey,
   });
 
-  final _HeaderCollapseController headerController;
+  final HeaderCollapseController headerController;
   final TabController tabController;
   final String? Function(int index) nameResolver;
 
@@ -2028,7 +1452,7 @@ class _TopEdgeFade extends StatelessWidget {
     required this.topInset,
   });
 
-  final _HeaderCollapseController headerController;
+  final HeaderCollapseController headerController;
   final ScrollController scrollController;
   final double topInset;
 
@@ -2093,7 +1517,7 @@ class _TitleTabPrefix extends StatelessWidget {
     required this.anchorKey,
   });
 
-  final _HeaderCollapseController headerController;
+  final HeaderCollapseController headerController;
   final TabController tabController;
 
   /// tab index → 分类名（0/越界 = null，无前缀）
@@ -2222,7 +1646,7 @@ class _TitleTabPrefix extends StatelessWidget {
 class _SearchSlotSpacer extends StatelessWidget {
   const _SearchSlotSpacer({required this.controller});
 
-  final _HeaderCollapseController controller;
+  final HeaderCollapseController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -2262,7 +1686,7 @@ class _CategoryChipsRow extends StatelessWidget {
   final Map<int, Category>? categoryMap;
   final VoidCallback onReselect;
   final VoidCallback onManageCategories;
-  final _HeaderCollapseController headerController;
+  final HeaderCollapseController headerController;
 
   /// 选中 chip 的文字测位 key：chip→标题飞行标签的起点
   final GlobalKey selectedChipKey;
@@ -2423,7 +1847,7 @@ class _TopicList extends ConsumerStatefulWidget {
 
   /// 头部收放控制器：骨架屏/错误页等非滚动态的顶部让位需实时贴着
   /// 头部下缘（visibleExtentFor），否则胶囊折叠时露 48px 空洞
-  final _HeaderCollapseController headerController;
+  final HeaderCollapseController headerController;
 
   const _TopicList({
     super.key,
@@ -2912,7 +2336,7 @@ class _TopicListState extends ConsumerState<_TopicList>
           refreshIndicatorKey: _refreshIndicatorKey,
           refreshNotifier: masterRefreshNotifier,
           // 头部可折叠段悬浮在列表上方;列表贴顶时头部必然全展开
-          // （见 _HeaderCollapseController.handleScrollDelta 的上限规则），
+          // （见 HeaderCollapseController.handleScrollDelta 的上限规则），
           // spinner 固定从展开头部下缘冒出
           edgeOffset: _headerInset,
           shouldRefresh: () =>
@@ -2950,8 +2374,8 @@ class _TopicListState extends ConsumerState<_TopicList>
                   child: CustomScrollView(
                     controller: _scrollController,
                     // 顶带吸附下沉在弹道层（继承惯性速度的弹簧 + 起手
-                    // 分治迟滞，见 _TopSnapScrollPhysics）
-                    physics: _TopSnapScrollPhysics(
+                    // 分治迟滞，见 TopSnapScrollPhysics）
+                    physics: TopSnapScrollPhysics(
                       controller: widget.headerController,
                       parent: const AlwaysScrollableScrollPhysics(),
                     ),

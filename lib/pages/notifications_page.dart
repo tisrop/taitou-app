@@ -8,8 +8,8 @@ import '../widgets/desktop_refresh_indicator.dart';
 import '../utils/notification_navigation.dart';
 import '../widgets/notification/notification_item.dart';
 import '../widgets/notification/notification_list_skeleton.dart';
-import '../widgets/common/error_view.dart';
-import '../widgets/common/paged_list_footer.dart';
+import '../widgets/common/misc/error_view.dart';
+import '../widgets/common/layout/paged_list_footer.dart';
 import '../l10n/s.dart';
 import '../utils/blocked_user_filter.dart';
 

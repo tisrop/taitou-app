@@ -8,9 +8,9 @@ import '../../services/discourse_cache_manager.dart';
 import '../../utils/dialog_utils.dart';
 import '../../utils/font_awesome_helper.dart';
 import '../../utils/url_helper.dart';
-import '../common/category_selection_sheet.dart';
-import '../common/tag_selection_sheet.dart';
-import '../common/topic_badges.dart';
+import '../common/overlay/category_selection_sheet.dart';
+import '../common/overlay/tag_selection_sheet.dart';
+import '../common/misc/topic_badges.dart';
 import '../../../../../l10n/s.dart';
 
 /// 话题编辑器辅助函数和 Widgets

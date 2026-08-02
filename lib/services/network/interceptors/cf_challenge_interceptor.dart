@@ -2,9 +2,9 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../cf_challenge_service.dart';
-import '../../cf_challenge_logger.dart';
-import '../../cf_clearance_refresh_service.dart';
+import '../../../services/cf/cf_challenge_service.dart';
+import '../../../services/cf/cf_challenge_logger.dart';
+import '../../../services/cf/cf_clearance_refresh_service.dart';
 import '../../app_logger.dart';
 import '../adapters/platform_adapter.dart';
 import '../cookie/boundary_sync_service.dart';

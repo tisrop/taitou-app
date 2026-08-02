@@ -13,8 +13,8 @@ import '../services/emoji_handler.dart';
 import '../services/log/log_writer.dart';
 import '../services/migration_service.dart';
 import '../utils/dialog_utils.dart';
-import '../widgets/common/ambient_background.dart';
-import '../widgets/common/error_view.dart';
+import '../widgets/common/visual/ambient_background.dart';
+import '../widgets/common/misc/error_view.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import 'preheat_logo.dart';
 

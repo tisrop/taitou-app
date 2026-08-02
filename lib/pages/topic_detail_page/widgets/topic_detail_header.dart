@@ -7,13 +7,13 @@ import '../../../models/topic.dart';
 import '../../../providers/discourse_providers.dart';
 import '../../../utils/font_awesome_helper.dart';
 import '../../../widgets/topic/topic_summary_widget.dart';
-import '../../../widgets/common/emoji_text.dart';
+import '../../../widgets/common/text/emoji_text.dart';
 import '../../../utils/time_utils.dart';
-import '../../../widgets/common/relative_time_text.dart';
+import '../../../widgets/common/text/relative_time_text.dart';
 import '../../../utils/number_utils.dart';
 import '../../../widgets/topic/topic_notification_button.dart';
 import 'topic_vote_button.dart';
-import '../../../widgets/common/topic_badges.dart';
+import '../../../widgets/common/misc/topic_badges.dart';
 import '../../category_topics_page.dart';
 import '../../tag_topics_page.dart';
 

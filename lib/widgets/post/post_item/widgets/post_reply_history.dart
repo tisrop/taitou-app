@@ -3,7 +3,7 @@ import 'package:app_icons/app_icons.dart';
 import '../../../../l10n/s.dart';
 import '../../../../models/topic.dart';
 import '../../../../utils/fluxdo_render_callbacks.dart';
-import '../../../common/smart_avatar.dart';
+import '../../../common/visual/smart_avatar.dart';
 
 /// 回复历史预览组件
 class PostReplyHistory extends StatelessWidget {

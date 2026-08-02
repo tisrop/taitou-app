@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import '../models/user.dart';
 import '../providers/discourse_providers.dart';
-import '../widgets/common/error_view.dart';
-import '../widgets/common/smart_avatar.dart';
+import '../widgets/common/misc/error_view.dart';
+import '../widgets/common/visual/smart_avatar.dart';
 import 'user_profile_page.dart';
 import '../l10n/s.dart';
 

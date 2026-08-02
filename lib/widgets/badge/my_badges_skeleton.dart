@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../common/skeleton.dart';
+import '../common/overlay/skeleton.dart';
 import '../../../../../l10n/s.dart';
 
 /// 我的徽章页骨架屏

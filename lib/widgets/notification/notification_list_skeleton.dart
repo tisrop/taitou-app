@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../common/skeleton.dart';
+import '../common/overlay/skeleton.dart';
 
 /// 通知列表骨架屏
 class NotificationListSkeleton extends StatelessWidget {

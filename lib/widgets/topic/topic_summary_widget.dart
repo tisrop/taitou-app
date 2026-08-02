@@ -6,8 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/topic.dart';
 import '../../pages/topic_detail_page/topic_detail_page.dart';
 import '../../providers/discourse_providers.dart';
-import '../common/error_view.dart';
-import '../common/relative_time_text.dart';
+import '../common/misc/error_view.dart';
+import '../common/text/relative_time_text.dart';
 import '../markdown_editor/markdown_renderer.dart';
 import '../../../../../l10n/s.dart';
 

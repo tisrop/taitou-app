@@ -6,7 +6,7 @@ import 'package:scroll_to_index/scroll_to_index.dart';
 
 import '../../l10n/s.dart';
 import '../../utils/dialog_utils.dart';
-import '../common/app_bottom_sheet.dart';
+import '../common/overlay/app_bottom_sheet.dart';
 
 /// 弹出模型选择 sheet
 ///

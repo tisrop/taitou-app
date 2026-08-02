@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../common/skeleton.dart';
+import '../common/overlay/skeleton.dart';
 
 /// 话题列表骨架屏
 class TopicListSkeleton extends StatelessWidget {

@@ -4,8 +4,8 @@ import 'package:app_icons/app_icons.dart';
 import 'package:jovial_svg/jovial_svg.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
-import '../../services/blob_image_cache.dart';
-import '../../services/media_geometry_memo.dart';
+import '../../services/image/blob_image_cache.dart';
+import '../../services/image/media_geometry_memo.dart';
 import '../../utils/svg_utils.dart';
 import 'animated_svg_view.dart';
 

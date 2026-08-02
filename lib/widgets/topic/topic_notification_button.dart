@@ -3,7 +3,7 @@ import 'package:app_icons/app_icons.dart';
 import '../../models/topic.dart';
 import '../../models/category.dart';
 import '../../utils/dialog_utils.dart';
-import '../common/app_bottom_sheet.dart';
+import '../common/overlay/app_bottom_sheet.dart';
 import '../../../../../l10n/s.dart';
 
 enum TopicNotificationButtonStyle { icon, chip }

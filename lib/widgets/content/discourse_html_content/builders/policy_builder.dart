@@ -6,7 +6,7 @@ import '../../../../models/topic.dart';
 import '../../../../pages/user_profile_page.dart';
 import '../../../../services/discourse/discourse_service.dart';
 import '../../../../services/toast_service.dart';
-import '../../../../widgets/common/smart_avatar.dart';
+import '../../../../widgets/common/visual/smart_avatar.dart';
 import '../current_post_scope.dart';
 
 /// 构建 Policy 容器（discourse-policy 插件）

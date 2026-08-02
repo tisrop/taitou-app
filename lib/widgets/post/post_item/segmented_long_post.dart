@@ -9,7 +9,7 @@ import '../../../providers/preferences_provider.dart';
 import '../../../providers/topic_session_provider.dart';
 import '../../../utils/blocked_user_filter.dart';
 import '../../../utils/frame_jank_monitor.dart';
-import '../../common/perf_span_box.dart';
+import '../../common/layout/perf_span_box.dart';
 import '../../../services/toast_service.dart';
 import '../../../utils/fluxdo_render_callbacks.dart';
 import '../post_boost/boost_actions.dart';

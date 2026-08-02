@@ -6,10 +6,10 @@ import '../providers/discourse_providers.dart';
 import '../models/search_filter.dart';
 import '../models/search_result.dart';
 import '../services/preloaded_data_service.dart';
-import '../widgets/common/smart_avatar.dart';
-import '../widgets/common/error_view.dart';
+import '../widgets/common/visual/smart_avatar.dart';
+import '../widgets/common/misc/error_view.dart';
 import 'package:m3e_ui/m3e_ui.dart';
-import '../widgets/common/paged_list_footer.dart';
+import '../widgets/common/layout/paged_list_footer.dart';
 import '../widgets/search/search_filter_panel.dart';
 import '../widgets/search/search_list_skeleton.dart';
 import '../widgets/search/search_post_card.dart';
@@ -24,7 +24,7 @@ import 'user_profile_page.dart';
 import '../utils/dialog_utils.dart';
 import '../utils/load_more_coordinator.dart';
 import '../utils/blocked_user_filter.dart';
-import '../widgets/common/search_capsule.dart';
+import '../widgets/common/misc/search_capsule.dart';
 
 /// 搜索页面
 class SearchPage extends ConsumerStatefulWidget {

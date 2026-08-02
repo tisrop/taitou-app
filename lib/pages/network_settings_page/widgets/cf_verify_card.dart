@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/s.dart';
 import '../../../providers/preferences_provider.dart';
-import '../../../services/cf_challenge_service.dart';
+import '../../../services/cf/cf_challenge_service.dart';
 import '../../../services/toast_service.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 

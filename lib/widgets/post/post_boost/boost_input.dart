@@ -6,7 +6,7 @@ import '../../../models/emoji.dart';
 import '../../../utils/emoji_shortcodes.dart';
 import '../../../utils/dialog_utils.dart';
 import '../../../utils/platform_utils.dart';
-import '../../common/emoji_text.dart';
+import '../../common/text/emoji_text.dart';
 import '../../markdown_editor/emoji_picker.dart';
 
 /// Boost 输入框的提交结果。

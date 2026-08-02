@@ -7,7 +7,7 @@ import '../../constants.dart';
 import '../../l10n/s.dart';
 import '../../models/mention_user.dart';
 import '../../services/discourse/discourse_service.dart';
-import '../common/smart_avatar.dart';
+import '../common/visual/smart_avatar.dart';
 
 /// 私信收件人选择器：已选项显示为可删除的 chip，下方输入即搜。
 ///

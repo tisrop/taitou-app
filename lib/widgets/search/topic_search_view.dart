@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/s.dart';
 import '../../providers/topic_search_provider.dart';
 import '../../utils/load_more_coordinator.dart';
-import '../common/paged_list_footer.dart';
+import '../common/layout/paged_list_footer.dart';
 import '../../pages/topic_detail_page/topic_detail_page.dart';
 import 'search_list_skeleton.dart';
 import 'search_post_card.dart';

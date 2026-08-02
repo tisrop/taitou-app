@@ -9,7 +9,7 @@ import '../../providers/discourse_providers.dart';
 import '../../services/emoji_handler.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../utils/dialog_utils.dart';
-import '../common/app_bottom_sheet.dart';
+import '../common/overlay/app_bottom_sheet.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import '../../../../../l10n/s.dart';
 

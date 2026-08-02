@@ -3,9 +3,9 @@ import 'package:app_icons/app_icons.dart';
 import 'package:jovial_svg/jovial_svg.dart';
 import '../../models/notification.dart';
 import '../../utils/url_helper.dart';
-import '../common/emoji_text.dart';
-import '../common/smart_avatar.dart';
-import '../common/relative_time_text.dart';
+import '../common/text/emoji_text.dart';
+import '../common/visual/smart_avatar.dart';
+import '../common/text/relative_time_text.dart';
 
 // discourse-follow 插件的自定义 SVG 图标
 const _followNewFollowerSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 30">'

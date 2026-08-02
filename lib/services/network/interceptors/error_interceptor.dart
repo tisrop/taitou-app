@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../constants.dart';
 import '../../../l10n/s.dart';
-import '../../cf_challenge_service.dart';
+import '../../../services/cf/cf_challenge_service.dart';
 import '../../toast_service.dart';
 import '../exceptions/api_exception.dart';
 import '../vpn_connectivity_state.dart';

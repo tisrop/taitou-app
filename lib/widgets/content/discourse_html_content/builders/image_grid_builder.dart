@@ -3,7 +3,7 @@ import 'package:app_icons/app_icons.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import '../../../../services/discourse_cache_manager.dart';
-import '../../../../services/image_decode_spec_memo.dart';
+import '../../../../services/image/image_decode_spec_memo.dart';
 import '../../../../utils/url_helper.dart';
 import '../image_utils.dart';
 import '../../lazy_load_scope.dart';

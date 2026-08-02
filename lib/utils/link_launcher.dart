@@ -10,7 +10,7 @@ import '../pages/user_profile_page.dart';
 import '../pages/webview_page.dart';
 import '../providers/preferences_provider.dart';
 import '../services/discourse/discourse_service.dart';
-import '../widgets/common/external_link_confirm_dialog.dart';
+import '../widgets/common/overlay/external_link_confirm_dialog.dart';
 import '../widgets/content/discourse_html_content/image_utils.dart';
 import 'discourse_url_parser.dart';
 import 'link_security.dart';

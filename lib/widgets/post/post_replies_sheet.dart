@@ -14,7 +14,7 @@ import '../../utils/code_selection_context.dart';
 import '../../utils/html_text_mapper.dart';
 import '../../utils/html_to_markdown.dart';
 import '../../utils/quote_builder.dart';
-import '../common/app_bottom_sheet.dart';
+import '../common/overlay/app_bottom_sheet.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import 'post_item/quote_selection_helper.dart';

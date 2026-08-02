@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../models/topic.dart';
 import '../../utils/url_helper.dart';
-import '../common/radial_long_press_menu.dart';
-import '../common/smart_avatar.dart';
+import '../common/overlay/radial_long_press_menu.dart';
+import '../common/visual/smart_avatar.dart';
 import '../user/avatar_action_menu.dart';
 import '../user/user_card.dart';
 
