@@ -353,22 +353,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.9.2"
-  dio_compatibility_layer:
-    dependency: "direct main"
-    description:
-      name: dio_compatibility_layer
-      sha256: "73ffce50133cc30a51a3b1ea20acf13b2df28e1671673188a04f671102e6fba1"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.1.1"
-  dio_cookie_manager:
-    dependency: "direct main"
-    description:
-      name: dio_cookie_manager
-      sha256: "0db1a7b997a0455e488ac35744c68eed3f2a4280d3ab531835a65641b0a08744"
-      url: "https://pub.dev"
-    source: hosted
-    version: "3.4.0"
   dio_smart_retry:
     dependency: "direct main"
     description:
@@ -385,14 +369,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.2"
-  dns_client:
-    dependency: "direct main"
-    description:
-      name: dns_client
-      sha256: "7d32102c4064e880c6fb556c505aaf0a2bbd12a339c5c3be67699fab20dc1134"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.3.1"
   dynamic_color:
     dependency: "direct main"
     description:
@@ -606,14 +582,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.0"
-  flutter_dynamic_icon_plus:
-    dependency: "direct main"
-    description:
-      name: flutter_dynamic_icon_plus
-      sha256: "2611607982af70c5cec138ec0ec16a6f632899307145557a31dd17f0ba21004a"
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.4.1"
   flutter_foreground_task:
     dependency: "direct main"
     description:
@@ -1005,14 +973,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.19.3"
-  hive_ce_flutter:
-    dependency: "direct main"
-    description:
-      name: hive_ce_flutter
-      sha256: "2677e95a333ff15af43ccd06af7eb7abbf1a4f154ea071997f3de4346cae913a"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.3.4"
   hooks:
     dependency: transitive
     description:
@@ -1045,14 +1005,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.6.0"
-  http2:
-    dependency: transitive
-    description:
-      name: http2
-      sha256: "382d3aefc5bd6dc68c6b892d7664f29b5beb3251611ae946a98d35158a82bbfa"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.3.1"
   http_client_helper:
     dependency: transitive
     description:
@@ -1574,7 +1526,7 @@ packages:
     source: hosted
     version: "2.2.1"
   path_provider_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: path_provider_platform_interface
       sha256: "484838772624c3a4b94f1e44a3e19897fee738f2d5c4ce448443b0417f7c9dda"

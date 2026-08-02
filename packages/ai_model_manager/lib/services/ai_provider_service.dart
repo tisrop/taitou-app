@@ -76,7 +76,7 @@ class AiProviderApiService {
       receiveTimeout: const Duration(seconds: 15),
     ));
     if (_adapterFactory != null) {
-      dio.httpClientAdapter = _adapterFactory!();
+      dio.httpClientAdapter = _adapterFactory();
     }
     return dio;
   }

@@ -195,7 +195,7 @@ class UpdateService {
           headers: {
             'User-Agent': 'Taitou-App',
             'Accept': 'application/vnd.github.v3+json',
-            if (storedEtag != null) 'If-None-Match': storedEtag,
+            'If-None-Match': ?storedEtag,
           },
           validateStatus: (status) =>
               status != null && (status == 200 || status == 304),

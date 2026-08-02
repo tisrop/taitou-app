@@ -26,7 +26,7 @@ class UrlHelper {
     }
 
     if (url == '/') {
-      return '$_origin${_baseUriOrSlash}';
+      return '$_origin$_baseUriOrSlash';
     }
 
     return url;
@@ -52,7 +52,7 @@ class UrlHelper {
     }
 
     if (url == '/') {
-      return '${_cdnUrl ?? _origin}${_baseUriOrSlash}';
+      return '${_cdnUrl ?? _origin}$_baseUriOrSlash';
     }
 
     return url;

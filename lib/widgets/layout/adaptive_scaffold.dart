@@ -54,16 +54,12 @@ class AdaptiveScaffold extends ConsumerWidget {
         ? -1
         : selectedIndex;
 
-    const useAcrylicRail = false;
     final railWidth = extendedRail ? 180.0 : 72.0;
-    final overlayLeftInset = showRail
-        ? railWidth + (useAcrylicRail ? 0.0 : 1.0)
-        : 0.0;
+    final overlayLeftInset = showRail ? railWidth + 1.0 : 0.0;
 
     return Stack(
       children: [
         Scaffold(
-          backgroundColor: useAcrylicRail ? Colors.transparent : null,
           // 底栏隐藏改为整条平移出屏（paint-only），内容延伸到底栏后面;
           // body 高度不再随底栏显隐变化，收放过程零 relayout
           extendBody: true,
@@ -117,20 +113,11 @@ class AdaptiveScaffold extends ConsumerWidget {
                   leading: railLeading,
                   bottomLeading: railBottomLeading,
                 ),
-                if (!useAcrylicRail)
-                  const VerticalDivider(thickness: 1, width: 1),
+                const VerticalDivider(thickness: 1, width: 1),
               ],
               Expanded(
                 key: const ValueKey('adaptive-body'),
-                // 桌面 acrylic 模式：用 Material 给 body 提供不透明背景
-                // TopicsScreen 等页面没有自己的 Scaffold，
-                // Material 和 Scaffold 内部是同一个组件，不会产生双层背景
-                child: useAcrylicRail
-                    ? Material(
-                        color: Theme.of(context).colorScheme.surface,
-                        child: body,
-                      )
-                    : body,
+                child: body,
               ),
             ],
           ),

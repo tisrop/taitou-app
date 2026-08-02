@@ -49,7 +49,7 @@ class CategoryShortcuts extends ConsumerWidget {
         );
       },
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
     );
   }
 }
@@ -139,7 +139,7 @@ Widget _buildCategoryIcon(Category category, Color color, double size) {
       width: size,
       height: size,
       fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => _buildColorDot(color, size * 0.5),
+      errorBuilder: (_, _, _) => _buildColorDot(color, size * 0.5),
     );
   }
 

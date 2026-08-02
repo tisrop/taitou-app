@@ -121,19 +121,13 @@ Future<String?> pickAndUploadMediaTag(
 }
 
 /// 超限媒体压缩(模态进度对话框,可取消)。返回压缩后文件路径;
-/// null = 取消 / 失败 / 平台不支持(失败已 SnackBar 提示)。
+/// null = 取消 / 失败(失败已 SnackBar 提示)。
 Future<String?> compressMediaWithDialog(
   BuildContext context, {
   required String path,
   required bool isAudio,
 }) async {
   final transcoder = MediaTranscoder.forCurrentPlatform();
-  if (transcoder == null) {
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      const SnackBar(content: Text('当前平台不支持压缩,请压到 4MB 内再上传')),
-    );
-    return null;
-  }
   final tempDir = await getTemporaryDirectory();
   if (!context.mounted) return null;
 

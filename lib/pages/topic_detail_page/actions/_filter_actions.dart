@@ -14,8 +14,9 @@ extension _FilterActions on _TopicDetailPageState {
       if (detail.postStream.posts.any((p) => p.id == postId)) return true;
     }
     if (postNumber != null) {
-      if (detail.postStream.posts.any((p) => p.postNumber == postNumber))
+      if (detail.postStream.posts.any((p) => p.postNumber == postNumber)) {
         return true;
+      }
     }
     return false;
   }

@@ -157,7 +157,7 @@ class _VoiceRecorderSheetState extends State<_VoiceRecorderSheet> {
       return;
     }
     final transcoder = MediaTranscoder.forCurrentPlatform();
-    if (transcoder != null && await transcoder.ensureReady() == null) {
+    if (await transcoder.ensureReady() == null) {
       try {
         final m4a = path.replaceFirst(RegExp(r'\.wav$'), '.m4a');
         final ok = await transcoder.transcode(TranscodeSpec(

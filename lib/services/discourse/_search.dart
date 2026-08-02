@@ -16,7 +16,7 @@ mixin _SearchMixin on _DiscourseServiceBase {
       queryParameters: {
         'q': query,
         if (page > 1) 'page': page,
-        if (typeFilter != null) 'type_filter': typeFilter,
+        'type_filter': ?typeFilter,
       },
     );
     return SearchResult.fromJson(response.data);

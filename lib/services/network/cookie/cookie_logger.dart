@@ -192,14 +192,14 @@ class CookieLogger {
       'message': msg,
       'url': url,
       'name': name,
-      if (intent != null) 'intent': intent,
-      if (variantsBefore != null) 'variantsBefore': variantsBefore,
-      if (variantsAfter != null) 'variantsAfter': variantsAfter,
-      if (winnerSource != null) 'winnerSource': winnerSource,
-      if (reason != null) 'reason': reason,
-      if (elapsedMs != null) 'elapsedMs': elapsedMs,
-      if (entryGeneration != null) 'entryGeneration': entryGeneration,
-      if (currentGeneration != null) 'currentGeneration': currentGeneration,
+      'intent': ?intent,
+      'variantsBefore': ?variantsBefore,
+      'variantsAfter': ?variantsAfter,
+      'winnerSource': ?winnerSource,
+      'reason': ?reason,
+      'elapsedMs': ?elapsedMs,
+      'entryGeneration': ?entryGeneration,
+      'currentGeneration': ?currentGeneration,
     });
   }
 
@@ -222,9 +222,9 @@ class CookieLogger {
       'event': 'nuclear_reset_$event',
       'message': msg,
       'url': url,
-      if (reason != null) 'reason': reason,
-      if (primingDurationMs != null) 'primingDurationMs': primingDurationMs,
-      if (totalElapsedMs != null) 'totalElapsedMs': totalElapsedMs,
+      'reason': ?reason,
+      'primingDurationMs': ?primingDurationMs,
+      'totalElapsedMs': ?totalElapsedMs,
     });
   }
 
@@ -252,10 +252,10 @@ class CookieLogger {
       'event': 'priming_$event',
       'message': msg,
       'url': url,
-      if (isPrimed != null) 'isPrimed': isPrimed,
-      if (cookiesInjected != null) 'cookiesInjected': cookiesInjected,
-      if (durationMs != null) 'durationMs': durationMs,
-      if (reason != null) 'reason': reason,
+      'isPrimed': ?isPrimed,
+      'cookiesInjected': ?cookiesInjected,
+      'durationMs': ?durationMs,
+      'reason': ?reason,
     });
   }
 
@@ -284,12 +284,12 @@ class CookieLogger {
       'event': 'self_healing_$event',
       'message': msg,
       'url': url,
-      if (status != null) 'status': status,
-      if (jarHasValidToken != null) 'jarHasValidToken': jarHasValidToken,
-      if (hasLoggedOutHeader != null) 'hasLoggedOutHeader': hasLoggedOutHeader,
-      if (attempt != null) 'attempt': attempt,
-      if (attemptsUsed != null) 'attemptsUsed': attemptsUsed,
-      if (finalAction != null) 'finalAction': finalAction,
+      'status': ?status,
+      'jarHasValidToken': ?jarHasValidToken,
+      'hasLoggedOutHeader': ?hasLoggedOutHeader,
+      'attempt': ?attempt,
+      'attemptsUsed': ?attemptsUsed,
+      'finalAction': ?finalAction,
     });
   }
 
@@ -310,8 +310,8 @@ class CookieLogger {
       'event': 'lock_timeout',
       'message': msg,
       'name': name,
-      if (consecutiveCount != null) 'consecutiveCount': consecutiveCount,
-      if (currentHolder != null) 'currentHolder': currentHolder,
+      'consecutiveCount': ?consecutiveCount,
+      'currentHolder': ?currentHolder,
     });
   }
 }
