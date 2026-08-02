@@ -8,7 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/s.dart';
 import '../../models/user.dart';
 import '../../providers/discourse_providers.dart';
-import '../../pages/user_profile_page.dart';
+import '../../pages/user_profile_page/user_profile_page.dart';
 import '../../services/app_error_handler.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../services/preloaded_data_service.dart';

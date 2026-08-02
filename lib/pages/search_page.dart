@@ -20,7 +20,7 @@ import 'topic_detail_page/topic_detail_page.dart';
 import 'package:dio/dio.dart';
 import '../services/app_error_handler.dart';
 import '../l10n/s.dart';
-import 'user_profile_page.dart';
+import 'user_profile_page/user_profile_page.dart';
 import '../utils/dialog_utils.dart';
 import '../utils/load_more_coordinator.dart';
 import '../utils/blocked_user_filter.dart';

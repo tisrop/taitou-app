@@ -17,7 +17,7 @@ import 'export_history_page.dart';
 import 'my_browser_page.dart';
 import 'my_topics_page.dart';
 import 'my_badges_page.dart';
-import 'user_profile_page.dart';
+import 'user_profile_page/user_profile_page.dart';
 import 'settings_page.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import '../widgets/common/overlay/loading_dialog.dart';

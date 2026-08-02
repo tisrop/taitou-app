@@ -9,7 +9,7 @@ import '../navigation/nav_action_bus.dart';
 import '../services/app_logger.dart';
 import '../services/discourse/discourse_service.dart';
 import '../widgets/common/visual/smart_avatar.dart';
-import 'user_profile_page.dart';
+import 'user_profile_page/user_profile_page.dart';
 
 typedef GamificationPageLoader =
     Future<GamificationLeaderboardResponse> Function(int page);

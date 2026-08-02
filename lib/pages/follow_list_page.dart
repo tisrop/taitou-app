@@ -6,7 +6,7 @@ import '../models/user.dart';
 import '../providers/discourse_providers.dart';
 import '../widgets/common/misc/error_view.dart';
 import '../widgets/common/visual/smart_avatar.dart';
-import 'user_profile_page.dart';
+import 'user_profile_page/user_profile_page.dart';
 import '../l10n/s.dart';
 
 /// 关注/粉丝列表页面

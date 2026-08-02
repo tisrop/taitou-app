@@ -19,7 +19,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 import '../l10n/s.dart';
 import '../pages/image_viewer_page.dart';
 import '../pages/mermaid_viewer_page.dart';
-import '../pages/user_profile_page.dart';
+import '../pages/user_profile_page/user_profile_page.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../models/topic.dart' show Post, MentionedUser, LinkCount;
 import '../providers/download_provider.dart';

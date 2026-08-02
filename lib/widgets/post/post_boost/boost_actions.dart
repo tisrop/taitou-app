@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/s.dart';
 import '../../../models/topic.dart';
-import '../../../pages/user_profile_page.dart';
+import '../../../pages/user_profile_page/user_profile_page.dart';
 import '../../../providers/discourse_providers.dart';
 import '../../../services/discourse/discourse_service.dart';
 import '../../../services/app_error_handler.dart';

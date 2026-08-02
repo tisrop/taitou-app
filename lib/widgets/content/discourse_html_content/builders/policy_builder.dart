@@ -3,7 +3,7 @@ import 'package:app_icons/app_icons.dart';
 import 'package:html/dom.dart' as dom;
 
 import '../../../../models/topic.dart';
-import '../../../../pages/user_profile_page.dart';
+import '../../../../pages/user_profile_page/user_profile_page.dart';
 import '../../../../services/discourse/discourse_service.dart';
 import '../../../../services/toast_service.dart';
 import '../../../../widgets/common/visual/smart_avatar.dart';

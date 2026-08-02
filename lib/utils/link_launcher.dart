@@ -6,7 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config/site_customization.dart';
 import '../constants.dart';
 import '../pages/image_viewer_page.dart';
-import '../pages/user_profile_page.dart';
+import '../pages/user_profile_page/user_profile_page.dart';
 import '../pages/webview_page.dart';
 import '../providers/preferences_provider.dart';
 import '../services/discourse/discourse_service.dart';

@@ -14,7 +14,7 @@ import '../widgets/badge/badge_ui_utils.dart';
 import '../utils/fluxdo_render_callbacks.dart';
 import '../services/emoji_handler.dart';
 import 'topic_detail_page/topic_detail_page.dart';
-import 'user_profile_page.dart';
+import 'user_profile_page/user_profile_page.dart';
 import '../l10n/s.dart';
 import 'package:app_icons/app_icons.dart';
 

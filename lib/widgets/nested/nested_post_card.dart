@@ -7,7 +7,7 @@ import '../../models/topic.dart';
 import '../../providers/nested_topic_provider.dart';
 import '../../providers/preferences_provider.dart';
 import '../../providers/topic_session_provider.dart';
-import '../../pages/user_profile_page.dart';
+import '../../pages/user_profile_page/user_profile_page.dart';
 import '../../utils/blocked_user_filter.dart';
 import '../../utils/fluxdo_render_callbacks.dart';
 import '../../utils/responsive.dart';
