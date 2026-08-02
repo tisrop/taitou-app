@@ -3,10 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 import 'package:gal/gal.dart';
-import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:cross_file/cross_file.dart';
 import 'dart:io';
+import 'png_encoder.dart';
 import 'share_utils.dart';
 
 /// Widget 截图工具类
@@ -66,7 +66,8 @@ class ScreenshotUtils {
   }
 
   /// 分块截图拼接（用于超长帖）
-  /// 使用 image package 在 CPU 端拼接，避免最终合成时再次触碰 GPU 纹理限制
+  /// 在 CPU 端用 [PngEncoder] 拼接各块的 RGBA 像素,避免最终合成时再次触碰
+  /// GPU 纹理限制。各块像素逐行 memcpy 到全幅画布。
   static Future<Uint8List?> _captureInChunks(RenderRepaintBoundary boundary, double pixelRatio) async {
     // ignore: invalid_use_of_protected_member
     final layer = boundary.layer;
@@ -86,8 +87,9 @@ class ScreenshotUtils {
 
     debugPrint('[ScreenshotUtils] 分块截图：$chunkCount 块，每块逻辑高度 $chunkLogicalHeight');
 
-    // 在 CPU 端创建最终图像
-    final fullImage = img.Image(width: totalPixelWidth, height: totalPixelHeight);
+    // CPU 端画布:RGBA8888,逐行 memcpy 各块像素
+    final fullCanvas = Uint8List(totalPixelWidth * totalPixelHeight * 4);
+    final rowBytes = totalPixelWidth * 4;
 
     for (int i = 0; i < chunkCount; i++) {
       final top = i * chunkLogicalHeight;
@@ -99,7 +101,6 @@ class ScreenshotUtils {
       final chunkImage = await layer.toImage(bounds, pixelRatio: pixelRatio);
 
       try {
-        // 获取 RGBA 原始像素数据
         final byteData = await chunkImage.toByteData(format: ui.ImageByteFormat.rawRgba);
         if (byteData == null) continue;
 
@@ -107,20 +108,17 @@ class ScreenshotUtils {
         final chunkPixelHeight = chunkImage.height;
         final pixels = byteData.buffer.asUint8List();
         final yOffset = (top * pixelRatio).round();
+        final chunkRowBytes = chunkPixelWidth * 4;
 
-        // 逐行复制像素到最终图像
+        // 逐行 memcpy(宽度一致时整行拷贝;若块宽度因取整略小则按块宽拷)
+        final copyWidth = chunkPixelWidth < totalPixelWidth ? chunkPixelWidth : totalPixelWidth;
+        final copyBytes = copyWidth * 4;
         for (int y = 0; y < chunkPixelHeight; y++) {
           final destY = yOffset + y;
           if (destY >= totalPixelHeight) break;
-          for (int x = 0; x < chunkPixelWidth; x++) {
-            if (x >= totalPixelWidth) break;
-            final srcIndex = (y * chunkPixelWidth + x) * 4;
-            final r = pixels[srcIndex];
-            final g = pixels[srcIndex + 1];
-            final b = pixels[srcIndex + 2];
-            final a = pixels[srcIndex + 3];
-            fullImage.setPixelRgba(x, destY, r, g, b, a);
-          }
+          final srcOffset = y * chunkRowBytes;
+          final dstOffset = destY * rowBytes;
+          fullCanvas.setRange(dstOffset, dstOffset + copyBytes, pixels, srcOffset);
         }
       } finally {
         chunkImage.dispose();
@@ -128,8 +126,7 @@ class ScreenshotUtils {
     }
 
     // CPU 端编码为 PNG
-    final pngBytes = img.encodePng(fullImage);
-    return Uint8List.fromList(pngBytes);
+    return const PngEncoder().encodeRgba(fullCanvas, totalPixelWidth, totalPixelHeight);
   }
 
   /// 保存图片到相册
