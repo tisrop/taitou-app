@@ -73,9 +73,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   @override
   Widget build(BuildContext context) {
     final notificationsAsync = ref.watch(notificationListProvider);
-    final systemAvatarTemplate = ref
-        .watch(systemUserAvatarTemplateProvider)
-        .value;
 
     return Scaffold(
       appBar: AppBar(
@@ -155,7 +152,6 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                 final notification = visibleNotifications[index];
                 return NotificationItem(
                   notification: notification,
-                  systemAvatarTemplate: systemAvatarTemplate,
                   onTap: () =>
                       handleNotificationTap(context, ref, notification),
                 );

@@ -5,6 +5,7 @@ import '../providers/discourse_providers.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../pages/user_profile_page/user_profile_page.dart';
 import '../pages/badge_page.dart';
+import '../pages/chat_channel_page.dart';
 import '../services/local_notification_service.dart';
 
 NavigatorState? _rootNavigator(BuildContext context) {
@@ -64,6 +65,31 @@ void handleNotificationTap(
       break;
 
     case NotificationType.membershipRequestAccepted:
+      break;
+
+    case NotificationType.chatMention:
+    case NotificationType.chatGroupMention:
+      final channelId = notification.data.chatChannelId;
+      // 子线程消息仍可通过 messageId 在频道流中定位；chatThreadId 暂为预留，
+      // 等 ChatChannelPage 支持线程视角后再透传以恢复线程上下文。
+      if (channelId != null) {
+        _pushOnRootNavigator(
+          context,
+          ChatChannelPage(
+            channelId: channelId,
+            title: notification.data.chatChannelTitle ?? '',
+            initialMessageId: notification.data.chatMessageId,
+          ),
+        );
+      }
+      break;
+
+    case NotificationType.chatMessage:
+    case NotificationType.chatQuotedPost:
+    case NotificationType.chatInvitation:
+    case NotificationType.chatWatchedThread:
+      // TODO(notification): 使用 chatChannelId/chatMessageId 补齐聊天室通知跳转。
+      // 当前仅 chatMention/chatGroupMention 需要支持点击后定位消息。
       break;
 
     case NotificationType.boost:

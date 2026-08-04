@@ -39,6 +39,33 @@
   "notification_channelDiscourse": "Discourse 通知",
   "notification_channelDiscourseDesc": "來自 Discourse 論壇的通知",
   "notification_chatGroupMention": "群組在聊天中被提及",
+  "notification_chatGroupMentionInChannel": "在“{channel}”中提及“@{groupName}”",
+  "@notification_chatGroupMentionInChannel": {
+    "placeholders": {
+      "channel": {
+        "type": "String"
+      },
+      "groupName": {
+        "type": "String"
+      }
+    }
+  },
+  "notification_chatGroupMentionInChannelFallback": "在“{channel}”中提及了群組",
+  "@notification_chatGroupMentionInChannelFallback": {
+    "placeholders": {
+      "channel": {
+        "type": "String"
+      }
+    }
+  },
+  "notification_chatGroupMentionTarget": "在聊天中提及“@{groupName}”",
+  "@notification_chatGroupMentionTarget": {
+    "placeholders": {
+      "groupName": {
+        "type": "String"
+      }
+    }
+  },
   "notification_chatInvitation": "{username} 邀請你參與聊天",
   "@notification_chatInvitation": {
     "placeholders": {
@@ -51,6 +78,15 @@
   "@notification_chatMention": {
     "placeholders": {
       "username": {
+        "type": "String"
+      }
+    }
+  },
+  "notification_chatMentionContext": "在聊天中提及了你",
+  "notification_chatMentionInChannel": "在“{channel}”中提及了你",
+  "@notification_chatMentionInChannel": {
+    "placeholders": {
+      "channel": {
         "type": "String"
       }
     }
