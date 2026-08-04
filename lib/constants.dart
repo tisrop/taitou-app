@@ -9,6 +9,9 @@ import 'config/sites/openxinsheng.dart';
 
 /// 应用常量（仅支持 Android）。
 class AppConstants {
+  /// 应用对外展示名称。
+  static const String appName = '开源心声社区';
+
   /// 当前站点自定义配置
   static final SiteCustomization siteCustomization = openxinshengCustomization;
 
