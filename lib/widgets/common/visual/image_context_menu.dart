@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter/services.dart';
 import 'package:cross_file/cross_file.dart';
+import 'package:gal/gal.dart';
 import 'package:super_clipboard/super_clipboard.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../l10n/s.dart';
 import '../../../utils/share_utils.dart';
 import '../../../models/topic.dart';
@@ -14,6 +16,29 @@ import '../../../utils/platform_utils.dart';
 import '../../../utils/quote_builder.dart';
 import '../../content/discourse_html_content/image_utils.dart';
 import 'package:common_ui/common_ui.dart';
+
+enum ImageContextMenuPresentation { standard, compactFloating }
+
+/// Allows a render surface to opt its descendant images into a specialized
+/// long-press menu without rebuilding the shared render callback bundle.
+class ImageContextMenuScope extends InheritedWidget {
+  const ImageContextMenuScope({
+    super.key,
+    required this.presentation,
+    this.onMarkAd,
+    required super.child,
+  });
+
+  final ImageContextMenuPresentation presentation;
+  final VoidCallback? onMarkAd;
+
+  static ImageContextMenuScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ImageContextMenuScope>();
+
+  @override
+  bool updateShouldNotify(ImageContextMenuScope oldWidget) =>
+      presentation != oldWidget.presentation || onMarkAd != oldWidget.onMarkAd;
+}
 
 /// 图片上下文菜单
 ///
@@ -42,8 +67,19 @@ class ImageContextMenu {
     Offset? position,
     VoidCallback? onClose,
     String? heroTag,
+    ImageContextMenuPresentation? presentation,
+    VoidCallback? onMarkAd,
+    double? imageWidth,
+    double? imageHeight,
+    String? fileSizeText,
   }) {
     final originalUrl = DiscourseImageUtils.getOriginalUrl(imageUrl);
+    final scope = ImageContextMenuScope.maybeOf(context);
+    final effectivePresentation =
+        presentation ??
+        scope?.presentation ??
+        ImageContextMenuPresentation.standard;
+    final effectiveOnMarkAd = onMarkAd ?? scope?.onMarkAd;
 
     if (PlatformUtils.isDesktop && position != null) {
       _showDesktopMenu(
@@ -58,6 +94,22 @@ class ImageContextMenu {
         onClose: onClose,
         heroTag: heroTag,
       );
+    } else if (effectivePresentation ==
+        ImageContextMenuPresentation.compactFloating) {
+      _showCompactMobileMenu(
+        context: context,
+        originalUrl: originalUrl,
+        imageUrl: imageUrl,
+        showViewFullImage: showViewFullImage,
+        post: post,
+        topicId: topicId,
+        onQuoteImage: onQuoteImage,
+        heroTag: heroTag,
+        onMarkAd: effectiveOnMarkAd,
+        imageWidth: imageWidth,
+        imageHeight: imageHeight,
+        fileSizeText: fileSizeText,
+      );
     } else {
       _showMobileMenu(
         context: context,
@@ -71,6 +123,165 @@ class ImageContextMenu {
         heroTag: heroTag,
       );
     }
+  }
+
+  /// Chat images use a compact floating menu that mirrors the browser-style
+  /// long-press surface while keeping every action inside the app.
+  static void _showCompactMobileMenu({
+    required BuildContext context,
+    required String originalUrl,
+    required String imageUrl,
+    required bool showViewFullImage,
+    Post? post,
+    int? topicId,
+    void Function(String quote, Post post)? onQuoteImage,
+    String? heroTag,
+    VoidCallback? onMarkAd,
+    double? imageWidth,
+    double? imageHeight,
+    String? fileSizeText,
+  }) {
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black.withValues(alpha: 0.18),
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (dialogContext, _, _) {
+        final theme = Theme.of(dialogContext);
+        final size = MediaQuery.sizeOf(dialogContext);
+        final menuWidth = (size.width * 0.64).clamp(260.0, 380.0).toDouble();
+
+        void closeThen(VoidCallback action) {
+          Navigator.of(dialogContext).pop();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) action();
+          });
+        }
+
+        return SafeArea(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Material(
+                color: theme.colorScheme.surface,
+                elevation: 10,
+                shadowColor: Colors.black.withValues(alpha: 0.24),
+                borderRadius: BorderRadius.circular(24),
+                clipBehavior: Clip.antiAlias,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: menuWidth,
+                    maxWidth: menuWidth,
+                    maxHeight: size.height * 0.84,
+                  ),
+                  child: ListView(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    children: [
+                      if (showViewFullImage)
+                        _compactItem(
+                          dialogContext,
+                          S.current.image_view,
+                          () => closeThen(
+                            () => ImageViewerPage.open(
+                              context,
+                              originalUrl,
+                              thumbnailUrl: imageUrl,
+                              heroTag: heroTag,
+                            ),
+                          ),
+                        ),
+                      _compactItem(
+                        dialogContext,
+                        S.current.image_download,
+                        () => closeThen(() => _saveImage(originalUrl)),
+                      ),
+                      _compactItem(
+                        dialogContext,
+                        S.current.common_shareImage,
+                        () => closeThen(() => _shareImage(originalUrl)),
+                      ),
+                      _compactItem(
+                        dialogContext,
+                        S.current.image_reverseSearch,
+                        () => closeThen(() => _openWithLens(originalUrl)),
+                      ),
+                      _compactItem(
+                        dialogContext,
+                        S.current.image_pageInfo,
+                        () => closeThen(
+                          () => _showImageInfo(
+                            context,
+                            originalUrl,
+                            width: imageWidth,
+                            height: imageHeight,
+                            fileSizeText: fileSizeText,
+                          ),
+                        ),
+                      ),
+                      if (onMarkAd != null)
+                        _compactItem(
+                          dialogContext,
+                          S.current.image_markAd,
+                          () => closeThen(onMarkAd),
+                        ),
+                      _compactItem(
+                        dialogContext,
+                        S.current.image_moreOptions,
+                        () => closeThen(
+                          () => _showMobileMenu(
+                            context: context,
+                            originalUrl: originalUrl,
+                            imageUrl: imageUrl,
+                            showViewFullImage: showViewFullImage,
+                            post: post,
+                            topicId: topicId,
+                            onQuoteImage: onQuoteImage,
+                            heroTag: heroTag,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (_, animation, _, child) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.08, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+          child: child,
+        ),
+      ),
+    );
+  }
+
+  static Widget _compactItem(
+    BuildContext context,
+    String label,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: 58,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(label, style: Theme.of(context).textTheme.titleMedium),
+          ),
+        ),
+      ),
+    );
   }
 
   /// 桌面端：在鼠标位置弹出 Popup Menu
@@ -117,11 +328,17 @@ class ImageContextMenu {
         ),
       PopupMenuItem(
         value: 'copyImage',
-        child: _MenuItemRow(icon: Symbols.content_copy_rounded, label: S.current.image_copyImage),
+        child: _MenuItemRow(
+          icon: Symbols.content_copy_rounded,
+          label: S.current.image_copyImage,
+        ),
       ),
       PopupMenuItem(
         value: 'copyLink',
-        child: _MenuItemRow(icon: Symbols.link_rounded, label: S.current.image_copyLink),
+        child: _MenuItemRow(
+          icon: Symbols.link_rounded,
+          label: S.current.image_copyLink,
+        ),
       ),
       PopupMenuItem(
         value: 'share',
@@ -150,7 +367,10 @@ class ImageContextMenu {
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'close',
-          child: _MenuItemRow(icon: Symbols.close_rounded, label: S.current.common_close),
+          child: _MenuItemRow(
+            icon: Symbols.close_rounded,
+            label: S.current.common_close,
+          ),
         ),
       ],
     ];
@@ -331,6 +551,88 @@ class ImageContextMenu {
       case 'close':
         onClose?.call();
     }
+  }
+
+  static Future<void> _saveImage(String imageUrl) async {
+    try {
+      final hasAccess = await Gal.hasAccess() || await Gal.requestAccess();
+      if (!hasAccess) {
+        ToastService.showInfo(S.current.imageViewer_grantPermission);
+        return;
+      }
+      final bytes = await BlobImageCache.fetch(
+        BlobImageCache.originalBucket,
+        imageUrl,
+      );
+      if (bytes.isEmpty) {
+        ToastService.showError(S.current.image_fetchFailed);
+        return;
+      }
+      final ext = _getExtensionFromUrl(imageUrl);
+      await Gal.putImageBytes(
+        bytes,
+        name: 'fluxdo_${DateTime.now().millisecondsSinceEpoch}.$ext',
+      );
+      ToastService.showSuccess(S.current.imageViewer_imageSaved);
+    } catch (error) {
+      debugPrint('[ImageContextMenu] saveImage error: $error');
+      ToastService.showError(S.current.imageViewer_saveFailedRetry);
+    }
+  }
+
+  static Future<void> _openWithLens(String imageUrl) async {
+    try {
+      final uri = Uri.https('lens.google.com', '/uploadbyurl', {
+        'url': imageUrl,
+      });
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened) ToastService.showError(S.current.common_cannotOpenBrowser);
+    } catch (error) {
+      debugPrint('[ImageContextMenu] openWithLens error: $error');
+      ToastService.showError(S.current.common_cannotOpenBrowser);
+    }
+  }
+
+  static void _showImageInfo(
+    BuildContext context,
+    String imageUrl, {
+    double? width,
+    double? height,
+    String? fileSizeText,
+  }) {
+    final dimensions = width != null && height != null
+        ? '${width.round()} × ${height.round()}'
+        : null;
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(S.current.image_pageInfo),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (dimensions != null) ...[
+              Text(
+                dimensions,
+                style: Theme.of(dialogContext).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+            ],
+            if (fileSizeText != null && fileSizeText.isNotEmpty) ...[
+              Text(fileSizeText),
+              const SizedBox(height: 8),
+            ],
+            SelectableText(imageUrl),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(S.current.common_close),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 复制图片到剪贴板

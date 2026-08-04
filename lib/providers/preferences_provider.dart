@@ -498,7 +498,7 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
           ),
           bottomNavIds:
               _prefs.getStringList(_bottomNavIdsKey) ??
-              const [NavEntryIds.home, NavEntryIds.profile],
+              const [NavEntryIds.home, NavEntryIds.chat, NavEntryIds.profile],
           displayModeRefreshRate:
               _prefs.getInt(_displayModeRefreshRateKey) ?? 0,
           progressGesturesEnabled:

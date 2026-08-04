@@ -97,6 +97,23 @@
   "userCard_lastPosted": "Last post",
   "userCard_mute": "Mute",
   "userCard_ignore": "Ignore",
+  "userCard_postedAt": "Posted",
+  "userCard_joinedAt": "Joined:",
+  "userCard_reading": "Read {total} (recent {recent})",
+  "@userCard_reading": {
+    "placeholders": {
+      "total": { "type": "String" },
+      "recent": { "type": "String" }
+    }
+  },
+  "userCard_otherBadges": "Other (+{count})",
+  "@userCard_otherBadges": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "userCard_referenceTopicTitle": "Re: {title}",
   "@userCard_referenceTopicTitle": {
     "placeholders": {

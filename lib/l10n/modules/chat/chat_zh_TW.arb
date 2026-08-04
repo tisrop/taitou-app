@@ -1,0 +1,242 @@
+{
+  "@@locale": "zh_TW",
+  "chat_title": "聊天",
+  "chat_nav": "聊天",
+  "chat_empty": "暂无可用频道",
+  "chat_channels": "频道",
+  "chat_directMessages": "直接消息",
+  "chat_channelMessagesEmpty": "还没有消息，来发第一条吧",
+  "chat_messageInputHint": "输入消息…",
+  "chat_directMessageFirstUser": "你是 #{name} 中的第一個使用者",
+  "@chat_directMessageFirstUser": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_directMessageStart": "搶先發言，開啟對話。",
+  "chat_directMessageUsersHere": "{count} 個使用者在這裡",
+  "@chat_directMessageUsersHere": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_directMessageInputHint": "與 @{username} 聊天",
+  "@chat_directMessageInputHint": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_send": "发送",
+  "chat_loadMoreError": "加载更多失败，请重试",
+  "chat_sendFailed": "发送失败，请重试",
+  "chat_loadMore": "加载更早消息",
+  "chat_retry": "重试",
+  "chat_muted": "已静音",
+  "chat_unreadCount": "{count} 条未读",
+  "@chat_unreadCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_moreActions": "更多操作",
+  "chat_insertEmoji": "插入表情符號",
+  "chat_attachFile": "附加檔案",
+  "chat_insertGif": "插入 GIF",
+  "chat_summarize": "總結訊息",
+  "chat_uploading": "上傳中…",
+  "chat_uploadFailed": "上傳失敗，請重試",
+  "chat_summarizeRangeTitle": "總結哪段時間的訊息",
+  "chat_summarizeRangeHours": "過去 {hours} 小時",
+  "@chat_summarizeRangeHours": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_summarizeTitle": "訊息總結",
+  "chat_summarizeEmpty": "這段時間沒有訊息",
+  "chat_summarizeNoModel": "還沒有設定 AI 模型，請先到設定裡新增",
+  "chat_summarizeFailed": "總結失敗，請重試",
+  "chat_summarizeCollecting": "正在收集訊息…",
+  "chat_summarizeTruncated": "訊息太多，只總結了最近 {count} 則",
+  "@chat_summarizeTruncated": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_summarizeCopy": "複製",
+  "chat_summarizeCopied": "已複製",
+  "chat_gifSearchHint": "搜尋 GIF",
+  "chat_gifCategories": "按類別瀏覽",
+  "chat_gifNoResults": "找不到 GIF",
+  "chat_gifLoadFailed": "GIF 載入失敗，請重試",
+  "chat_directMessagesEmpty": "您還沒有加入任何直接訊息！",
+  "chat_startConversation": "開始一個對話",
+  "chat_newDirectMessage": "發起直接訊息",
+  "chat_deleteDirectMessage": "刪除對話",
+  "chat_deleteDirectMessageConfirm": "確定要從直接訊息列表中刪除「{name}」嗎？",
+  "@chat_deleteDirectMessageConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_deleteDirectMessageFailed": "刪除直接訊息失敗，請重試",
+  "chat_searchUsersHint": "搜尋使用者",
+  "chat_searchUsersPrompt": "搜尋使用者並開始一個對話",
+  "chat_noUsersFound": "找不到使用者",
+  "chat_createDirectMessageFailed": "無法發起對話，請重試",
+  "chat_filterChannels": "篩選",
+  "chat_createGroupChat": "新增群組聊天",
+  "chat_groupNameOptional": "群組聊天名稱（可選）",
+  "chat_addMoreMembers": "新增更多成員",
+  "chat_memberCount": "{count}/{max} 成員",
+  "chat_groupNeedsMembers": "請至少選擇 2 位成員",
+  "chat_groupMemberLimit": "最多可選擇 20 位成員",
+  "chat_createGroupFailed": "無法建立群組聊天，請重試",
+  "chat_noChannelsFound": "找不到頻道",
+  "@chat_memberCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_searchTitle": "搜尋聊天",
+  "chat_searchMessagesHint": "搜尋訊息",
+  "chat_searchSortRelevance": "相關性",
+  "chat_searchSortLatest": "最新",
+  "chat_searchNoResults": "找不到訊息",
+  "chat_searchPrompt": "輸入關鍵字搜尋聊天訊息",
+  "chat_searchFailed": "搜尋失敗，請重試",
+  "chat_starChannel": "收藏頻道",
+  "chat_unstarChannel": "取消收藏",
+  "chat_starChannelFailed": "收藏狀態更新失敗，請重試",
+  "chat_threadsTitle": "訊息串",
+  "chat_threadsEmpty": "此頻道尚未有訊息串",
+  "chat_threadsFailed": "訊息串載入失敗，請重試",
+  "chat_threadReplies": "{count} 則回覆",
+  "@chat_threadReplies": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_threadMessagesEmpty": "此訊息串尚未有回覆",
+  "chat_messageNoText": "訊息",
+  "chat_messageCopyLink": "複製連結",
+  "chat_messageCopyText": "複製文字",
+  "chat_messageSelect": "選擇",
+  "chat_messagePin": "置頂訊息",
+  "chat_messageUnpin": "取消置頂",
+  "chat_messageReport": "檢舉",
+  "chat_messageDelete": "刪除",
+  "chat_messageRebake": "重建 HTML",
+  "chat_messageBookmark": "收藏",
+  "chat_messageRemoveBookmark": "取消收藏",
+  "chat_messageReply": "回覆",
+  "chat_messageMoreReactions": "更多表情回應",
+  "chat_messageCopied": "已複製訊息",
+  "chat_messageLinkCopied": "已複製連結",
+  "chat_messageActionFailed": "操作失敗，請重試",
+  "chat_messageDeleteConfirm": "確定要刪除此訊息嗎？",
+  "chat_messageBookmarked": "已收藏訊息",
+  "chat_messageBookmarkRemoved": "已取消收藏",
+  "chat_messagePinned": "已置頂訊息",
+  "chat_messageUnpinned": "已取消置頂",
+  "chat_messageRebaked": "已重建訊息 HTML",
+  "chat_messageReported": "檢舉已提交",
+  "chat_messageReportNote": "補充說明（選填）",
+  "chat_messageReplyingTo": "回覆 {username}",
+  "@chat_messageReplyingTo": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_messageSelectedCount": "已選擇 {count} 則",
+  "@chat_messageSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_browseChannels": "瀏覽頻道",
+  "chat_channelStatusAll": "所有",
+  "chat_channelStatusOpen": "開放",
+  "chat_channelStatusClosed": "已關閉",
+  "chat_channelJoinedAll": "所有頻道",
+  "chat_channelJoined": "已加入",
+  "chat_channelNotJoined": "未加入",
+  "chat_searchChannelsHint": "按名稱搜尋頻道",
+  "chat_createChannel": "建立頻道",
+  "chat_newChannel": "新增頻道",
+  "chat_channelName": "頻道名稱",
+  "chat_channelSlug": "頻道縮略名（可選）",
+  "chat_channelDescription": "描述（可選）",
+  "chat_selectCategory": "選擇一個分類",
+  "chat_selectCategoryHint": "選擇一個…",
+  "chat_categoryPermissionsHint": "分類安全性設定決定哪些使用者可以存取此頻道。",
+  "chat_channelEmoji": "頻道表情符號（可選）",
+  "chat_chooseEmoji": "選擇表情符號",
+  "chat_resetEmoji": "重設表情符號",
+  "chat_autoJoinUsers": "自動加入使用者",
+  "chat_autoJoinUsersDescription": "每小時檢查哪些使用者在過去 3 個月中活躍。如果他們可以存取所選分類，請將其加入此頻道。",
+  "chat_enableThreads": "啟用討論串",
+  "chat_enableThreadsDescription": "啟用後，回覆聊天訊息會建立獨立對話，並與主頻道並存。",
+  "chat_createChannelFailed": "無法建立頻道，請再試一次",
+  "chat_joinChannelFailed": "無法加入頻道，請再試一次",
+  "chat_closedChannelUnavailable": "無法加入已關閉的頻道",
+  "chat_channelNameRequired": "請輸入頻道名稱",
+  "chat_categoryRequired": "請選擇一個分類",
+  "chat_joinChannel": "加入",
+  "chat_channelMembers": "{count} 位成員",
+  "@chat_channelMembers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_channelTitleSection": "標題",
+  "chat_channelSettingsSection": "設定",
+  "chat_channelInfoSection": "頻道資訊",
+  "chat_membersTitle": "成員",
+  "chat_membersEmpty": "暫無成員",
+  "chat_channelMute": "將頻道設為勿擾",
+  "chat_pushNotifications": "傳送推播通知",
+  "chat_notificationNever": "永不",
+  "chat_notificationMentions": "僅限提及",
+  "chat_notificationAll": "所有活動",
+  "chat_channelHistory": "歷史記錄",
+  "chat_channelHistoryForever": "無限期",
+  "chat_leaveChannel": "離開頻道",
+  "chat_leaveChannelConfirm": "確定要離開「{name}」嗎？",
+  "@chat_leaveChannelConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_leaveChannelFailed": "離開頻道失敗，請再試一次",
+  "chat_channelSettingsUpdateFailed": "頻道設定更新失敗，請再試一次"
+}

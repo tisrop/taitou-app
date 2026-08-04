@@ -11,6 +11,7 @@ import 'user_content_providers.dart';
 import 'category_provider.dart';
 import 'message_bus/notification_providers.dart';
 import 'message_bus/topic_tracking_providers.dart';
+import 'chat/chat_channel_list_provider.dart';
 
 class AppStateRefresher {
   AppStateRefresher._();
@@ -117,5 +118,6 @@ class AppStateRefresher {
     (c) => c.invalidate(notificationAlertChannelProvider),
     (c) => c.invalidate(latestChannelProvider),
     (c) => c.invalidate(messageBusInitProvider),
+    (c) => c.invalidate(chatChannelListProvider),
   ];
 }

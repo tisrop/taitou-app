@@ -23,6 +23,11 @@ import '../../models/template.dart';
 import '../../models/post_revision.dart';
 import '../../models/pending_post.dart';
 import '../../models/gamification.dart';
+import '../../models/chat/chat_channel.dart';
+import '../../models/chat/chat_message.dart';
+import '../../models/chat/chat_message_search.dart';
+import '../../models/chat/chat_thread.dart';
+import '../../models/chat/gif.dart';
 
 import '../../constants.dart';
 import '../../providers/message_bus_providers.dart';
@@ -72,6 +77,8 @@ part '_revisions.dart';
 part '_onebox.dart';
 part '_reviewables.dart';
 part '_gamification.dart';
+part '_chat.dart';
+part '_gifs.dart';
 
 /// 基类，包含所有共享字段
 abstract class _DiscourseServiceBase {
@@ -136,7 +143,9 @@ class DiscourseService extends _DiscourseServiceBase
         _RevisionsMixin,
         _OneboxMixin,
         _ReviewablesMixin,
-        _GamificationMixin {
+        _GamificationMixin,
+        _ChatMixin,
+        _GifsMixin {
   static const String baseUrl = AppConstants.baseUrl;
   static const String _usernameKey = 'linux_do_username';
   static const _summaryCacheDuration = Duration(minutes: 5);

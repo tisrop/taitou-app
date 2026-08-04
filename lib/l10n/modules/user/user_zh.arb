@@ -118,6 +118,23 @@
   "userCard_lastPosted": "最后发布",
   "userCard_mute": "免打扰",
   "userCard_ignore": "忽略",
+  "userCard_postedAt": "发布时间",
+  "userCard_joinedAt": "加入日期：",
+  "userCard_reading": "阅读 {total} (最近 {recent})",
+  "@userCard_reading": {
+    "placeholders": {
+      "total": { "type": "String" },
+      "recent": { "type": "String" }
+    }
+  },
+  "userCard_otherBadges": "其他 (+{count})",
+  "@userCard_otherBadges": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "userCard_referenceTopicTitle": "回复:{title}",
   "@userCard_referenceTopicTitle": {
     "placeholders": {

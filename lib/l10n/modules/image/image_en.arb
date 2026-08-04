@@ -88,6 +88,14 @@
   "image_copyFailed": "Failed to copy image",
   "image_copyImage": "Copy image",
   "image_copyLink": "Copy link",
+  "image_download": "Download image",
   "image_fetchFailed": "Failed to fetch image",
+  "image_markAd": "Mark as advertisement",
+  "image_moreOptions": "More options",
+  "image_pageInfo": "Page information",
+  "image_reverseSearch": "Search by image",
+  "image_scanQr": "Scan QR code",
+  "image_view": "View image",
+  "image_viewMode": "Image viewing mode",
   "image_viewFull": "View full image"
 }

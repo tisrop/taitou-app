@@ -8,6 +8,7 @@ final openxinshengCustomization = SiteCustomization(
   discourseReactionsEnabled: true,
   gamificationEnabled: true,
   gamificationLeaderboardId: 1,
+  chatEnabled: true,
   linkSecurityConfig: _openxinshengLinkSecurityConfig,
 );
 

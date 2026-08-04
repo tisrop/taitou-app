@@ -1,0 +1,242 @@
+{
+  "@@locale": "zh",
+  "chat_title": "聊天",
+  "chat_nav": "聊天",
+  "chat_empty": "暂无可用频道",
+  "chat_channels": "频道",
+  "chat_directMessages": "直接消息",
+  "chat_channelMessagesEmpty": "还没有消息，来发第一条吧",
+  "chat_messageInputHint": "输入消息…",
+  "chat_directMessageFirstUser": "你是 #{name} 中的第一个用户",
+  "@chat_directMessageFirstUser": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_directMessageStart": "抢先发言，开启对话。",
+  "chat_directMessageUsersHere": "{count} 个用户在这里",
+  "@chat_directMessageUsersHere": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_directMessageInputHint": "与 @{username} 聊天",
+  "@chat_directMessageInputHint": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_send": "发送",
+  "chat_loadMoreError": "加载更多失败，请重试",
+  "chat_sendFailed": "发送失败，请重试",
+  "chat_loadMore": "加载更早消息",
+  "chat_retry": "重试",
+  "chat_muted": "已静音",
+  "chat_unreadCount": "{count} 条未读",
+  "@chat_unreadCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_moreActions": "更多操作",
+  "chat_insertEmoji": "插入表情符号",
+  "chat_attachFile": "附加文件",
+  "chat_insertGif": "插入 GIF",
+  "chat_summarize": "总结消息",
+  "chat_uploading": "上传中…",
+  "chat_uploadFailed": "上传失败，请重试",
+  "chat_summarizeRangeTitle": "总结哪段时间的消息",
+  "chat_summarizeRangeHours": "过去 {hours} 小时",
+  "@chat_summarizeRangeHours": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_summarizeTitle": "消息总结",
+  "chat_summarizeEmpty": "这段时间没有消息",
+  "chat_summarizeNoModel": "还没有配置 AI 模型，请先到设置里添加",
+  "chat_summarizeFailed": "总结失败，请重试",
+  "chat_summarizeCollecting": "正在收集消息…",
+  "chat_summarizeTruncated": "消息太多，只总结了最近 {count} 条",
+  "@chat_summarizeTruncated": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_summarizeCopy": "复制",
+  "chat_summarizeCopied": "已复制",
+  "chat_gifSearchHint": "搜索 GIF",
+  "chat_gifCategories": "按类别浏览",
+  "chat_gifNoResults": "没有找到 GIF",
+  "chat_gifLoadFailed": "GIF 加载失败，请重试",
+  "chat_directMessagesEmpty": "您还没有加入任何直接消息！",
+  "chat_startConversation": "开始一个对话",
+  "chat_newDirectMessage": "发起直接消息",
+  "chat_deleteDirectMessage": "删除对话",
+  "chat_deleteDirectMessageConfirm": "确定要从直接消息列表中删除“{name}”吗？",
+  "@chat_deleteDirectMessageConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_deleteDirectMessageFailed": "删除直接消息失败，请重试",
+  "chat_searchUsersHint": "搜索用户",
+  "chat_searchUsersPrompt": "搜索用户并开始一个对话",
+  "chat_noUsersFound": "没有找到用户",
+  "chat_createDirectMessageFailed": "无法发起对话，请重试",
+  "chat_filterChannels": "筛选",
+  "chat_createGroupChat": "新建群组聊天",
+  "chat_groupNameOptional": "群组聊天名称（可选）",
+  "chat_addMoreMembers": "添加更多成员",
+  "chat_memberCount": "{count}/{max} 成员",
+  "chat_groupNeedsMembers": "请至少选择 2 位成员",
+  "chat_groupMemberLimit": "最多可选择 20 位成员",
+  "chat_createGroupFailed": "无法创建群组聊天，请重试",
+  "chat_noChannelsFound": "没有找到频道",
+  "@chat_memberCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_searchTitle": "搜索聊天",
+  "chat_searchMessagesHint": "搜索消息",
+  "chat_searchSortRelevance": "相关性",
+  "chat_searchSortLatest": "最新",
+  "chat_searchNoResults": "没有找到消息",
+  "chat_searchPrompt": "输入关键词搜索聊天消息",
+  "chat_searchFailed": "搜索失败，请重试",
+  "chat_starChannel": "收藏频道",
+  "chat_unstarChannel": "取消收藏",
+  "chat_starChannelFailed": "收藏状态更新失败，请重试",
+  "chat_threadsTitle": "消息串",
+  "chat_threadsEmpty": "此频道还没有消息串",
+  "chat_threadsFailed": "消息串加载失败，请重试",
+  "chat_threadReplies": "{count} 条回复",
+  "@chat_threadReplies": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_threadMessagesEmpty": "此消息串还没有回复",
+  "chat_messageNoText": "消息",
+  "chat_messageCopyLink": "复制链接",
+  "chat_messageCopyText": "复制文本",
+  "chat_messageSelect": "选择",
+  "chat_messagePin": "置顶消息",
+  "chat_messageUnpin": "取消置顶",
+  "chat_messageReport": "举报",
+  "chat_messageDelete": "删除",
+  "chat_messageRebake": "重建 HTML",
+  "chat_messageBookmark": "收藏",
+  "chat_messageRemoveBookmark": "取消收藏",
+  "chat_messageReply": "回复",
+  "chat_messageMoreReactions": "更多表情回应",
+  "chat_messageCopied": "已复制消息",
+  "chat_messageLinkCopied": "已复制链接",
+  "chat_messageActionFailed": "操作失败，请重试",
+  "chat_messageDeleteConfirm": "确定要删除这条消息吗？",
+  "chat_messageBookmarked": "已收藏消息",
+  "chat_messageBookmarkRemoved": "已取消收藏",
+  "chat_messagePinned": "已置顶消息",
+  "chat_messageUnpinned": "已取消置顶",
+  "chat_messageRebaked": "已重建消息 HTML",
+  "chat_messageReported": "举报已提交",
+  "chat_messageReportNote": "补充说明（可选）",
+  "chat_messageReplyingTo": "回复 {username}",
+  "@chat_messageReplyingTo": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_messageSelectedCount": "已选择 {count} 条",
+  "@chat_messageSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_browseChannels": "浏览频道",
+  "chat_channelStatusAll": "所有",
+  "chat_channelStatusOpen": "开放",
+  "chat_channelStatusClosed": "已关闭",
+  "chat_channelJoinedAll": "所有频道",
+  "chat_channelJoined": "已加入",
+  "chat_channelNotJoined": "未加入",
+  "chat_searchChannelsHint": "按名称搜索频道",
+  "chat_createChannel": "创建频道",
+  "chat_newChannel": "新建频道",
+  "chat_channelName": "频道名称",
+  "chat_channelSlug": "频道缩略名（可选）",
+  "chat_channelDescription": "描述（可选）",
+  "chat_selectCategory": "选择一个类别",
+  "chat_selectCategoryHint": "选择一个…",
+  "chat_categoryPermissionsHint": "类别安全设置决定哪些用户可以访问此频道。",
+  "chat_channelEmoji": "频道表情符号（可选）",
+  "chat_chooseEmoji": "选择表情符号",
+  "chat_resetEmoji": "重置表情符号",
+  "chat_autoJoinUsers": "自动添加用户",
+  "chat_autoJoinUsersDescription": "每小时检查哪些用户在过去 3 个月中活跃。如果他们可以访问所选类别，请将其添加到此频道。",
+  "chat_enableThreads": "启用消息串",
+  "chat_enableThreadsDescription": "启用后，对聊天消息的回复会创建单独的对话，并与主频道并存。",
+  "chat_createChannelFailed": "无法创建频道，请重试",
+  "chat_joinChannelFailed": "无法加入频道，请重试",
+  "chat_closedChannelUnavailable": "无法加入已关闭的频道",
+  "chat_channelNameRequired": "请输入频道名称",
+  "chat_categoryRequired": "请选择一个类别",
+  "chat_joinChannel": "加入",
+  "chat_channelMembers": "{count} 位成员",
+  "@chat_channelMembers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_channelTitleSection": "标题",
+  "chat_channelSettingsSection": "设置",
+  "chat_channelInfoSection": "频道信息",
+  "chat_membersTitle": "成员",
+  "chat_membersEmpty": "暂无成员",
+  "chat_channelMute": "将频道设为免打扰",
+  "chat_pushNotifications": "发送推送通知",
+  "chat_notificationNever": "永不",
+  "chat_notificationMentions": "仅限提及",
+  "chat_notificationAll": "所有活动",
+  "chat_channelHistory": "历史记录",
+  "chat_channelHistoryForever": "无限期",
+  "chat_leaveChannel": "离开频道",
+  "chat_leaveChannelConfirm": "确定要离开“{name}”吗？",
+  "@chat_leaveChannelConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_leaveChannelFailed": "离开频道失败，请重试",
+  "chat_channelSettingsUpdateFailed": "频道设置更新失败，请重试"
+}

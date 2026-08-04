@@ -62,9 +62,9 @@ class Badge {
   factory Badge.fromJson(Map<String, dynamic> json) {
     return Badge(
       id: json['id'] as int,
-      name: json['name'] as String,
+      name: json['name'] as String? ?? '',
       description: json['description'] as String? ?? '',
-      badgeTypeId: json['badge_type_id'] as int,
+      badgeTypeId: json['badge_type_id'] as int? ?? 0,
       imageUrl: json['image_url'] as String?,
       icon: json['icon'] as String?,
       grantCount: json['grant_count'] as int? ?? 0,

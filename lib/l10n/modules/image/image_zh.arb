@@ -158,6 +158,14 @@
   "image_copyFailed": "复制图片失败",
   "image_copyImage": "复制图片",
   "image_copyLink": "复制链接",
+  "image_download": "下载图片",
   "image_fetchFailed": "获取图片失败",
+  "image_markAd": "标记广告",
+  "image_moreOptions": "更多选项",
+  "image_pageInfo": "页面信息",
+  "image_reverseSearch": "以图搜图",
+  "image_scanQr": "扫描二维码",
+  "image_view": "查看图片",
+  "image_viewMode": "看图模式",
   "image_viewFull": "查看大图"
 }

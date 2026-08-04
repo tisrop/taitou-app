@@ -7,6 +7,7 @@ import '../constants.dart';
 import '../models/user.dart';
 import '../pages/bookmarks_page.dart';
 import '../pages/browsing_history_page.dart';
+import '../pages/chat_page.dart';
 import '../pages/drafts_page.dart';
 import '../pages/gamification_leaderboard_page.dart';
 import '../pages/private_messages_page.dart';
@@ -100,6 +101,16 @@ class NavEntryRegistry {
           label: (ctx) => ctx.l10n.nav_leaderboard,
           pageBuilder: (ctx, isActive) =>
               GamificationLeaderboardPage(isActive: isActive),
+          requiresLogin: true,
+        ),
+      if (AppConstants.siteCustomization.chatEnabled)
+        NavEntry(
+          id: NavEntryIds.chat,
+          kind: NavEntryKind.page,
+          iconData: Symbols.chat_bubble_rounded,
+          selectedIconData: Symbols.chat_bubble_rounded,
+          label: (ctx) => ctx.l10n.chat_nav,
+          pageBuilder: (ctx, isActive) => ChatPage(isActive: isActive),
           requiresLogin: true,
         ),
       NavEntry(

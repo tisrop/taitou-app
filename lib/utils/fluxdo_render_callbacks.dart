@@ -143,6 +143,7 @@ class FluxdoRenderCallbacks {
     TextStyle? baseTextStyle,
     bool selectionEnabled = true,
     bool compact = false,
+    bool shrinkWrapWidth = false,
     bool screenshotMode = false,
     List<BlockNode>? parsedNodes,
     String? footnotesHtml,
@@ -162,6 +163,7 @@ class FluxdoRenderCallbacks {
       baseTextStyle: baseTextStyle,
       selectionEnabled: selectionEnabled,
       compact: compact,
+      shrinkWrapWidth: shrinkWrapWidth,
       screenshotMode: screenshotMode,
       footnotesHtml: footnotesHtml,
       imageIndexOffset: imageIndexOffset,
@@ -1315,6 +1317,9 @@ class FluxdoRenderCallbacks {
       onQuoteImage: liveQuoteHandler,
       position: position,
       heroTag: heroTag,
+      imageWidth: image.naturalWidth ?? image.width,
+      imageHeight: image.naturalHeight ?? image.height,
+      fileSizeText: image.fileSizeText,
     );
   }
 

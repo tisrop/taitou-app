@@ -167,7 +167,11 @@ class NotificationData {
 
   factory NotificationData.fromJson(Map<String, dynamic> json) {
     return NotificationData(
-      displayUsername: json['display_username'] as String?,
+      // Fallback for older Discourse API responses that don't include
+      // display_username.
+      displayUsername:
+          json['display_username'] as String? ??
+          json['mentioned_by_username'] as String?,
       originalPostId: json['original_post_id']?.toString(),
       originalPostType: json['original_post_type'] as int?,
       originalUsername: json['original_username'] as String?,

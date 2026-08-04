@@ -97,6 +97,9 @@ class SiteCustomization {
   /// 部分站点的 `/leaderboard.json` 不提供数据接口，必须请求带 ID 的路径。
   final int? gamificationLeaderboardId;
 
+  /// 站点是否启用 discourse-chat（聊天室）。
+  final bool chatEnabled;
+
   /// 头像光晕规则列表
   final List<AvatarGlowRule> avatarGlowRules;
 
@@ -110,6 +113,7 @@ class SiteCustomization {
     this.discourseReactionsEnabled = false,
     this.gamificationEnabled = false,
     this.gamificationLeaderboardId,
+    this.chatEnabled = false,
     this.avatarGlowRules = const [],
     this.userTitleStyleRules = const [],
     this.linkSecurityConfig,
