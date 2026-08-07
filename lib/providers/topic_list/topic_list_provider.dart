@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/topic.dart';
@@ -26,6 +28,15 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
 
   @override
   Future<List<Topic>> build() async {
+    // MessageBus 会持续推进全局话题追踪游标。把变化同步到当前列表，避免
+    // 新回复到达或在其他设备读完后，列表卡片仍停留在旧的未读快照。
+    ref.listen<Map<int, TrackedTopicState>>(topicTrackingStateProvider, (
+      previous,
+      next,
+    ) {
+      _syncFromTrackingState(next);
+    });
+
     // 所有参数使用 ref.read（不建立依赖），
     // 由 UI 层在参数变化时主动 invalidate provider
     final currentFilter = ref.read(topicFilterProvider);
@@ -339,6 +350,16 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
     );
   }
 
+  void _syncFromTrackingState(Map<int, TrackedTopicState> tracking) {
+    final topics = state.value;
+    if (topics == null) return;
+
+    final synced = syncTopicsWithTrackingState(topics, tracking);
+    if (!identical(synced, topics)) {
+      state = AsyncValue.data(synced);
+    }
+  }
+
   void updateSeen(int topicId, int highestSeen) {
     final topics = state.value;
     if (topics == null) return;
@@ -353,30 +374,11 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
 
     final newUnread = (topic.highestPostNumber - highestSeen).clamp(0, topic.highestPostNumber);
 
-    final updated = Topic(
-      id: topic.id,
-      title: topic.title,
-      slug: topic.slug,
-      postsCount: topic.postsCount,
-      replyCount: topic.replyCount,
-      views: topic.views,
-      likeCount: topic.likeCount,
-      excerpt: topic.excerpt,
-      createdAt: topic.createdAt,
-      lastPostedAt: topic.lastPostedAt,
-      lastPosterUsername: topic.lastPosterUsername,
-      categoryId: topic.categoryId,
-      pinned: topic.pinned,
-      visible: topic.visible,
-      closed: topic.closed,
-      archived: topic.archived,
-      tags: topic.tags,
-      posters: topic.posters,
+    final updated = topic.copyWith(
       unseen: false,
       unread: newUnread,
       newPosts: 0,
       lastReadPostNumber: highestSeen,
-      highestPostNumber: topic.highestPostNumber,
     );
 
     final newList = [...topics];
@@ -392,6 +394,61 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
 final topicListProvider = AsyncNotifierProvider.family<TopicListNotifier, List<Topic>, int?>(
   TopicListNotifier.new,
 );
+
+/// 将全局追踪状态合并进话题列表快照。
+///
+/// MessageBus 重连时可能重放旧消息，预加载追踪状态也可能比刚请求到的列表
+/// 更旧。因此最高帖号和最后阅读帖号分别做单调合并，只允许游标向前推进。
+/// 若没有任何变化则返回原列表实例，避免无意义的 Provider 重建。
+@visibleForTesting
+List<Topic> syncTopicsWithTrackingState(
+  List<Topic> topics,
+  Map<int, TrackedTopicState> tracking,
+) {
+  if (topics.isEmpty || tracking.isEmpty) return topics;
+
+  List<Topic>? updatedTopics;
+  for (var i = 0; i < topics.length; i++) {
+    final topic = topics[i];
+    final tracked = tracking[topic.id];
+    if (tracked == null) continue;
+
+    final highest = math.max(
+      tracked.highestPostNumber,
+      topic.highestPostNumber,
+    );
+    final trackedLastRead = tracked.lastReadPostNumber;
+    final topicLastRead = topic.lastReadPostNumber;
+    final lastRead = trackedLastRead == null
+        ? topicLastRead
+        : topicLastRead == null
+        ? trackedLastRead
+        : math.max(trackedLastRead, topicLastRead);
+
+    // 没读过的话题使用 unseen/NEW 语义，不计入 unread_posts。
+    final unread = lastRead == null
+        ? 0
+        : (highest - lastRead).clamp(0, highest);
+    final unseen = lastRead == null && !tracked.isSeen && topic.unseen;
+
+    if (unread == topic.unread &&
+        highest == topic.highestPostNumber &&
+        lastRead == topicLastRead &&
+        unseen == topic.unseen) {
+      continue;
+    }
+
+    updatedTopics ??= [...topics];
+    updatedTopics[i] = topic.copyWith(
+      unseen: unseen,
+      unread: unread,
+      lastReadPostNumber: lastRead,
+      highestPostNumber: highest,
+    );
+  }
+
+  return updatedTopics ?? topics;
+}
 
 /// 热门话题 Provider
 final topTopicsProvider = FutureProvider<TopicListResponse>((ref) async {

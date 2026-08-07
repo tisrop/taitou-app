@@ -5,6 +5,72 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/widgets/markdown_editor/media_upload_helper.dart';
 
 void main() {
+  group('附件扩展名白名单', () {
+    test('普通用户只使用站点基础白名单并规范化格式', () {
+      final extensions = deriveAttachmentAllowedExtensions(
+        siteSettings: {
+          'authorized_extensions': ' JPG | .pdf | zip | jpg ',
+          'authorized_extensions_for_staff': 'apk|aab',
+        },
+        currentUser: {'admin': false, 'moderator': false},
+      );
+
+      expect(extensions, ['jpg', 'pdf', 'zip']);
+    });
+
+    test('staff 合并专属白名单并去重', () {
+      final extensions = deriveAttachmentAllowedExtensions(
+        siteSettings: {
+          'authorized_extensions': 'jpg|pdf',
+          'authorized_extensions_for_staff': 'pdf|apk|aab',
+        },
+        currentUser: {'moderator': true},
+      );
+
+      expect(extensions, ['jpg', 'pdf', 'apk', 'aab']);
+    });
+
+    test('当前用户可用名单包含通配符时不限制文件选择器', () {
+      expect(
+        deriveAttachmentAllowedExtensions(
+          siteSettings: {'authorized_extensions': '*'},
+          currentUser: null,
+        ),
+        isNull,
+      );
+      expect(
+        deriveAttachmentAllowedExtensions(
+          siteSettings: {
+            'authorized_extensions': 'jpg|pdf',
+            'authorized_extensions_for_staff': '*',
+          },
+          currentUser: {'admin': true},
+        ),
+        isNull,
+      );
+    });
+
+    test('非 staff 忽略 staff 通配符，配置缺失时交给服务端校验', () {
+      expect(
+        deriveAttachmentAllowedExtensions(
+          siteSettings: {
+            'authorized_extensions': 'jpg|pdf',
+            'authorized_extensions_for_staff': '*',
+          },
+          currentUser: {'admin': false, 'moderator': false},
+        ),
+        ['jpg', 'pdf'],
+      );
+      expect(
+        deriveAttachmentAllowedExtensions(
+          siteSettings: null,
+          currentUser: null,
+        ),
+        isNull,
+      );
+    });
+  });
+
   test('upload:// 短链 → /uploads/short-url/<b62>.xz(去原扩展)', () {
     expect(
       mediaShortUrlToXzPath('upload://lwDn83PDeB3xOUoEeZI9v77qGJa.mp4'),

@@ -302,6 +302,54 @@ class Topic {
     this.canHaveAnswer = false,
   });
 
+  /// 创建只修改话题列表实时状态字段的副本。
+  ///
+  /// 列表卡片收到 MessageBus 追踪状态后只需要更新已读游标，其他从列表
+  /// API 获取的展示字段必须完整保留。
+  Topic copyWith({
+    bool? unseen,
+    int? unread,
+    int? newPosts,
+    int? lastReadPostNumber,
+    bool clearLastRead = false,
+    int? highestPostNumber,
+  }) {
+    return Topic(
+      id: id,
+      title: title,
+      slug: slug,
+      postsCount: postsCount,
+      replyCount: replyCount,
+      views: views,
+      likeCount: likeCount,
+      excerpt: excerpt,
+      createdAt: createdAt,
+      lastPostedAt: lastPostedAt,
+      lastPosterUsername: lastPosterUsername,
+      categoryId: categoryId,
+      pinned: pinned,
+      visible: visible,
+      closed: closed,
+      archived: archived,
+      tags: tags,
+      posters: posters,
+      unseen: unseen ?? this.unseen,
+      unread: unread ?? this.unread,
+      newPosts: newPosts ?? this.newPosts,
+      lastReadPostNumber: clearLastRead
+          ? null
+          : (lastReadPostNumber ?? this.lastReadPostNumber),
+      highestPostNumber: highestPostNumber ?? this.highestPostNumber,
+      bookmarkedPostNumber: bookmarkedPostNumber,
+      bookmarkId: bookmarkId,
+      bookmarkName: bookmarkName,
+      bookmarkReminderAt: bookmarkReminderAt,
+      bookmarkableType: bookmarkableType,
+      hasAcceptedAnswer: hasAcceptedAnswer,
+      canHaveAnswer: canHaveAnswer,
+    );
+  }
+
   factory Topic.fromJson(
     Map<String, dynamic> json, {
     Map<int, TopicUser>? userMap,

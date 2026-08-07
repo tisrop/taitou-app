@@ -20,6 +20,55 @@ import '../../services/app_error_handler.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/media_transcoder/media_compressor.dart';
 import '../../services/media_transcoder/media_transcoder.dart';
+import '../../services/preloaded_data_service.dart';
+
+/// 站点允许上传的附件扩展名。
+///
+/// 普通用户读取 `authorized_extensions`，staff 额外合并
+/// `authorized_extensions_for_staff`。返回 null 表示站点允许任意扩展名，
+/// 或预加载配置尚不可用，此时不在客户端拦截，由服务端最终校验。
+List<String>? attachmentAllowedExtensions() {
+  final preloaded = PreloadedDataService();
+  return deriveAttachmentAllowedExtensions(
+    siteSettings: preloaded.siteSettingsSync,
+    currentUser: preloaded.currentUserSync,
+  );
+}
+
+/// 从 Discourse 预加载数据中解析附件白名单。
+@visibleForTesting
+List<String>? deriveAttachmentAllowedExtensions({
+  required Map<String, dynamic>? siteSettings,
+  required Map<String, dynamic>? currentUser,
+}) {
+  final base = siteSettings?['authorized_extensions'];
+  if (base is! String) return null;
+
+  final isStaff = currentUser?['admin'] == true ||
+      currentUser?['moderator'] == true;
+  final staffValue = isStaff && siteSettings != null
+      ? siteSettings['authorized_extensions_for_staff']
+      : null;
+  final staffExtra = staffValue is String ? staffValue : null;
+
+  if (base.contains('*') || (staffExtra?.contains('*') ?? false)) {
+    return null;
+  }
+
+  final extensions = <String>{
+    ..._extensionsToList(base),
+    if (staffExtra != null) ..._extensionsToList(staffExtra),
+  }.toList();
+  return extensions.isEmpty ? null : extensions;
+}
+
+List<String> _extensionsToList(String raw) => raw
+    .toLowerCase()
+    .replaceAll(RegExp(r'[\s.]+'), '')
+    .split('|')
+    .where((extension) =>
+        extension.isNotEmpty && !extension.contains('*'))
+    .toList();
 
 /// `upload://<base62>.<ext>` → `/uploads/short-url/<base62>.xz` 播放路径。
 String mediaShortUrlToXzPath(String shortUrl) {

@@ -895,10 +895,14 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
-  /// 选择并上传附件（支持任意文件类型，公开方法，供工具面板调用）
+  /// 选择并上传附件（类型跟随站点白名单，公开方法，供工具面板调用）
   Future<void> pickAndUploadFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles();
+      final allowedExtensions = attachmentAllowedExtensions();
+      final result = await FilePicker.platform.pickFiles(
+        type: allowedExtensions == null ? FileType.any : FileType.custom,
+        allowedExtensions: allowedExtensions,
+      );
       if (result == null || result.files.isEmpty) return;
       final file = result.files.first;
       if (file.path == null) return;
