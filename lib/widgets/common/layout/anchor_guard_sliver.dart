@@ -119,16 +119,22 @@ class RenderAnchorGuardSliver extends RenderSliver {
   set structureSignature(int value) {
     if (_structureSignature == value) return;
     _structureSignature = value;
-    // 结构变了:旧锚的 RenderBox 可能被 index 复用换了内容,基线作废。
-    // updateRenderObject 在 build 期执行,先于本帧布局,时序正确。
-    _invalidateBaseline();
+    // 结构变了:多盒列表(SliverList)的 child 按 index 复用,同一 RenderBox
+    // 可能已换内容,基线作废。单盒 sliver 的 RenderBox 与列表签名无关，
+    // 跨 rebuild 身份稳定；保留它才能补偿推荐区上方的新帖插入。
+    final anchor = _anchorBox;
+    if (anchor == null ||
+        !anchor.attached ||
+        anchor.parentData is SliverMultiBoxAdaptorParentData) {
+      _invalidateBaseline();
+    }
   }
 
   // —— 基线:上一趟布局结束时的锚元素与环境快照 ——
-  // 锚元素 = 同半场里含视口上沿的帖子(退而求其次:上沿下方最近的
-  // 帖子)。持有 RenderBox 引用:数据更新只换 Post 内容,Element/
-  // RenderObject 按 index 复用不变;被回收(detach/keptAlive)则基线
-  // 自动作废。
+  // 锚元素 = 同半场里含视口上沿的 box(退而求其次:上沿下方最近者),
+  // 候选含帖子列表项与单盒 sliver 的 child(推荐区/header 等)。持有
+  // RenderBox 引用:数据更新只换内容,Element/RenderObject 按 index
+  // 复用不变;被回收(detach/keptAlive)则基线自动作废。
   RenderBox? _anchorBox;
   double _anchorTop = 0.0;
   double _basePixels = 0.0;
@@ -225,12 +231,14 @@ class RenderAnchorGuardSliver extends RenderSliver {
   /// 锚元素仍可参与比较:还挂在树上、有尺寸、没被挪进 keepAlive 桶
   /// (桶里的 child 仍 attached 但 layoutOffset 是陈旧值),且确实在本
   /// viewport 之下(getTransformTo 对非祖先会 assert)。
+  ///
+  /// 单盒 sliver 的 child 没有 multi-box parentData，也不会进入
+  /// keepAlive 桶，因此只需通用的挂载、尺寸与祖先校验。
   bool _anchorStillValid(RenderBox anchor, RenderViewport viewport) {
     if (!anchor.attached || !anchor.hasSize) return false;
     final parentData = anchor.parentData;
-    if (parentData is! SliverMultiBoxAdaptorParentData ||
-        parentData.keptAlive ||
-        parentData.layoutOffset == null) {
+    if (parentData is SliverMultiBoxAdaptorParentData &&
+        (parentData.keptAlive || parentData.layoutOffset == null)) {
       return false;
     }
     RenderObject? node = anchor.parent;
@@ -249,9 +257,10 @@ class RenderAnchorGuardSliver extends RenderSliver {
     ).dy;
   }
 
-  /// 重建基线:只遍历**与自己同增长方向**的兄弟 sliver 里的帖子列表
-  /// (RenderSliverMultiBoxAdaptor;header/typing/分页指示器都是单 box
-  /// 适配器,自动排除),选含视口上沿的 child 为锚。
+  /// 重建基线:只遍历**与自己同增长方向**的兄弟 sliver,选含视口上沿
+  /// 的 box 为锚。候选包括多盒列表项和单盒 sliver 的 child（推荐区、
+  /// header、typing 等）。否则视口停在推荐区时没有候选，新帖从其上方
+  /// 落地会让哨兵失明。
   ///
   /// 限定同半场的原因:viewport 每趟先布局 reverse 区再布局 forward 区,
   /// reverse 哨兵布局时 forward 兄弟可能尚未重排,跨半场读到的是陈旧
@@ -263,6 +272,21 @@ class RenderAnchorGuardSliver extends RenderSliver {
     RenderBox? below;
     double belowTop = double.infinity;
 
+    void consider(RenderBox child) {
+      final top = _boxTopInViewport(child, viewport);
+      final bottom = top + child.size.height;
+      if (top <= 0 && bottom > 0) {
+        // 多个候选(理论上仅重叠边界)取顶边最贴近上沿的。
+        if (containing == null || top > containingTop) {
+          containing = child;
+          containingTop = top;
+        }
+      } else if (top > 0 && top < belowTop) {
+        below = child;
+        belowTop = top;
+      }
+    }
+
     void visit(RenderObject node) {
       if (node is RenderSliverMultiBoxAdaptor) {
         RenderBox? child = node.firstChild;
@@ -271,21 +295,13 @@ class RenderAnchorGuardSliver extends RenderSliver {
           if (parentData is SliverMultiBoxAdaptorParentData &&
               parentData.layoutOffset != null &&
               child.hasSize) {
-            final top = _boxTopInViewport(child, viewport);
-            final bottom = top + child.size.height;
-            if (top <= 0 && bottom > 0) {
-              // 多个候选(理论上仅重叠边界)取顶边最贴近上沿的
-              if (containing == null || top > containingTop) {
-                containing = child;
-                containingTop = top;
-              }
-            } else if (top > 0 && top < belowTop) {
-              below = child;
-              belowTop = top;
-            }
+            consider(child);
           }
           child = node.childAfter(child);
         }
+      } else if (node is RenderSliverSingleBoxAdapter) {
+        final child = node.child;
+        if (child != null && child.hasSize) consider(child);
       } else if (node is RenderSliver) {
         node.visitChildren(visit);
       }
