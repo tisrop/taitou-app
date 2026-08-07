@@ -20,8 +20,19 @@ import 'preheat_logo.dart';
 
 class PreheatGate extends StatefulWidget {
   final Widget child;
+  final Duration maxBlockingDuration;
+  @visibleForTesting
+  final Future<void> Function()? preloadOverride;
+  @visibleForTesting
+  final VoidCallback? warmupOverride;
 
-  const PreheatGate({super.key, required this.child});
+  const PreheatGate({
+    super.key,
+    required this.child,
+    this.maxBlockingDuration = const Duration(milliseconds: 1500),
+    this.preloadOverride,
+    this.warmupOverride,
+  });
 
   @override
   State<PreheatGate> createState() => _PreheatGateState();
@@ -59,12 +70,39 @@ class _PreheatGateState extends State<PreheatGate> {
         await _showReloginDialog();
       }
 
-      await BrowserTrustCoordinator.instance.ensurePreloaded(
-        reason: 'preheat_gate',
+      var blockingWindowExpired = false;
+      final preload =
+          widget.preloadOverride?.call() ??
+          BrowserTrustCoordinator.instance.ensurePreloaded(
+            reason: 'preheat_gate',
+          );
+      final observedPreload = preload.catchError((Object e, StackTrace stack) {
+        if (blockingWindowExpired) {
+          debugPrint('[PreheatGate] Background preload failed: $e');
+          return;
+        }
+        Error.throwWithStackTrace(e, stack);
+      });
+
+      // 预加载可以继续在后台完成，但不能再让网络或 WebView 的长超时
+      // 把用户困在开屏页。首屏业务请求自身会等待短时信任门禁并处理加载态。
+      await observedPreload.timeout(
+        widget.maxBlockingDuration,
+        onTimeout: () {
+          blockingWindowExpired = true;
+          debugPrint(
+            '[PreheatGate] Preload exceeded '
+            '${widget.maxBlockingDuration.inMilliseconds}ms; continue in background',
+          );
+        },
       );
 
-      DiscourseService().getEnabledReactions();
-      EmojiHandler().init();
+      if (widget.warmupOverride != null) {
+        widget.warmupOverride!();
+      } else {
+        DiscourseService().getEnabledReactions();
+        EmojiHandler().init();
+      }
 
       _error = null;
       return true;
@@ -138,7 +176,7 @@ class _PreheatGateState extends State<PreheatGate> {
         }
 
         return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 600),
+          duration: const Duration(milliseconds: 300),
           switchInCurve: Curves.easeInOutCubic,
           switchOutCurve: Curves.easeOut,
           transitionBuilder: (child, animation) {
