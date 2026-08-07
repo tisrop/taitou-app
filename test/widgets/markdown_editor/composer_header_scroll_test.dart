@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:chat_bottom_container/chat_bottom_container.dart';
 import 'package:fluxdo/l10n/s.dart';
 import 'package:fluxdo/providers/theme_provider.dart';
 import 'package:fluxdo/services/local_notification_service.dart';
@@ -204,6 +205,31 @@ void main() {
       reason: '正文变化不能误用 header 标题的 RenderEditable 拉回顶部',
     );
     await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('深色主题面板容器跟随页面背景色', (tester) async {
+    const background = Color(0xFF121416);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      await _wrap(
+        Theme(
+          data: ThemeData.dark().copyWith(scaffoldBackgroundColor: background),
+          child: MarkdownEditor(controller: controller, expands: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final panelFinder = find.byWidgetPredicate(
+      (widget) => widget is ChatBottomPanelContainer<EditorPanelType>,
+    );
+    expect(panelFinder, findsOneWidget);
+    final panel = tester.widget<ChatBottomPanelContainer<EditorPanelType>>(
+      panelFinder,
+    );
+    expect(panel.panelBgColor, background);
   });
 
   testWidgets('无 header(回复弹框形态)回归:点击聚焦正常', (tester) async {

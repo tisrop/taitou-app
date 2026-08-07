@@ -2560,6 +2560,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         ChatBottomPanelContainer<_RichPanelType>(
           controller: _panelController,
           inputFocusNode: _editorAreaFocus,
+          // 外壳默认纯白，深色主题下键盘/表情面板过渡会闪白。
+          panelBgColor: Theme.of(context).scaffoldBackgroundColor,
           otherPanelWidget: (type) => type == _RichPanelType.emoji
               ? _buildEmojiPanel()
               : const SizedBox.shrink(),

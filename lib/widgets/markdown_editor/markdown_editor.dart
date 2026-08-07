@@ -937,6 +937,8 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
         ChatBottomPanelContainer<EditorPanelType>(
           controller: _panelController,
           inputFocusNode: _focusNode,
+          // 插件默认使用纯白背景，深色主题切换键盘/面板时会闪白。
+          panelBgColor: Theme.of(context).scaffoldBackgroundColor,
           otherPanelWidget: (type) {
             switch (type) {
               case EditorPanelType.emoji:
