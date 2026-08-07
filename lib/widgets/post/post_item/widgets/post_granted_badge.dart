@@ -11,6 +11,18 @@ class PostGrantedBadgeIcon extends StatelessWidget {
 
   const PostGrantedBadgeIcon({super.key, required this.badge});
 
+  /// 徽章说明可能包含链接和 HTML 实体，Tooltip 只显示纯文本。
+  static String _plainText(String html) {
+    return html
+        .replaceAll(RegExp(r'<[^>]+>'), '')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'")
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&amp;', '&')
+        .trim();
+  }
+
   /// 根据徽章类型获取颜色（1=Gold, 2=Silver, 3=Bronze）
   Color _badgeTypeColor(ThemeData theme) {
     switch (badge.badgeTypeId) {
@@ -29,12 +41,16 @@ class PostGrantedBadgeIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final color = _badgeTypeColor(theme);
+    final description = badge.description != null
+        ? _plainText(badge.description!)
+        : '';
+    final tooltip = description.isNotEmpty ? description : badge.name;
 
     // 优先使用图片
     if (badge.imageUrl != null && badge.imageUrl!.isNotEmpty) {
       final url = UrlHelper.resolveUrlWithCdn(badge.imageUrl!);
       return Tooltip(
-        message: badge.name,
+        message: tooltip,
         child: Padding(
           padding: const EdgeInsets.only(left: 2),
           child: Image(
@@ -52,7 +68,7 @@ class PostGrantedBadgeIcon extends StatelessWidget {
       final iconData = FontAwesomeHelper.getIcon(badge.icon!);
       if (iconData != null) {
         return Tooltip(
-          message: badge.name,
+          message: tooltip,
           child: Padding(
             padding: const EdgeInsets.only(left: 2),
             child: FaIcon(iconData, size: 12, color: color),

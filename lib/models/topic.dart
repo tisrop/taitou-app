@@ -493,6 +493,7 @@ class MentionedUser {
 class GrantedBadge {
   final int id;
   final String name;
+  final String? description;
   final String? icon; // FontAwesome 图标名，如 "seedling"
   final String? imageUrl; // 图片 URL（与 icon 二选一）
   final String slug;
@@ -501,6 +502,7 @@ class GrantedBadge {
   const GrantedBadge({
     required this.id,
     required this.name,
+    this.description,
     this.icon,
     this.imageUrl,
     required this.slug,
@@ -512,6 +514,7 @@ class GrantedBadge {
     return GrantedBadge(
       id: badge['id'] as int? ?? 0,
       name: badge['name'] as String? ?? '',
+      description: badge['description'] as String?,
       icon: badge['icon'] as String?,
       imageUrl: badge['image_url'] as String?,
       slug: badge['slug'] as String? ?? '',
