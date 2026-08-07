@@ -117,6 +117,7 @@ extension LoadingMethods on TopicDetailNotifier {
           arg.topicId,
           postNumber: lastPostNumber,
           asc: true,
+          includeSuggested: currentDetail.suggestedTopics.isEmpty,
         );
 
         final existingIds = currentPosts.map((p) => p.id).toSet();
@@ -133,8 +134,20 @@ extension LoadingMethods on TopicDetailNotifier {
         final newLastIndex = mergedStream.indexOf(newLastId);
         _hasMoreAfter = newLastIndex < mergedStream.length - 1;
 
-        return currentDetail.copyWith(
-          postStream: PostStream(posts: mergedPosts, stream: mergedStream, gaps: currentDetail.postStream.gaps),
+        return _withSuggestedCache(
+          currentDetail.copyWith(
+            postStream: PostStream(
+              posts: mergedPosts,
+              stream: mergedStream,
+              gaps: currentDetail.postStream.gaps,
+            ),
+            suggestedTopics: newPostStream.suggestedTopics.isNotEmpty
+                ? newPostStream.suggestedTopics
+                : null,
+            relatedTopics: newPostStream.relatedTopics.isNotEmpty
+                ? newPostStream.relatedTopics
+                : null,
+          ),
         );
       });
       if (!ref.mounted) return;
@@ -279,7 +292,7 @@ extension LoadingMethods on TopicDetailNotifier {
 
       _updateBoundaryState(detail.postStream.posts, detail.postStream.stream);
 
-      return detail;
+      return _withSuggestedCache(detail);
     });
     if (!ref.mounted) return;
     state = result;
@@ -305,7 +318,7 @@ extension LoadingMethods on TopicDetailNotifier {
 
       _updateBoundaryState(detail.postStream.posts, detail.postStream.stream);
 
-      return detail;
+      return _withSuggestedCache(detail);
     });
     if (!ref.mounted) return;
     state = result;

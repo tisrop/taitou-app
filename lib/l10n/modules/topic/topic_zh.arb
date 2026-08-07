@@ -29,6 +29,7 @@
       }
     }
   },
+  "topicDetail_relatedTopics": "相关话题",
   "topicDetail_removeFromReadLater": "移出浮窗",
   "topicDetail_removeFromReadLaterSuccess": "已从浮窗移除",
   "topicDetail_replyLabel": "回复",
@@ -52,6 +53,7 @@
       }
     }
   },
+  "topicDetail_suggestedTopics": "建议话题",
   "topicDetail_topLevelOnly": "只看顶层",
   "topicDetail_viewAll": "查看全部",
   "topicDetail_viewsLabel": "浏览",

@@ -212,13 +212,16 @@ class TopicPoster {
     Map<String, dynamic> json,
     Map<int, TopicUser> userMap,
   ) {
-    final userId = json['user_id'] as int;
+    // 推荐话题的 poster 会内嵌 user，而普通列表使用 user_id + users。
+    final embeddedUser = json['user'] as Map<String, dynamic>?;
+    final userId = json['user_id'] as int? ?? embeddedUser?['id'] as int? ?? 0;
     return TopicPoster(
       userId: userId,
       description: json['description'] as String? ?? '',
       extras: json['extras'] as String? ?? '',
       user:
           userMap[userId] ??
+          (embeddedUser != null ? TopicUser.fromJson(embeddedUser) : null) ??
           // 从本地缓存反序列化时没有 userMap；fallback 到嵌入在
           // poster entry 里的用户字段（normalizeBookmarkListEntry 写入）。
           (json['_avatar_template'] != null || json['_username'] != null
@@ -1360,7 +1363,17 @@ class PostStream {
   final List<int> stream; // 所有 post_id 的列表
   final PostStreamGaps? gaps; // 拉黑用户帖子的 gaps 数据
 
-  PostStream({required this.posts, required this.stream, this.gaps});
+  /// 翻页响应顶层回填的推荐话题。
+  final List<Topic> suggestedTopics;
+  final List<Topic> relatedTopics;
+
+  PostStream({
+    required this.posts,
+    required this.stream,
+    this.gaps,
+    this.suggestedTopics = const [],
+    this.relatedTopics = const [],
+  });
 
   factory PostStream.fromJson(Map<String, dynamic> json) {
     final gapsJson = json['gaps'] as Map<String, dynamic>?;
@@ -1609,6 +1622,10 @@ class TopicDetail {
   // 当前用户在本主题下的待审核回复(仅认证 + 站点启用审核队列时返回)
   final List<PendingPost> pendingPosts;
 
+  /// 帖子流末尾的相关话题与建议话题。
+  final List<Topic> suggestedTopics;
+  final List<Topic> relatedTopics;
+
   bool get hasAcceptedAnswer => acceptedAnswers.isNotEmpty;
   int? get acceptedAnswerPostNumber =>
       acceptedAnswers.isEmpty ? null : acceptedAnswers.first.postNumber;
@@ -1654,6 +1671,8 @@ class TopicDetail {
     this.bookmarkReminderAt,
     this.acceptedAnswers = const [],
     this.pendingPosts = const [],
+    this.suggestedTopics = const [],
+    this.relatedTopics = const [],
   });
 
   factory TopicDetail.fromJson(Map<String, dynamic> json) {
@@ -1833,6 +1852,8 @@ class TopicDetail {
           .whereType<Map>()
           .map((e) => PendingPost.fromJson(Map<String, dynamic>.from(e)))
           .toList(),
+      suggestedTopics: parseSuggestedTopicList(json['suggested_topics']),
+      relatedTopics: parseSuggestedTopicList(json['related_topics']),
     );
   }
 
@@ -1876,6 +1897,8 @@ class TopicDetail {
     bool clearBookmarkReminderAt = false,
     List<AcceptedAnswer>? acceptedAnswers,
     List<PendingPost>? pendingPosts,
+    List<Topic>? suggestedTopics,
+    List<Topic>? relatedTopics,
   }) {
     return TopicDetail(
       id: id ?? this.id,
@@ -1918,8 +1941,27 @@ class TopicDetail {
           : (bookmarkReminderAt ?? this.bookmarkReminderAt),
       acceptedAnswers: acceptedAnswers ?? this.acceptedAnswers,
       pendingPosts: pendingPosts ?? this.pendingPosts,
+      suggestedTopics: suggestedTopics ?? this.suggestedTopics,
+      relatedTopics: relatedTopics ?? this.relatedTopics,
     );
   }
+}
+
+/// 解析话题详情响应里的推荐话题数组。
+///
+/// SuggestedTopicSerializer 的字段比较稀疏；单条异常不能导致整个详情失败。
+List<Topic> parseSuggestedTopicList(dynamic raw) {
+  if (raw is! List || raw.isEmpty) return const [];
+  final result = <Topic>[];
+  for (final item in raw) {
+    if (item is! Map<String, dynamic>) continue;
+    try {
+      result.add(Topic.fromJson(item));
+    } catch (_) {
+      // 跳过不完整条目，继续保留其余可用推荐。
+    }
+  }
+  return result;
 }
 
 /// 话题 AI 摘要

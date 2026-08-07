@@ -116,6 +116,28 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
     _hasMoreAfter = lastIndex != -1 && lastIndex < stream.length - 1;
   }
 
+  /// 服务端只在帖子流到达末尾时返回推荐数据；局部重载时保留旧值。
+  List<Topic> _cachedSuggestedTopics = const [];
+  List<Topic> _cachedRelatedTopics = const [];
+
+  TopicDetail _withSuggestedCache(TopicDetail detail) {
+    if (detail.suggestedTopics.isNotEmpty) {
+      _cachedSuggestedTopics = detail.suggestedTopics;
+    }
+    if (detail.relatedTopics.isNotEmpty) {
+      _cachedRelatedTopics = detail.relatedTopics;
+    }
+    final needSuggested =
+        detail.suggestedTopics.isEmpty && _cachedSuggestedTopics.isNotEmpty;
+    final needRelated =
+        detail.relatedTopics.isEmpty && _cachedRelatedTopics.isNotEmpty;
+    if (!needSuggested && !needRelated) return detail;
+    return detail.copyWith(
+      suggestedTopics: needSuggested ? _cachedSuggestedTopics : null,
+      relatedTopics: needRelated ? _cachedRelatedTopics : null,
+    );
+  }
+
   /// 更新单个帖子的辅助方法
   void _updatePostById(int postId, Post Function(Post) updater) {
     final currentDetail = state.value;
@@ -186,7 +208,7 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
 
     _updateBoundaryState(detail.postStream.posts, detail.postStream.stream);
 
-    return detail;
+    return _withSuggestedCache(detail);
   }
 }
 

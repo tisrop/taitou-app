@@ -29,6 +29,7 @@ import 'topic_detail_header.dart';
 import 'shared_issue_button.dart';
 import 'typing_indicator.dart';
 import 'pending_posts_section.dart';
+import 'topic_more_topics.dart';
 
 /// 话题帖子列表
 /// 负责构建 CustomScrollView 及其 Slivers
@@ -1197,6 +1198,14 @@ class _TopicPostListState extends State<TopicPostList> {
                     onWithdraw: widget.onWithdrawPendingPost!,
                     onWithdrawAndEdit: widget.onWithdrawAndEditPendingPost!,
                   ),
+                ),
+              ),
+
+            if (!hasMoreAfter)
+              SliverToBoxAdapter(
+                child: _wrapContent(
+                  context,
+                  MoreTopicsSection(detail: detail),
                 ),
               ),
 

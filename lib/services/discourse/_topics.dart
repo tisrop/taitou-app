@@ -228,11 +228,16 @@ mixin _TopicsMixin on _DiscourseServiceBase {
   }
 
   /// 批量获取帖子内容
-  Future<PostStream> getPosts(int topicId, List<int> postIds) async {
+  Future<PostStream> getPosts(
+    int topicId,
+    List<int> postIds, {
+    bool includeSuggested = false,
+  }) async {
     final response = await _dio.get<String>(
       '/t/$topicId/posts.json',
       queryParameters: {
         'post_ids[]': postIds,
+        if (includeSuggested) 'include_suggested': 'true',
       },
       options: Options(responseType: ResponseType.plain),
     );
@@ -240,12 +245,18 @@ mixin _TopicsMixin on _DiscourseServiceBase {
   }
 
   /// 按帖子编号获取帖子
-  Future<PostStream> getPostsByNumber(int topicId, {required int postNumber, required bool asc}) async {
+  Future<PostStream> getPostsByNumber(
+    int topicId, {
+    required int postNumber,
+    required bool asc,
+    bool includeSuggested = false,
+  }) async {
     final response = await _dio.get<String>(
       '/t/$topicId/posts.json',
       queryParameters: {
         'post_number': postNumber,
         'asc': asc,
+        if (includeSuggested) 'include_suggested': 'true',
       },
       options: Options(responseType: ResponseType.plain),
     );
@@ -519,7 +530,16 @@ PostStream _parsePostStreamJson(String body) {
     data,
     streamJson['posts'] as List<dynamic>?,
   );
-  return postStream;
+  final suggested = parseSuggestedTopicList(data['suggested_topics']);
+  final related = parseSuggestedTopicList(data['related_topics']);
+  if (suggested.isEmpty && related.isEmpty) return postStream;
+  return PostStream(
+    posts: postStream.posts,
+    stream: postStream.stream,
+    gaps: postStream.gaps,
+    suggestedTopics: suggested,
+    relatedTopics: related,
+  );
 }
 
 /// isolate 入口:话题列表响应构造
