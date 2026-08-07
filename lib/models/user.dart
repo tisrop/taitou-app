@@ -55,9 +55,10 @@ class User {
   final int? totalFollowers; // 粉丝数
   final int? totalFollowing; // 关注数
 
-  // 私信相关
+  // 私信 / 聊天能力（来自 current_user；用户详情响应可能不包含）
   final bool? canSendPrivateMessages; // 当前用户是否可以发送私信
   final bool? canSendPrivateMessageToUser; // 是否可以给该用户发私信
+  final bool? canChat; // 当前用户是否可以使用站内聊天
 
   // 积分相关
   final int? gamificationScore;
@@ -116,6 +117,7 @@ class User {
     this.totalFollowing,
     this.canSendPrivateMessages,
     this.canSendPrivateMessageToUser,
+    this.canChat,
     this.gamificationScore,
     this.muted,
     this.ignored,
@@ -137,6 +139,7 @@ class User {
     int? notificationChannelPosition,
     bool? muted,
     bool? ignored,
+    bool? canChat,
   }) {
     return User(
       id: id,
@@ -180,6 +183,7 @@ class User {
       totalFollowing: totalFollowing,
       canSendPrivateMessages: canSendPrivateMessages,
       canSendPrivateMessageToUser: canSendPrivateMessageToUser,
+      canChat: canChat ?? this.canChat,
       gamificationScore: gamificationScore,
       muted: muted ?? this.muted,
       ignored: ignored ?? this.ignored,
@@ -259,6 +263,7 @@ class User {
       canSendPrivateMessages: json['can_send_private_messages'] as bool?,
       canSendPrivateMessageToUser:
           json['can_send_private_message_to_user'] as bool?,
+      canChat: json['can_chat'] as bool?,
       gamificationScore: json['gamification_score'] as int?,
       muted: json['muted'] as bool?,
       ignored: json['ignored'] as bool?,
@@ -281,6 +286,7 @@ class User {
     'avatar_template': avatarTemplate,
     'animated_avatar': animatedAvatar,
     'trust_level': trustLevel,
+    'can_chat': canChat,
     'status': status != null
         ? {'description': status!.description, 'emoji': status!.emoji}
         : null,
@@ -302,6 +308,7 @@ class User {
       avatarTemplate: json['avatar_template'] as String?,
       animatedAvatar: json['animated_avatar'] as String?,
       trustLevel: json['trust_level'] as int? ?? 0,
+      canChat: json['can_chat'] as bool?,
       status: json['status'] != null
           ? UserStatus.fromJson(json['status'] as Map<String, dynamic>)
           : null,

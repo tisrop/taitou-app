@@ -42,6 +42,7 @@ import '../utils/responsive.dart';
 import '../services/emoji_handler.dart';
 import '../services/log/log_writer.dart';
 import '../widgets/layout/master_detail_layout.dart';
+import '../widgets/user/trust_level_info_sheet.dart';
 
 /// 个人页面
 class ProfilePage extends ConsumerStatefulWidget {
@@ -1017,6 +1018,9 @@ class _ProfileInfoSection extends ConsumerWidget {
     final trustLevel = ref.watch(
       currentUserProvider.select((value) => value.value?.trustLevel),
     );
+    final canChat = ref.watch(
+      currentUserProvider.select((value) => value.value?.canChat),
+    );
     final status = ref.watch(
       currentUserProvider.select((value) => value.value?.status),
     );
@@ -1054,18 +1058,12 @@ class _ProfileInfoSection extends ConsumerWidget {
             runSpacing: 4,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  _getTrustLevelLabel(trustLevel ?? 0),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSecondaryContainer,
-                    fontWeight: FontWeight.w500,
-                  ),
+              TrustLevelBadge(
+                level: trustLevel ?? 0,
+                onTap: () => TrustLevelInfoSheet.show(
+                  context: context,
+                  currentLevel: trustLevel ?? 0,
+                  canChat: canChat,
                 ),
               ),
               if (status != null) _buildStatusChip(status, theme),
@@ -1165,23 +1163,6 @@ class _ProfileAvatarState extends State<_ProfileAvatar>
     );
 
     return _cachedAvatarWithFlair!;
-  }
-}
-
-String _getTrustLevelLabel(int level) {
-  switch (level) {
-    case 0:
-      return S.current.user_trustLevel0;
-    case 1:
-      return S.current.user_trustLevel1;
-    case 2:
-      return S.current.user_trustLevel2;
-    case 3:
-      return S.current.user_trustLevel3;
-    case 4:
-      return S.current.user_trustLevel4;
-    default:
-      return 'L$level';
   }
 }
 

@@ -23,6 +23,7 @@ import '../../widgets/content/collapsed_html_content.dart';
 import '../../widgets/post/reply_sheet.dart';
 import '../../widgets/user/user_profile_skeleton.dart';
 import '../../widgets/user/ignore_duration_picker.dart';
+import '../../widgets/user/trust_level_info_sheet.dart';
 import '../../services/toast_service.dart';
 import '../search_page.dart';
 import '../follow_list_page.dart';
@@ -622,19 +623,24 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                                   const SizedBox(height: 6), // 占位
 
                                 // Row 3: Level Badge
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha:0.2),
-                                    borderRadius: BorderRadius.circular(12),
+                                TrustLevelBadge(
+                                  level: _user?.trustLevel ?? 0,
+                                  backgroundColor: Colors.white.withValues(
+                                    alpha: 0.2,
                                   ),
-                                  child: Text(
-                                    _getTrustLevelLabel(_user?.trustLevel ?? 0),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 2,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  textStyle: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  onTap: () => TrustLevelInfoSheet.show(
+                                    context: context,
+                                    currentLevel: _user?.trustLevel ?? 0,
                                   ),
                                 ),
                               ],
@@ -1037,23 +1043,6 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
       default:
         // '4,5' / '4' / '5' / '1' 等通用 Activity filter
         return UserActivityList(username: widget.username, filter: filter);
-    }
-  }
-
-  String _getTrustLevelLabel(int level) {
-    switch (level) {
-      case 0:
-        return S.current.user_trustLevel0;
-      case 1:
-        return S.current.user_trustLevel1;
-      case 2:
-        return S.current.user_trustLevel2;
-      case 3:
-        return S.current.user_trustLevel3;
-      case 4:
-        return S.current.user_trustLevel4;
-      default:
-        return S.current.user_trustLevelUnknown(level);
     }
   }
 }

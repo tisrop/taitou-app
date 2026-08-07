@@ -1320,7 +1320,7 @@ class _MainPageState extends ConsumerState<MainPage>
     for (final id in ids) {
       final e = byId[id];
       if (e == null) continue;
-      if (e.requiresLogin && user == null) continue;
+      if (!NavEntryRegistry.isAvailable(e, user)) continue;
       if (seen.contains(id)) continue;
       resolved.add(e);
       seen.add(id);
@@ -1331,7 +1331,7 @@ class _MainPageState extends ConsumerState<MainPage>
       if (seen.contains(id)) continue;
       final e = byId[id];
       if (e == null) continue;
-      if (e.requiresLogin && user == null) continue;
+      if (!NavEntryRegistry.isAvailable(e, user)) continue;
       resolved.add(e);
       seen.add(id);
     }

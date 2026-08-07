@@ -112,6 +112,7 @@ class NavEntryRegistry {
           label: (ctx) => ctx.l10n.chat_nav,
           pageBuilder: (ctx, isActive) => ChatPage(isActive: isActive),
           requiresLogin: true,
+          requiresChatAccess: true,
         ),
       NavEntry(
         id: NavEntryIds.notifications,
@@ -133,10 +134,13 @@ class NavEntryRegistry {
     return null;
   }
 
-  /// 根据用户登录状态过滤可用 entry
+  /// 根据登录状态和服务端能力过滤可用 entry。
   static bool isAvailable(NavEntry entry, User? user) {
-    if (!entry.requiresLogin) return true;
-    return user != null;
+    if (entry.requiresLogin && user == null) return false;
+    if (entry.requiresChatAccess && (user == null || user.canChat == false)) {
+      return false;
+    }
+    return true;
   }
 
   /// 默认底栏 id 列表

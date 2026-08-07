@@ -144,6 +144,7 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
       allUnreadNotificationsCount: preloadedUser.allUnreadNotificationsCount,
       seenNotificationId: preloadedUser.seenNotificationId,
       notificationChannelPosition: preloadedUser.notificationChannelPosition,
+      canChat: preloadedUser.canChat,
     );
   }
 

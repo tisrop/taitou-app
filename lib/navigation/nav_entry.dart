@@ -28,6 +28,7 @@ class NavEntry {
     this.onPanelTap,
     this.onAction,
     this.requiresLogin = false,
+    this.requiresChatAccess = false,
     this.locked = false,
     this.defaultInBottomNav = false,
     this.customIconBuilder,
@@ -61,6 +62,10 @@ class NavEntry {
 
   /// 需要登录才可见 / 可添加
   final bool requiresLogin;
+
+  /// 需要当前用户具备服务端授予的聊天权限。
+  /// 能力未知时保留旧行为，避免旧缓存或精简响应导致入口闪烁消失。
+  final bool requiresChatAccess;
 
   /// 不可从底栏移除（home、profile 等必备入口）
   final bool locked;
