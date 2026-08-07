@@ -249,6 +249,22 @@ bool _hasCrossingMarks(List<MarkSpan> marks) {
   return false;
 }
 
+/// 锚文本是否就是这条链接的裸 URL 形态。
+///
+/// cook 会给无 scheme 的裸域名补 `http://`，给裸邮箱补 `mailto:`，
+/// 但锚文本仍保持用户输入。序列化时忽略这两种可逆差异，避免把裸链接
+/// 改写成 `[text](href)`。不能忽略 `https://`，否则重新 cook 后会被
+/// 降级为 `http://`。
+bool _isBareUrlText(String text, String href) {
+  if (text == href) return true;
+  for (final scheme in const ['http://', 'mailto:']) {
+    if (href.startsWith(scheme) && href.substring(scheme.length) == text) {
+      return true;
+    }
+  }
+  return false;
+}
+
 String _inlineToMarkdown(EditableTextContent content) {
   final text = content.text;
   if (text.isEmpty) return '';
@@ -265,7 +281,7 @@ String _inlineToMarkdown(EditableTextContent content) {
       if (m.kind == MarkKind.link &&
           m.attr != null &&
           m.attr!.isNotEmpty &&
-          text.substring(m.start, m.end) == m.attr)
+          _isBareUrlText(text.substring(m.start, m.end), m.attr!))
         m,
   };
 

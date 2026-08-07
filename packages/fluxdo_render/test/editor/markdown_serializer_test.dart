@@ -32,6 +32,8 @@ TextBlock tb(
     );
 
 void main() {
+  _bareUrlTests();
+
   group('行内 mark', () {
     test('粗体/斜体/删除线/行内代码/下划线', () {
       expect(
@@ -561,6 +563,64 @@ void main() {
         '<video width="640" height="360" controls>\n'
         '  <source src="/uploads/short-url/xyz.xz" type="video/mp4">\n'
         '</video>',
+      );
+    });
+  });
+}
+
+/// 裸 URL 往返：cook 会给裸域名补 `http://`、给裸邮箱补 `mailto:`，
+/// 序列化时应恢复用户原先的裸写法；`https://` 差异则必须保留完整链接。
+void _bareUrlTests() {
+  MarkSpan link(int start, int end, String href) =>
+      MarkSpan(start: start, end: end, kind: MarkKind.link, attr: href);
+
+  String markdown(String text, MarkSpan mark) => docToMarkdown([
+        TextBlock(
+          id: 'b0',
+          content: EditableTextContent(text: text, marks: [mark]),
+        ),
+      ]);
+
+  group('裸 URL 序列化', () {
+    test('锚文本与 href 只差 http:// 时写回裸域名', () {
+      expect(
+        markdown('看 dl.google.com 吧', link(2, 15, 'http://dl.google.com')),
+        '看 dl.google.com 吧',
+      );
+    });
+
+    test('锚文本与 href 只差 https:// 时保留完整链接语法', () {
+      expect(
+        markdown('看 dl.google.com 吧', link(2, 15, 'https://dl.google.com')),
+        '看 [dl.google.com](https://dl.google.com) 吧',
+      );
+    });
+
+    test('锚文本与 href 只差 mailto: 时写回裸邮箱', () {
+      expect(
+        markdown(
+          '联系 user@example.com 吧',
+          link(3, 19, 'mailto:user@example.com'),
+        ),
+        '联系 user@example.com 吧',
+      );
+    });
+
+    test('锚文本与 href 完全相同时保持原有裸链接行为', () {
+      expect(
+        markdown('看 https://a.b 吧', link(2, 13, 'https://a.b')),
+        '看 https://a.b 吧',
+      );
+    });
+
+    test('自定义文案和不同目标地址仍保留完整链接语法', () {
+      expect(
+        markdown('看 这里 吧', link(2, 4, 'https://a.b')),
+        '看 [这里](https://a.b) 吧',
+      );
+      expect(
+        markdown('看 a.com 吧', link(2, 7, 'https://b.com')),
+        '看 [a.com](https://b.com) 吧',
       );
     });
   });
