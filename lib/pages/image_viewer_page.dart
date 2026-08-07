@@ -180,6 +180,10 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
   /// 中的交互(如下滑关闭)不再随载体销毁。
   final Map<int, ImageGestureController> _gestureControllers = {};
 
+  /// 退场开始时将当前页缩放归位，避免 Hero 把全屏缩放画布压进
+  /// 逐帧缩小的飞行盒子，造成内容闪跳。
+  ModalRoute<dynamic>? _route;
+
   ImageGestureController _obtainGestureController(
     int index, {
     required bool inPageView,
@@ -351,7 +355,32 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (!identical(route, _route)) {
+      _route?.animation?.removeStatusListener(_onRouteAnimationStatus);
+      _route = route;
+      _route?.animation?.addStatusListener(_onRouteAnimationStatus);
+    }
+  }
+
+  void _onRouteAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.reverse) {
+      _resetZoomForExit();
+    }
+  }
+
+  void _resetZoomForExit() {
+    final controller = _gestureControllers[currentIndex];
+    final scale = controller?.details?.totalScale ?? 1.0;
+    if (scale == 1.0) return;
+    controller?.reset();
+  }
+
+  @override
   void dispose() {
+    _route?.animation?.removeStatusListener(_onRouteAnimationStatus);
     HeroVisibilityController.instance.clear();
     _activeHeroPage.dispose();
     _galleryPageController?.dispose();
