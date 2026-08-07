@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:scroll_to_index/scroll_to_index.dart';
 import '../../../models/topic.dart';
 import '../../../services/screen_track.dart';
+import '../../../utils/scroll_jump.dart';
 
 /// 话题详情页滚动状态
 class TopicScrollState {
@@ -268,15 +269,15 @@ class TopicDetailController extends ChangeNotifier {
     return 0;
   }
 
-  /// 滚动到指定帖子
+  /// 滚动到指定帖子（近距跳转，目标已渲染）。
+  ///
+  /// 使用 jumpTo 避免 1ms animateTo 在列表高度收缩时留下越界回弹。
   Future<void> scrollToPost(int postNumber, List<Post> posts) async {
     final postIndex = posts.indexWhere((p) => p.postNumber == postNumber);
     if (postIndex == -1) return;
 
-    await scrollController.scrollToIndex(
+    await scrollController.jumpToRenderedScrollIndex(
       scrollIndexForPostIndex(postIndex),
-      preferPosition: AutoScrollPosition.begin,
-      duration: const Duration(milliseconds: 1),
     );
   }
 
