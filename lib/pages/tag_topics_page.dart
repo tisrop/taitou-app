@@ -159,8 +159,8 @@ class _TagTopicsPageState extends ConsumerState<TagTopicsPage> {
     }
   }
 
-  /// 静默刷新（不显示 loading）
-  Future<void> _silentRefresh() async {
+  /// 静默同步已加载话题的状态，不截断已加载的后续分页数据。
+  Future<void> _silentSyncTopics() async {
     try {
       final service = ref.read(discourseServiceProvider);
       final response = await service.getFilteredTopics(
@@ -177,21 +177,10 @@ class _TagTopicsPageState extends ConsumerState<TagTopicsPage> {
             : null,
       );
 
-      final result = _paginationHelper.processRefresh(
-        PaginationResult(
-          items: response.topics,
-          moreUrl: response.moreTopicsUrl,
-        ),
-      );
-
-      if (mounted) {
-        setState(() {
-          _topics = result.items;
-          _hasMore = result.hasMore;
-          _page = 0;
-        });
-        _loadMoreCoordinator.resetCooldown();
-      }
+      if (!mounted) return;
+      setState(() {
+        _topics = _paginationHelper.mergeUpdates(_topics, response.topics);
+      });
     } on DioException catch (_) {
       // 网络错误已由 ErrorInterceptor 处理
     } catch (e, s) {
@@ -311,9 +300,9 @@ class _TagTopicsPageState extends ConsumerState<TagTopicsPage> {
       ),
     );
 
-    // 从话题详情返回后，静默刷新
+    // 只合并第一页中的状态更新，保住已加载数据与滚动位置。
     if (mounted) {
-      _silentRefresh();
+      _silentSyncTopics();
     }
   }
 

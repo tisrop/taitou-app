@@ -222,6 +222,38 @@ class _CategoryTopicsPageState extends ConsumerState<CategoryTopicsPage> {
     }
   }
 
+  /// 静默同步已加载话题的状态，不截断已加载的后续分页数据。
+  Future<void> _silentSyncTopics() async {
+    try {
+      final service = ref.read(discourseServiceProvider);
+      final response = await service.getFilteredTopics(
+        filter: _currentFilter.filterName,
+        categoryId: widget.category.id,
+        categorySlug: widget.category.slug,
+        parentCategorySlug: _parentSlug,
+        tags: _selectedTags.isNotEmpty ? _selectedTags : null,
+        period: _currentFilter.period,
+        page: 0,
+        order: _currentOrder.apiValue,
+        ascending: _currentOrder != TopicSortOrder.defaultOrder
+            ? _ascending
+            : null,
+        subset: _currentFilter == TopicListFilter.newTopics
+            ? _currentSubset.apiValue
+            : null,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _topics = _paginationHelper.mergeUpdates(_topics, response.topics);
+      });
+    } on DioException catch (_) {
+      // 网络错误已由 ErrorInterceptor 处理
+    } catch (e, s) {
+      AppErrorHandler.handleUnexpected(e, s);
+    }
+  }
+
   Future<void> _loadMore() async {
     if (_isLoadMoreFailed) return;
     if (!_hasMore || _isLoadingMore || _isLoading) return;
@@ -423,9 +455,9 @@ class _CategoryTopicsPageState extends ConsumerState<CategoryTopicsPage> {
       ),
     );
 
-    // 从话题详情返回后，静默刷新以获取 MessageBus 更新的状态
+    // 只合并第一页中的状态更新，保住已加载数据与滚动位置。
     if (mounted) {
-      _silentRefresh();
+      _silentSyncTopics();
     }
   }
 
