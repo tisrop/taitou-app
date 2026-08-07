@@ -9,12 +9,15 @@ import '../../../../services/discourse/discourse_service.dart';
 import '../../../../services/toast_service.dart';
 import '../../../common/overlay/app_bottom_sheet.dart';
 
+typedef PostFlagTypesLoader = Future<List<FlagType>?> Function();
+
 /// 举报底部弹窗
 class PostFlagSheet extends StatefulWidget {
   final int postId;
   final String postUsername;
   final DiscourseService service;
   final VoidCallback? onSuccess;
+  final PostFlagTypesLoader? loadFlagTypes;
 
   const PostFlagSheet({
     super.key,
@@ -22,6 +25,7 @@ class PostFlagSheet extends StatefulWidget {
     required this.postUsername,
     required this.service,
     this.onSuccess,
+    this.loadFlagTypes,
   });
 
   @override
@@ -55,15 +59,15 @@ class _PostFlagSheetState extends State<PostFlagSheet> {
   }
 
   Future<void> _loadFlagTypes() async {
-    final preloaded = PreloadedDataService();
-    final types = await preloaded.getPostActionTypes();
+    final types = widget.loadFlagTypes != null
+        ? await widget.loadFlagTypes!()
+        : await _loadPreloadedFlagTypes();
 
     if (mounted) {
       setState(() {
         if (types != null && types.isNotEmpty) {
           _flagTypes =
               types
-                  .map((t) => FlagType.fromJson(t))
                   .where((f) => f.isFlag && f.enabled && f.appliesToPost)
                   .toList()
                 ..sort((a, b) => a.position.compareTo(b.position));
@@ -73,6 +77,11 @@ class _PostFlagSheetState extends State<PostFlagSheet> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<List<FlagType>?> _loadPreloadedFlagTypes() async {
+    final types = await PreloadedDataService().getPostActionTypes();
+    return types?.map(FlagType.fromJson).toList();
   }
 
   @override
@@ -223,6 +232,7 @@ class _PostFlagSheetState extends State<PostFlagSheet> {
     final description = _replaceDescription(type.description);
 
     return InkWell(
+      key: ValueKey('post-flag-option-${type.nameKey}'),
       onTap: () => setState(() => _selectedType = type),
       borderRadius: BorderRadius.circular(12),
       child: Container(
@@ -250,7 +260,28 @@ class _PostFlagSheetState extends State<PostFlagSheet> {
                   : theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 12),
-            Expanded(child: _buildDescriptionText(description, theme)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (type.name.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        _replaceDescription(type.name),
+                        key: ValueKey('post-flag-title-${type.nameKey}'),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  KeyedSubtree(
+                    key: ValueKey('post-flag-description-${type.nameKey}'),
+                    child: _buildDescriptionText(description, theme),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
