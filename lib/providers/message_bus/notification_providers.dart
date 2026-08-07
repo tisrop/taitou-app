@@ -14,17 +14,31 @@ import 'topic_tracking_providers.dart';
 /// 通知计数 Notifier
 /// 优先使用 MessageBus 推送的实时计数，初始值从 currentUser 获取。
 ///
-/// 关键：只对 currentUser 的「身份」(user.id) 建立依赖。
-/// 仅在登入 / 登出 / 切换账号（id 变化）时，才用服务端值重置计数；
-/// 同一用户的数据刷新（refreshSilently / invalidate）不会触发 rebuild，
-/// 从而保留 MessageBus 推送累积的实时计数，避免页面刷新把徽章刷回初值。
+/// 收到第一条实时更新前，持续采纳 currentUser 渐进加载出的服务端计数；
+/// 收到实时更新后则锁定 MessageBus 的新值，避免后续缓存刷新将徽章回刷。
 class NotificationCountNotifier extends Notifier<NotificationCountState> {
+  bool _liveUpdateReceived = false;
+  int? _lastUserId;
+
   @override
   NotificationCountState build() {
-    // 仅依赖 user.id：刷新同一用户不会重建，保留实时计数。
-    ref.watch(currentUserProvider.select((s) => s.value?.id));
-    final user = ref.read(currentUserProvider).value;
-    if (user == null) return const NotificationCountState();
+    final user = ref.watch(currentUserProvider).value;
+    if (user == null) {
+      _liveUpdateReceived = false;
+      _lastUserId = null;
+      return const NotificationCountState();
+    }
+
+    final identityChanged = user.id != _lastUserId;
+    _lastUserId = user.id;
+    if (identityChanged) {
+      _liveUpdateReceived = false;
+    }
+
+    if (_liveUpdateReceived) {
+      return state;
+    }
+
     return NotificationCountState(
       allUnread: user.allUnreadNotificationsCount,
       unread: user.unreadNotifications,
@@ -33,6 +47,7 @@ class NotificationCountNotifier extends Notifier<NotificationCountState> {
   }
 
   void update({int? allUnread, int? unread, int? highPriority}) {
+    _liveUpdateReceived = true;
     state = state.copyWith(
       allUnread: allUnread,
       unread: unread,
@@ -40,8 +55,9 @@ class NotificationCountNotifier extends Notifier<NotificationCountState> {
     );
   }
 
-  /// 标记所有已读后重置计数
+  /// 标记所有已读后重置计数，并防止服务端旧值重新点亮徽章。
   void markAllRead() {
+    _liveUpdateReceived = true;
     state = const NotificationCountState();
   }
 }
