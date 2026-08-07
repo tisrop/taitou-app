@@ -20,6 +20,7 @@ import 'providers/app_state_refresher.dart';
 import 'services/highlighter_service.dart';
 import 'widgets/common/misc/notification_icon_button.dart';
 import 'widgets/common/misc/clipboard_topic_link_snack_content.dart';
+import 'widgets/common/layout/anchor_guard_sliver.dart';
 import 'widgets/common/layout/predictive_back_cupertino_transitions.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -43,7 +44,7 @@ import 'services/browser_trust_coordinator.dart';
 import 'services/update_service.dart';
 import 'services/update_checker_helper.dart';
 import 'package:fluxdo_render/fluxdo_render.dart'
-    show FlattenCache, ParagraphLayoutCache;
+    show FlattenCache, FoldShiftHook, ParagraphLayoutCache;
 
 import 'services/clipboard_topic_link_service.dart';
 import 'services/deep_link_service.dart';
@@ -323,6 +324,10 @@ Future<void> main() async {
     await MigrationService.purgeTrash();
     await BlobImageCache.sweep(prefs);
   }());
+
+  // 折叠块(details/callout)展开动画帧武装滚动锚定哨兵:center 双向
+  // 列表的 reverse 半场里子项向上生长,否则展开会把标题顶出视口。
+  FoldShiftHook.onFrame = AnchorGuardSliver.arm;
 
   // 注入 AI 模型管理包的消息提示实现
   AiToastDelegate.configure((message, {type = AiToastType.info}) {
