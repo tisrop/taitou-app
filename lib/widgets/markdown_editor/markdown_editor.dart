@@ -122,6 +122,11 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
 
   final _toolbarKey = GlobalKey<MarkdownToolbarState>();
   final _scrollController = ScrollController();
+
+  /// 正文输入框定位锚。创建帖子页的 header 里还有标题输入框，
+  /// 光标跟随只能在正文子树内查找 RenderEditable，避免误把标题光标
+  /// 当成正文光标后将外层滚动位置拉回顶部。
+  final _bodyFieldKey = GlobalKey();
   final _pangu = Pangu();
   bool _isApplyingPangu = false;
   Timer? _panguTimer;
@@ -453,7 +458,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
       final selection = widget.controller.selection;
       if (!selection.isValid) return;
 
-      final renderObject = context.findRenderObject();
+      final renderObject = _bodyFieldKey.currentContext?.findRenderObject();
       if (renderObject == null) return;
 
       RenderEditable? editable;
@@ -485,13 +490,16 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
       final caretBottom = caretTop + caretLocal.height;
 
       double? target;
+      // 大于 EditableText 默认 scrollPadding(20)，避免它随后再次 reveal
+      // 同一个光标矩形，形成两个滚动驱动之间的轻微抖动。
+      const margin = 24.0;
       if (caretBottom > position.viewportDimension) {
         // 光标在视口下方，需要向下滚
         target =
-            position.pixels + caretBottom - position.viewportDimension + 8.0;
+            position.pixels + caretBottom - position.viewportDimension + margin;
       } else if (caretTop < 0) {
         // 光标在视口上方，需要向上滚
-        target = position.pixels + caretTop - 8.0;
+        target = position.pixels + caretTop - margin;
       }
 
       if (target != null) {
@@ -655,6 +663,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   /// 构建文本编辑器（可选包含 @提及自动补全）
   Widget _buildTextEditor() {
     final textField = TextField(
+      key: _bodyFieldKey,
       controller: widget.controller,
       focusNode: _focusNode,
       readOnly: _readOnly,

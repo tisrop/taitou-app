@@ -151,6 +151,61 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  testWidgets('header 含标题输入框时正文光标跟随不会跳回顶部', (tester) async {
+    final bodyController = TextEditingController(
+      text: List.generate(120, (i) => '正文第 $i 行').join('\n'),
+    );
+    final titleController = TextEditingController(text: '标题');
+    final bodyFocus = FocusNode();
+    addTearDown(() {
+      bodyController.dispose();
+      titleController.dispose();
+      bodyFocus.dispose();
+    });
+
+    await tester.pumpWidget(
+      await _wrap(
+        MarkdownEditor(
+          controller: bodyController,
+          focusNode: bodyFocus,
+          expands: true,
+          header: SizedBox(
+            height: 80,
+            child: TextField(controller: titleController),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final fields = find.byType(TextField);
+    expect(fields, findsNWidgets(2));
+    await tester.tap(fields.at(1), warnIfMissed: false);
+    await tester.pump();
+
+    final scrollView = find.byType(CustomScrollView);
+    await tester.drag(scrollView, const Offset(0, -10000), warnIfMissed: false);
+    await tester.pump();
+    final before = _outerScrollOffset(tester);
+    expect(before, greaterThan(0));
+
+    bodyController.value = bodyController.value.copyWith(
+      text: '${bodyController.text}x',
+      selection: TextSelection.collapsed(
+        offset: bodyController.text.length + 1,
+      ),
+      composing: TextRange.empty,
+    );
+    await tester.pump(); // 执行 _scrollToCursor 的 post-frame 回调
+
+    expect(
+      _outerScrollOffset(tester),
+      greaterThan(before - 80),
+      reason: '正文变化不能误用 header 标题的 RenderEditable 拉回顶部',
+    );
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('无 header(回复弹框形态)回归:点击聚焦正常', (tester) async {
     final controller = TextEditingController();
     final focus = FocusNode();
