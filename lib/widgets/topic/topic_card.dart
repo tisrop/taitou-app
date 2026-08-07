@@ -892,7 +892,14 @@ class TopicCard extends ConsumerWidget {
     return Text.rich(
       TextSpan(
         children: [
-          iconGlyphSpan(context, icon, size: 13, color: effectiveColor, gap: 3),
+          iconGlyphSpan(
+            context,
+            icon,
+            size: 13,
+            color: effectiveColor,
+            gap: 3,
+            textStyle: theme.textTheme.labelSmall,
+          ),
           TextSpan(
             text: NumberUtils.formatCount(count),
             style: theme.textTheme.labelSmall?.copyWith(
@@ -1115,6 +1122,9 @@ class CompactTopicCard extends ConsumerWidget {
                               alpha: 0.7,
                             ),
                             gap: 2,
+                            textStyle: theme.textTheme.labelSmall?.copyWith(
+                              fontSize: 10,
+                            ),
                           ),
                           TextSpan(
                             text: '${topic.postsCount - 1}',
