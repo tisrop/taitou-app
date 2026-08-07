@@ -49,6 +49,9 @@ class ScreenTrack {
   bool _inProgress = false;
   bool _hasFocus = true;
 
+  /// [abandon] 后抑制在途请求的成功回调，直到下一次 [start]。
+  bool _suppressCallbacks = false;
+
   /// CF 验证进行中标记。订阅自 [CfChallengeService.inProgressNotifier]。
   /// 为 true 时:
   /// - _tick 不再累积 _topicTime 和 _timings（避免一次性堆积几十秒的阅读时间
@@ -71,6 +74,7 @@ class ScreenTrack {
     }
     _reset();
     _topicId = topicId;
+    _suppressCallbacks = false;
     // 监听 CF 验证状态：CF 触发时立即清空累积数据并冻结后续 tick；
     // CF 完成后从下一个 tick 起从 0 重新累积。
     _cfFrozen = _cfService.isVerifying;
@@ -83,6 +87,21 @@ class ScreenTrack {
     _cfService.inProgressNotifier.removeListener(_onCfChange);
     _tick();
     _flush();
+    _reset();
+    _topicId = null;
+    _tickTimer?.cancel();
+    _tickTimer = null;
+  }
+
+  /// 丢弃当前话题尚未上报的阅读时间并立即停止追踪。
+  ///
+  /// “标记为未读”不能走 [stop]，因为 stop 会先 flush，可能把服务端刚
+  /// 回退的游标再次推进；在途请求的回调也必须被抑制，避免本地列表重新
+  /// 标记为已读。
+  void abandon() {
+    if (_topicId == null) return;
+    _cfService.inProgressNotifier.removeListener(_onCfChange);
+    _suppressCallbacks = true;
     _reset();
     _topicId = null;
     _tickTimer?.cancel();
@@ -272,7 +291,9 @@ class ScreenTrack {
       // 上报成功后调用回调，同步本地状态
       if (statusCode != null && statusCode < 400) {
         _ajaxFailures = 0;
-        if (next.timings.isNotEmpty && onTimingsSent != null) {
+        if (next.timings.isNotEmpty &&
+            onTimingsSent != null &&
+            !_suppressCallbacks) {
           final highestSeen = next.timings.keys.reduce((a, b) => a > b ? a : b);
           onTimingsSent!(next.topicId, next.timings.keys.toSet(), highestSeen);
         }

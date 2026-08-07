@@ -328,6 +328,28 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
     }
   }
 
+  /// 显式回退本地阅读游标，与服务端 timings 删除接口保持一致。
+  ///
+  /// [all] 为 false 时只将最后阅读位置回退到最高楼层前一层；为 true
+  /// 时清空阅读游标并恢复未见状态。由于列表同步采用单调前进合并，回退
+  /// 必须由本方法与列表 notifier 同时显式写入。
+  void markTopicUnread(
+    int topicId, {
+    required int highestPostNumber,
+    int? categoryId,
+    int? notificationLevel,
+    bool all = false,
+  }) {
+    state = markTopicUnreadTrackingState(
+      state,
+      topicId,
+      highestPostNumber: highestPostNumber,
+      categoryId: categoryId,
+      notificationLevel: notificationLevel,
+      all: all,
+    );
+  }
+
   /// 忽略所有新话题（本地调用，用于 dismissAll 同步）
   void dismissNewTopics({int? categoryId}) {
     final newState = Map<int, TrackedTopicState>.from(state);
@@ -355,6 +377,37 @@ class TopicTrackingStateNotifier extends Notifier<Map<int, TrackedTopicState>> {
     }
     state = newState;
   }
+}
+
+@visibleForTesting
+Map<int, TrackedTopicState> markTopicUnreadTrackingState(
+  Map<int, TrackedTopicState> current,
+  int topicId, {
+  required int highestPostNumber,
+  int? categoryId,
+  int? notificationLevel,
+  bool all = false,
+}) {
+  final existing = current[topicId];
+  final highest =
+      existing != null && existing.highestPostNumber > highestPostNumber
+      ? existing.highestPostNumber
+      : highestPostNumber;
+  final lastRead = all ? null : (highest > 1 ? highest - 1 : null);
+
+  return {
+    ...current,
+    topicId: TrackedTopicState(
+      topicId: topicId,
+      lastReadPostNumber: lastRead,
+      highestPostNumber: highest,
+      categoryId: categoryId ?? existing?.categoryId,
+      notificationLevel:
+          notificationLevel ?? existing?.notificationLevel ?? 1,
+      createdInNewPeriod: existing?.createdInNewPeriod ?? all,
+      isSeen: all ? false : (existing?.isSeen ?? true),
+    ),
+  };
 }
 
 final topicTrackingStateProvider =

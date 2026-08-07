@@ -22,6 +22,7 @@ import 'composer_shortcuts.dart';
 import 'editor_tools.dart';
 import 'emoji_popover.dart';
 import 'media_upload_helper.dart';
+import 'poll_builder_dialog.dart';
 import 'voice_recorder_sheet.dart';
 import 'image_upload_dialog.dart';
 import 'link_insert_dialog.dart';
@@ -959,6 +960,20 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         text[selection.start - 1] != '\n';
     final prefix = needsLeadingNewline ? '\n' : '';
     insertText('$prefix$snippet\n');
+  }
+
+  /// 打开投票构建器并在当前光标处插入 `[poll]` BBCode。
+  ///
+  /// Discourse 要求同一帖子里的具名投票名称唯一；首个投票可以使用默认
+  /// 名称，后续投票按正文中已有的 poll 块数量生成 poll2、poll3……
+  Future<void> insertPoll(BuildContext context) async {
+    final existing = RegExp(
+      r'\[poll(?:\s|\])',
+      caseSensitive: false,
+    ).allMatches(widget.controller.text).length;
+    final spec = await showPollBuilderDialog(context);
+    if (spec == null || !mounted) return;
+    insertBlockSnippet(spec.toBBCode(existingPollCount: existing));
   }
 
   /// 语音消息:录音面板 → 上传([wrap=voice] 语音条标签)→ 插入。

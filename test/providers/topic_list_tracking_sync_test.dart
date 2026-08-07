@@ -121,4 +121,61 @@ void main() {
       expect(result, same(topics));
     });
   });
+
+  group('标记为未读', () {
+    test('回退最后一层时 tracking 与列表保持相同游标', () {
+      final tracking = markTopicUnreadTrackingState(
+        {
+          1: _tracked(
+            lastReadPostNumber: 7,
+            highestPostNumber: 7,
+            isSeen: true,
+          ),
+        },
+        1,
+        highestPostNumber: 6,
+      );
+      final topics = markTopicUnreadInList(
+        [_topic(lastReadPostNumber: 7, highestPostNumber: 7)],
+        1,
+      );
+
+      expect(tracking[1]!.highestPostNumber, 7);
+      expect(tracking[1]!.lastReadPostNumber, 6);
+      expect(topics.single.lastReadPostNumber, 6);
+      expect(topics.single.unread, 1);
+      expect(topics.single.unseen, isFalse);
+    });
+
+    test('全部未读会清空游标并恢复 unseen，但不虚增 unread', () {
+      final tracking = markTopicUnreadTrackingState(
+        {
+          1: _tracked(
+            lastReadPostNumber: 7,
+            highestPostNumber: 7,
+            isSeen: true,
+          ),
+        },
+        1,
+        highestPostNumber: 7,
+        all: true,
+      );
+      final topics = markTopicUnreadInList(
+        [_topic(lastReadPostNumber: 7, highestPostNumber: 7)],
+        1,
+        all: true,
+      );
+
+      expect(tracking[1]!.lastReadPostNumber, isNull);
+      expect(tracking[1]!.isSeen, isFalse);
+      expect(topics.single.lastReadPostNumber, isNull);
+      expect(topics.single.unseen, isTrue);
+      expect(topics.single.unread, 0);
+    });
+
+    test('列表未命中话题时复用原实例', () {
+      final topics = [_topic(id: 1)];
+      expect(markTopicUnreadInList(topics, 2), same(topics));
+    });
+  });
 }

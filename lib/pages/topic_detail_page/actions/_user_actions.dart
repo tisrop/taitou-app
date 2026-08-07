@@ -581,6 +581,65 @@ extension _UserActions on _TopicDetailPageState {
     }
   }
 
+  /// 标记话题为未读并退出详情页。
+  ///
+  /// 必须先放弃 ScreenTrack 的未上报数据，否则 timings 请求可能在服务端
+  /// 回退阅读游标后马上把它推进回来。服务端成功后再同步全局 tracking
+  /// 与当前已挂载的话题列表，最后离开页面，避免继续阅读再次产生 timings。
+  Future<void> _handleMarkUnread(TopicDetail detail, {bool all = false}) async {
+    _screenTrack.abandon();
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .markTopicUnread(widget.topicId, all: all);
+    } on DioException catch (e) {
+      debugPrint('[TopicDetail] 标记未读失败: ${e.response?.statusCode}');
+      _restartScreenTrackAfterMarkUnreadFailure();
+      return;
+    } catch (e, s) {
+      _restartScreenTrackAfterMarkUnreadFailure();
+      AppErrorHandler.handleUnexpected(e, s);
+      return;
+    }
+
+    if (!mounted) return;
+
+    final container = ProviderScope.containerOf(context, listen: false);
+    container.read(topicTrackingStateProvider.notifier).markTopicUnread(
+      widget.topicId,
+      // TopicDetail 不包含 highest_post_number；posts_count 作为回退值，
+      // notifier 会优先保留 tracking state 中更大的服务端游标。
+      highestPostNumber: detail.postsCount,
+      categoryId: detail.categoryId,
+      notificationLevel: detail.notificationLevel.value,
+      all: all,
+    );
+
+    // 只改已经挂载的列表，避免为一次本地状态写入触发未打开分类的请求。
+    final pinnedIds = container.read(pinnedCategoriesProvider);
+    for (final categoryId in [null, ...pinnedIds]) {
+      final provider = topicListProvider(categoryId);
+      if (!container.exists(provider)) continue;
+      container.read(provider.notifier).markUnread(widget.topicId, all: all);
+    }
+
+    ToastService.showSuccess(S.current.topicDetail_markUnreadSuccess);
+    if (widget.embeddedMode) {
+      widget.onEmbeddedBack?.call();
+    } else {
+      unawaited(Navigator.of(context).maybePop());
+    }
+  }
+
+  void _restartScreenTrackAfterMarkUnreadFailure() {
+    if (!mounted || !_controller.trackEnabled) return;
+    _screenTrack.start(widget.topicId);
+    if (_controller.visiblePostNumbers.isNotEmpty) {
+      _screenTrack.setOnscreen(_controller.visiblePostNumbers);
+      _screenTrack.scrolled();
+    }
+  }
+
   void _shareTopic() {
     final user = ref.read(currentUserProvider).value;
     final username = user?.username ?? '';

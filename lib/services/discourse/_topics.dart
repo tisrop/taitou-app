@@ -354,6 +354,17 @@ mixin _TopicsMixin on _DiscourseServiceBase {
     );
   }
 
+  /// 标记话题为未读。
+  ///
+  /// 默认仅回退最后一层（Discourse `destroy_last_for`）；[all] 为 true
+  /// 时清空该话题的全部阅读进度，让下次进入时从头开始。
+  Future<void> markTopicUnread(int topicId, {bool all = false}) async {
+    await _dio.delete(
+      '/t/$topicId/timings.json',
+      queryParameters: all ? null : const {'last': 1},
+    );
+  }
+
   /// 设置话题订阅级别
   Future<void> setTopicNotificationLevel(int topicId, TopicNotificationLevel level) async {
     await _dio.post(

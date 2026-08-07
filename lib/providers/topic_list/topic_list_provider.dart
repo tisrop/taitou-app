@@ -389,6 +389,20 @@ class TopicListNotifier extends AsyncNotifier<List<Topic>>
     ref.read(topicTrackingStateProvider.notifier)
         .updateTopicRead(topicId, highestSeen, topic.highestPostNumber);
   }
+
+  /// 将已挂载列表中的话题显式回退为未读。
+  ///
+  /// 该写入不能依赖 [syncTopicsWithTrackingState]，因为后者为抵御旧消息
+  /// 重放只允许游标前进；标记未读是少数合法的主动回退场景。
+  void markUnread(int topicId, {bool all = false}) {
+    final topics = state.value;
+    if (topics == null) return;
+
+    final updated = markTopicUnreadInList(topics, topicId, all: all);
+    if (!identical(updated, topics)) {
+      state = AsyncValue.data(updated);
+    }
+  }
 }
 
 final topicListProvider = AsyncNotifierProvider.family<TopicListNotifier, List<Topic>, int?>(
@@ -448,6 +462,30 @@ List<Topic> syncTopicsWithTrackingState(
   }
 
   return updatedTopics ?? topics;
+}
+
+/// 显式回退列表快照中的阅读游标；未命中时复用原列表实例。
+@visibleForTesting
+List<Topic> markTopicUnreadInList(
+  List<Topic> topics,
+  int topicId, {
+  bool all = false,
+}) {
+  final index = topics.indexWhere((topic) => topic.id == topicId);
+  if (index == -1) return topics;
+
+  final topic = topics[index];
+  final highest = topic.highestPostNumber;
+  final lastRead = all ? null : (highest > 1 ? highest - 1 : null);
+  final updated = [...topics];
+  updated[index] = topic.copyWith(
+    unseen: all,
+    unread: lastRead == null ? 0 : highest - lastRead,
+    newPosts: 0,
+    lastReadPostNumber: lastRead,
+    clearLastRead: lastRead == null,
+  );
+  return updated;
 }
 
 /// 热门话题 Provider

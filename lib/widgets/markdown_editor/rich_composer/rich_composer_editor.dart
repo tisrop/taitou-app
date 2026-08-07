@@ -59,6 +59,7 @@ import '../emoji_popover.dart';
 import '../emoji_sticker_panel.dart';
 import '../image_upload_dialog.dart';
 import '../link_insert_dialog.dart';
+import '../poll_builder_dialog.dart';
 import '../template_insert_dialog.dart';
 import '../composer_shortcuts.dart' show composerShortcutHint;
 import '../markdown_toolbar.dart' show MarkdownToolbarState;
@@ -1215,6 +1216,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         item('__link__', Icons.link_rounded, '插入链接'),
         // 日期时间:弹属性对话框选时间再插原子(不再是死模板)
         item('__date__', Icons.event_rounded, '日期时间'),
+        item('__poll__', Icons.poll_outlined, '创建投票'),
         // 音视频:选文件改名 .xz 上传后插 <audio>/<video> 标签
         item('__audio__', Icons.audiotrack_rounded, '上传音频'),
         item('__video__', Icons.videocam_outlined, '上传视频'),
@@ -1230,6 +1232,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       await _insertCustomMarkdown();
     } else if (selected == '__date__') {
       await _insertLocalDate();
+    } else if (selected == '__poll__') {
+      await _insertPoll();
     } else if (selected == '__audio__' || selected == '__video__') {
       await _pickAndInsertMedia(isAudio: selected == '__audio__');
     } else if (selected == '__voice__') {
@@ -1261,6 +1265,18 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       );
     }
     editor.insertAtom(run);
+  }
+
+  /// 投票构建器产出 BBCode，再复用富编辑器统一的 markdown → cook 插入
+  /// 链路。这样投票仍作为原子岛呈现，提交时由文档序列化器还原为 raw。
+  Future<void> _insertPoll() async {
+    final existing = RegExp(
+      r'\[poll(?:\s|\])',
+      caseSensitive: false,
+    ).allMatches(widget.controller.text).length;
+    final spec = await showPollBuilderDialog(context);
+    if (spec == null || !mounted) return;
+    await insertMarkdownSnippet(spec.toBBCode(existingPollCount: existing));
   }
 
   /// 自由 markdown 输入(兜底:poll/policy/iframe 等任意语法都能进来,

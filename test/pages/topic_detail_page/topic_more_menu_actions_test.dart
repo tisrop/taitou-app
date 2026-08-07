@@ -7,6 +7,8 @@ void main() {
     var bookmarkCalls = 0;
     var readLaterCalls = 0;
     var subscribeCalls = 0;
+    var markUnreadCalls = 0;
+    var markUnreadAllCalls = 0;
     var shareLinkCalls = 0;
     var shareImageCalls = 0;
     var exportCalls = 0;
@@ -20,6 +22,8 @@ void main() {
       onBookmark: () => bookmarkCalls++,
       onReadLater: () => readLaterCalls++,
       onSubscribe: () => subscribeCalls++,
+      onMarkUnread: () => markUnreadCalls++,
+      onMarkUnreadAll: () => markUnreadAllCalls++,
       onShareLink: () => shareLinkCalls++,
       onShareImage: () => shareImageCalls++,
       onExport: () => exportCalls++,
@@ -32,11 +36,44 @@ void main() {
     expect(bookmarkCalls, 1);
     expect(readLaterCalls, 0);
     expect(subscribeCalls, 0);
+    expect(markUnreadCalls, 0);
+    expect(markUnreadAllCalls, 0);
     expect(shareLinkCalls, 0);
     expect(shareImageCalls, 0);
     expect(exportCalls, 0);
     expect(openInBrowserCalls, 0);
     expect(filterCalls, 0);
     expect(readingSettingsCalls, 0);
+  });
+
+  test('标记未读的两个菜单项分别触发对应动作', () {
+    var markUnreadCalls = 0;
+    var markUnreadAllCalls = 0;
+
+    void handle(String value) {
+      handleTopicDetailMoreMenuSelection(
+        value,
+        onEditTopic: () {},
+        onBookmark: () {},
+        onReadLater: () {},
+        onSubscribe: () {},
+        onMarkUnread: () => markUnreadCalls++,
+        onMarkUnreadAll: () => markUnreadAllCalls++,
+        onShareLink: () {},
+        onShareImage: () {},
+        onExport: () {},
+        onOpenInBrowser: () {},
+        onFilter: () {},
+        onReadingSettings: () {},
+      );
+    }
+
+    handle('mark_unread');
+    expect(markUnreadCalls, 1);
+    expect(markUnreadAllCalls, 0);
+
+    handle('mark_unread_all');
+    expect(markUnreadCalls, 1);
+    expect(markUnreadAllCalls, 1);
   });
 }
