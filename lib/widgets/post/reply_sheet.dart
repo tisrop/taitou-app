@@ -23,7 +23,6 @@ import '../../services/app_error_handler.dart';
 import '../../services/network/exceptions/api_exception.dart';
 import '../../services/toast_service.dart';
 import '../../services/preloaded_data_service.dart';
-import '../common/visual/smart_avatar.dart';
 import '../../l10n/s.dart';
 import '../../utils/dialog_utils.dart';
 import '../../providers/shortcut_provider.dart';
@@ -48,6 +47,7 @@ Future<Post?> showReplySheet({
   int? categoryId,
   Post? replyToPost,
   String? targetUsername,
+
   /// 新建私信（无预设收件人）：收件人由用户在编辑器内搜索添加
   bool composePrivateMessage = false,
   String? draftKey,
@@ -63,7 +63,7 @@ Future<Post?> showReplySheet({
   final result = await showAppBottomSheet<Post?>(
     context: context,
     isScrollControlled: true,
-    useSafeArea: false,
+    useSafeArea: true,
     backgroundColor: Colors.transparent,
     shortcutSurface: shortcutSurface,
     builder: (context) => ReplySheet(
@@ -102,7 +102,7 @@ Future<Post?> showEditSheet({
   final result = await showAppBottomSheet<Post?>(
     context: context,
     isScrollControlled: true,
-    useSafeArea: false,
+    useSafeArea: true,
     backgroundColor: Colors.transparent,
     shortcutSurface: shortcutSurface,
     builder: (context) => ReplySheet(
@@ -172,6 +172,9 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   bool _showEmojiPanel = false;
   bool _isLoadingRaw = false; // 编辑模式：加载原始内容中
   bool _isLoadingDraft = false; // 加载草稿中
+  bool _isChangingReplyTarget = false;
+
+  late Post? _replyToPost;
 
   // 表情面板高度
   static const double _emojiPanelHeight = 280.0;
@@ -206,6 +209,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   @override
   void initState() {
     super.initState();
+    _replyToPost = widget.replyToPost;
     EmojiHandler().init();
 
     // 编辑模式：加载帖子原始内容
@@ -265,7 +269,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
       // 区分回复话题和回复帖子
       draftKey = Draft.replyKey(
         widget.topicId!,
-        replyToPostNumber: widget.replyToPost?.postNumber,
+        replyToPostNumber: _replyToPost?.postNumber,
       );
     } else {
       return;
@@ -351,16 +355,44 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
   void _onContentChanged() {
     if (_isEditMode || _draftController == null) return;
 
-    final data = DraftData(
+    _draftController!.scheduleSave(_currentDraftData());
+  }
+
+  DraftData _currentDraftData() {
+    return DraftData(
       reply: _contentController.text,
       title: _isPrivateMessage ? _titleController.text : null,
       action: _isPrivateMessage ? 'privateMessage' : 'reply',
-      replyToPostNumber: widget.replyToPost?.postNumber,
+      replyToPostNumber: _replyToPost?.postNumber,
       recipients: _isPrivateMessage ? _recipients : null,
       archetypeId: _isPrivateMessage ? 'private_message' : 'regular',
     );
+  }
 
-    _draftController!.scheduleSave(data);
+  Future<void> _changeReplyTarget(Post? target) async {
+    if (_isPrivateMessage || _isEditMode || widget.topicId == null) return;
+    if (_replyToPost?.postNumber == target?.postNumber) return;
+
+    _richKey.currentState?.flushToController();
+    setState(() => _isChangingReplyTarget = true);
+
+    final previous = _draftController;
+    previous?.disable();
+    await previous?.deleteDraft();
+    previous?.dispose();
+    if (!mounted) return;
+
+    setState(() {
+      _replyToPost = target;
+      _draftController = DraftController(
+        draftKey: Draft.replyKey(
+          widget.topicId!,
+          replyToPostNumber: target?.postNumber,
+        ),
+      );
+      _isChangingReplyTarget = false;
+    });
+    _draftController?.scheduleSave(_currentDraftData());
   }
 
   /// 加载帖子原始内容
@@ -403,16 +435,8 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
           _contentController.text.trim().isNotEmpty ||
           (_isPrivateMessage && _titleController.text.trim().isNotEmpty);
       if (hasContent) {
-        final data = DraftData(
-          reply: _contentController.text,
-          title: _isPrivateMessage ? _titleController.text : null,
-          action: _isPrivateMessage ? 'privateMessage' : 'reply',
-          replyToPostNumber: widget.replyToPost?.postNumber,
-          recipients: _isPrivateMessage ? _recipients : null,
-          archetypeId: _isPrivateMessage ? 'private_message' : 'regular',
-        );
         // 异步保存，不阻塞 dispose
-        _draftController!.saveNow(data);
+        _draftController!.saveNow(_currentDraftData());
       } else {
         // 内容为空，删除草稿
         _draftController!.deleteDraft();
@@ -509,7 +533,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
         final newPost = await DiscourseService().createReply(
           topicId: widget.topicId!,
           raw: content,
-          replyToPostNumber: widget.replyToPost?.postNumber,
+          replyToPostNumber: _replyToPost?.postNumber,
           draftKey: _draftController?.draftKey,
           onDraftSequence: (seq) => _draftController?.syncSequence(seq),
         );
@@ -525,14 +549,13 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
       _submitted = true;
       if (!mounted) return;
       final pending = e.pendingPost;
-      if (pending != null && widget.editPost == null && widget.topicId != null) {
+      if (pending != null &&
+          widget.editPost == null &&
+          widget.topicId != null) {
         // enqueued 响应的 pending_post 只有 {id, raw, created_at},回复目标
         // 服务端 payload 存了但本人可见接口都不吐;趁 composer 还知道上下文
         // 记入注册表,「撤回并重新编辑」才能恢复"回复某楼"而非退化为直接回复话题
-        PendingReplyTargetRegistry.record(
-          pending.id,
-          widget.replyToPost?.postNumber,
-        );
+        PendingReplyTargetRegistry.record(pending.id, _replyToPost?.postNumber);
       }
       if (widget.onEnqueued != null && pending != null) {
         // 宿主接管展示(如主题页底部待审块),轻提示即可
@@ -594,11 +617,377 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     }
   }
 
+  void _closeComposer() {
+    _hideInputPanel();
+    Navigator.of(context).pop();
+  }
+
+  void _hideInputPanel() {
+    _editorKey.currentState?.closeEmojiPanel();
+    _richKey.currentState?.closeEmojiPanel();
+    _contentFocusNode.unfocus();
+    if (_showEmojiPanel && mounted) {
+      setState(() => _showEmojiPanel = false);
+    }
+  }
+
+  Future<void> _pickAndUploadImages() async {
+    if (_isSubmitting || _isLoadingRaw || _isLoadingDraft) return;
+    final useRich =
+        ref.read(preferencesProvider).useRichComposer && !_richFallback;
+    if (useRich) {
+      await _richKey.currentState?.pickAndUploadImages();
+    } else {
+      await _editorKey.currentState?.pickAndUploadImages();
+    }
+  }
+
+  Future<void> _toggleComposerMode() async {
+    final activeRichMode =
+        ref.read(preferencesProvider).useRichComposer && !_richFallback;
+    if (activeRichMode) {
+      _richKey.currentState?.flushToController();
+    } else if (mounted) {
+      setState(() => _richFallback = false);
+    }
+
+    await ref
+        .read(preferencesProvider.notifier)
+        .setUseRichComposer(!activeRichMode);
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _contentFocusNode.requestFocus();
+    });
+  }
+
+  Widget _buildReplyTargetSelector(ThemeData theme) {
+    final Post? originalReplyTarget = widget.replyToPost;
+    final String label;
+    final IconData icon;
+
+    if (_isEditMode) {
+      label = context.l10n.post_editPostTitle(widget.editPost!.postNumber);
+      icon = Symbols.edit_rounded;
+    } else if (_isPrivateMessage) {
+      label = _canEditRecipients
+          ? context.l10n.pm_newTitle
+          : context.l10n.post_sendPmTitle(_recipients.join(', '));
+      icon = Symbols.mail_rounded;
+    } else if (_replyToPost != null) {
+      label = _replyToPost!.username;
+      icon = Symbols.reply_rounded;
+    } else {
+      label = context.l10n.shortcuts_topic;
+      icon = Symbols.reply_rounded;
+    }
+
+    final child = Container(
+      key: const ValueKey('replyComposerTarget'),
+      constraints: const BoxConstraints(minHeight: 44),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleMedium,
+            ),
+          ),
+          if (originalReplyTarget != null &&
+              !_isEditMode &&
+              !_isPrivateMessage &&
+              widget.draftKey == null) ...[
+            const SizedBox(width: 4),
+            Icon(
+              Symbols.keyboard_arrow_down_rounded,
+              size: 20,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (originalReplyTarget == null ||
+        _isEditMode ||
+        _isPrivateMessage ||
+        widget.draftKey != null) {
+      return child;
+    }
+
+    return PopupMenuButton<int>(
+      enabled: !_isChangingReplyTarget && !_isSubmitting,
+      tooltip: context.l10n.post_replyTo,
+      onSelected: (value) =>
+          _changeReplyTarget(value == 0 ? null : originalReplyTarget),
+      itemBuilder: (context) => [
+        PopupMenuItem<int>(
+          value: 1,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              _replyToPost != null
+                  ? Symbols.check_rounded
+                  : Symbols.reply_rounded,
+            ),
+            title: Text(
+              context.l10n.post_replyToUser(originalReplyTarget.username),
+            ),
+          ),
+        ),
+        PopupMenuItem<int>(
+          value: 0,
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              _replyToPost == null
+                  ? Symbols.check_rounded
+                  : Symbols.forum_rounded,
+            ),
+            title: Text(context.l10n.post_replyToTopic),
+          ),
+        ),
+      ],
+      child: child,
+    );
+  }
+
+  Widget _buildComposerContext(ThemeData theme) {
+    final String label;
+    final String tooltip;
+    final Key key;
+
+    if (_replyToPost != null) {
+      label = '#${_replyToPost!.postNumber}';
+      tooltip = context.l10n.post_replyToUser(_replyToPost!.username);
+      key = const ValueKey('replyComposerPostContext');
+    } else {
+      label = widget.topicTitle!.trim();
+      tooltip = label;
+      key = const ValueKey('replyComposerTopicContext');
+    }
+
+    return Tooltip(
+      message: tooltip,
+      child: Row(
+        key: key,
+        children: [
+          Icon(
+            Symbols.link_rounded,
+            size: 18,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComposerMenu() {
+    final activeRichMode =
+        ref.watch(preferencesProvider).useRichComposer && !_richFallback;
+
+    Widget buildMenu(bool isReviewing, VoidCallback? review) {
+      return PopupMenuButton<int>(
+        key: const ValueKey('replyComposerMenu'),
+        enabled: !_isSubmitting && !_isLoadingRaw && !_isLoadingDraft,
+        tooltip: context.l10n.common_more,
+        icon: isReviewing
+            ? const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Symbols.menu_rounded),
+        onSelected: (value) {
+          if (value == 0) {
+            _toggleComposerMode();
+          } else if (value == 1) {
+            review?.call();
+          }
+        },
+        itemBuilder: (context) => [
+          PopupMenuItem<int>(
+            value: 0,
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                activeRichMode
+                    ? Symbols.code_rounded
+                    : Symbols.format_shapes_rounded,
+              ),
+              title: Text(activeRichMode ? '切换到 Markdown 模式' : '切换到富文本模式'),
+            ),
+          ),
+          if (_canReviewPost)
+            PopupMenuItem<int>(
+              value: 1,
+              enabled: review != null,
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: isReviewing
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Symbols.auto_awesome_rounded),
+                title: Text(
+                  isReviewing
+                      ? context.l10n.aiPostReview_reviewing
+                      : context.l10n.aiPostReview_button,
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+
+    if (!_canReviewPost) return buildMenu(false, null);
+    return AiPostReviewButton(
+      titleBuilder: () => widget.topicTitle,
+      contentBuilder: () => _contentController.text,
+      target: AiPostReviewTarget.reply,
+      enabled: !_isSubmitting && !_isLoadingRaw,
+      builder: (context, isReviewing, trigger) =>
+          buildMenu(isReviewing, trigger),
+    );
+  }
+
+  Widget _buildComposerHeader(ThemeData theme) {
+    final hasContext =
+        _replyToPost != null ||
+        (!_isEditMode &&
+            !_isPrivateMessage &&
+            widget.topicTitle?.trim().isNotEmpty == true);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+      child: Row(
+        children: [
+          if (hasContext) ...[
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 150),
+              child: _buildReplyTargetSelector(theme),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: _buildComposerContext(theme)),
+          ] else
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: _buildReplyTargetSelector(theme),
+              ),
+            ),
+          _buildComposerMenu(),
+          IconButton(
+            key: const ValueKey('replyComposerHideKeyboard'),
+            onPressed: _hideInputPanel,
+            tooltip: context.l10n.common_close,
+            icon: const Icon(Symbols.keyboard_arrow_down_rounded),
+          ),
+          IconButton(
+            key: const ValueKey('replyComposerClose'),
+            onPressed: _isSubmitting ? null : _closeComposer,
+            tooltip: context.l10n.common_close,
+            icon: const Icon(Symbols.close_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComposerFooter(ThemeData theme) {
+    final disabled =
+        _isSubmitting ||
+        _isLoadingRaw ||
+        _isLoadingDraft ||
+        _isChangingReplyTarget;
+    return Container(
+      key: const ValueKey('replyComposerFooter'),
+      color: theme.colorScheme.surface,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+      child: Row(
+        children: [
+          FilledButton.icon(
+            key: const ValueKey('replyComposerSend'),
+            onPressed: disabled ? null : _submit,
+            icon: _isSubmitting
+                ? const LoadingSpinner(size: 18, color: Colors.white)
+                : Icon(
+                    _isEditMode
+                        ? Symbols.save_rounded
+                        : _isPrivateMessage
+                        ? Symbols.send_rounded
+                        : Symbols.reply_rounded,
+                  ),
+            label: Text(
+              _isEditMode
+                  ? context.l10n.common_save
+                  : _isPrivateMessage
+                  ? context.l10n.common_send
+                  : context.l10n.topicDetail_replyLabel,
+            ),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(0, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              textStyle: theme.textTheme.titleMedium,
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            key: const ValueKey('replyComposerDiscard'),
+            onPressed: disabled ? null : _discardDraft,
+            tooltip: context.l10n.common_discard,
+            icon: const Icon(Symbols.delete_outline_rounded),
+          ),
+          if (_draftController != null) ...[
+            const SizedBox(width: 4),
+            ValueListenableBuilder<DraftSaveStatus>(
+              valueListenable: _draftController!.statusNotifier,
+              builder: (context, status, _) =>
+                  _buildDraftStatusIndicator(status, theme),
+            ),
+          ],
+          const Spacer(),
+          IconButton.outlined(
+            key: const ValueKey('replyComposerUpload'),
+            onPressed: disabled ? null : _pickAndUploadImages,
+            tooltip: context.l10n.common_upload,
+            icon: const Icon(Symbols.upload_rounded),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // 使用 FractionallySizedBox 固定 0.95 高度
+    // 使用接近全屏的编辑器布局，保留系统安全区。
     // SafeArea(bottom: false)：顶部安全区域由 SafeArea 处理，
     // 底部安全区域由 ChatBottomPanelContainer 内部管理，避免双重底部间距
     // CallbackShortcuts 包整个弹层:Cmd/Ctrl+Enter 提交(对齐 Discourse
@@ -606,7 +995,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
     final sheet = SafeArea(
       bottom: false,
       child: FractionallySizedBox(
-        heightFactor: 0.95,
+        heightFactor: 1,
         alignment: Alignment.bottomCenter,
         child: Scaffold(
           backgroundColor: Colors.transparent,
@@ -633,158 +1022,7 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                   ),
                   child: Column(
                     children: [
-                      // 1. 顶部 Header (固定)
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 拖拽手柄
-                          Container(
-                            width: 32,
-                            height: 4,
-                            margin: const EdgeInsets.only(top: 12, bottom: 8),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.outlineVariant,
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-
-                          // 标题行
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            child: Row(
-                              children: [
-                                // 标题信息
-                                if (_isEditMode) ...[
-                                  Icon(
-                                    Symbols.edit_rounded,
-                                    size: 18,
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      context.l10n.post_editPostTitle(
-                                        widget.editPost!.postNumber,
-                                      ),
-                                      style: theme.textTheme.titleSmall,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ] else if (_isPrivateMessage)
-                                  Expanded(
-                                    child: _canEditRecipients
-                                        ? Text(
-                                            context.l10n.pm_newTitle,
-                                            style: theme.textTheme.titleSmall,
-                                            overflow: TextOverflow.ellipsis,
-                                          )
-                                        : Text(
-                                            context.l10n.post_sendPmTitle(
-                                              _recipients.join(', '),
-                                            ),
-                                            style: theme.textTheme.titleSmall,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                  )
-                                else if (widget.replyToPost != null) ...[
-                                  SmartAvatar(
-                                    imageUrl:
-                                        widget.replyToPost!
-                                            .getAvatarUrl()
-                                            .isNotEmpty
-                                        ? widget.replyToPost!.getAvatarUrl()
-                                        : null,
-                                    radius: 14,
-                                    fallbackText: widget.replyToPost!.username,
-                                    backgroundColor:
-                                        theme.colorScheme.primaryContainer,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      context.l10n.post_replyToUser(
-                                        widget.replyToPost!.username,
-                                      ),
-                                      style: theme.textTheme.titleSmall,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ] else
-                                  Text(
-                                    context.l10n.post_replyToTopic,
-                                    style: theme.textTheme.titleSmall,
-                                  ),
-
-                                if (!_isPrivateMessage &&
-                                    !_isEditMode &&
-                                    widget.replyToPost == null)
-                                  const Spacer(),
-
-                                // 草稿保存状态指示器
-                                if (_draftController != null) ...[
-                                  ValueListenableBuilder<DraftSaveStatus>(
-                                    valueListenable:
-                                        _draftController!.statusNotifier,
-                                    builder: (context, status, _) {
-                                      return _buildDraftStatusIndicator(
-                                        status,
-                                        theme,
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(width: 8),
-                                  // 舍弃按钮
-                                  TextButton(
-                                    onPressed: _isSubmitting
-                                        ? null
-                                        : _discardDraft,
-                                    child: Text(context.l10n.common_discard),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-
-                                if (_canReviewPost) ...[
-                                  AiPostReviewButton(
-                                    titleBuilder: () => widget.topicTitle,
-                                    contentBuilder: () =>
-                                        _contentController.text,
-                                    target: AiPostReviewTarget.reply,
-                                    enabled: !_isSubmitting && !_isLoadingRaw,
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-
-                                // 发送/保存按钮
-                                FilledButton(
-                                  onPressed: (_isSubmitting || _isLoadingRaw)
-                                      ? null
-                                      : _submit,
-                                  child: _isSubmitting
-                                      ? const LoadingSpinner(
-                                          size: 20,
-                                          color: Colors.white,
-                                        )
-                                      : Text(
-                                          _isEditMode
-                                              ? context.l10n.common_save
-                                              : context.l10n.common_send,
-                                        ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          Divider(
-                            height: 1,
-                            color: theme.colorScheme.outlineVariant.withValues(
-                              alpha: 0.5,
-                            ),
-                          ),
-                        ],
-                      ),
+                      _buildComposerHeader(theme),
 
                       // 新建私信：收件人选择（已指定对象时不显示，收件人固定）
                       if (_canEditRecipients)
@@ -833,80 +1071,121 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                       // 并存 IME 交接竞态,说明见 create_topic_page)
                       Expanded(
                         child: ComposerSwitchFade(
-                          child: (ref
-                                      .watch(preferencesProvider)
-                                      .useRichComposer &&
+                          child:
+                              (ref.watch(preferencesProvider).useRichComposer &&
                                   !_richFallback)
-                            // 富文本的初始导入是一次性的(不监听 controller
-                            // 后续变化)——编辑原帖 raw / 草稿加载完成前挂载
-                            // 会用空 controller 建空文档,之后镜像回写覆盖
-                            // 真内容(毁帖)。内容源就绪后才挂;占位留空,
-                            // 加载视觉由草稿遮罩/RichComposer 自身统一提供
-                            // (双 spinner 叠影)。
-                            ? ((_isLoadingRaw || _isLoadingDraft)
-                                ? const SizedBox.shrink()
-                                : RichComposerEditor(
-                                    key: _richKey,
-                                    controller: _contentController,
-                                    focusNode: _contentFocusNode,
-                                    hintText: context.l10n.editor_hintText,
-                                    emojiPanelHeight: _emojiPanelHeight,
-                                    onEmojiPanelChanged: (show) {
-                                      setState(() => _showEmojiPanel = show);
-                                    },
-                                    mentionDataSource: (term) =>
-                                        DiscourseService().searchUsers(
-                                          term: term,
-                                          topicId: widget.topicId,
-                                          categoryId: widget.categoryId,
-                                          includeGroups:
-                                              !_isInPrivateMessageContext,
+                              // 富文本的初始导入是一次性的(不监听 controller
+                              // 后续变化)——编辑原帖 raw / 草稿加载完成前挂载
+                              // 会用空 controller 建空文档,之后镜像回写覆盖
+                              // 真内容(毁帖)。内容源就绪后才挂;占位留空,
+                              // 加载视觉由草稿遮罩/RichComposer 自身统一提供
+                              // (双 spinner 叠影)。
+                              ? ((_isLoadingRaw || _isLoadingDraft)
+                                    ? const SizedBox.shrink()
+                                    : RichComposerEditor(
+                                        key: _richKey,
+                                        controller: _contentController,
+                                        focusNode: _contentFocusNode,
+                                        hintText: context.l10n.editor_hintText,
+                                        toolbarAtTop: true,
+                                        editorMargin: const EdgeInsets.fromLTRB(
+                                          16,
+                                          8,
+                                          16,
+                                          0,
                                         ),
-                                    onFallbackToPlain: () {
-                                      if (mounted) {
-                                        setState(() => _richFallback = true);
-                                      }
-                                    },
-                                    // 主动切源码(可经工具栏「富文本
-                                    // 模式」切回,导入门禁重跑)
-                                    onSwitchToSource: () {
-                                      if (mounted) {
-                                        setState(() => _richFallback = true);
-                                      }
-                                    },
-                                  ))
-                            : MarkdownEditor(
-                                key: _editorKey,
-                                controller: _contentController,
-                                focusNode: _contentFocusNode,
-                                hintText: context.l10n.editor_hintText,
-                                expands: true,
-                                emojiPanelHeight: _emojiPanelHeight,
-                                onEmojiPanelChanged: (show) {
-                                  setState(() => _showEmojiPanel = show);
-                                },
-                                // 源码 → 富文本(仅富文本开关开着且当前
-                                // 处于主动切换态;门禁降级也允许重试 ——
-                                // 内容可能已改到可导入)
-                                onSwitchToRich: ref
-                                        .watch(preferencesProvider)
-                                        .useRichComposer
-                                    ? () {
-                                        if (mounted) {
+                                        editorDecoration: BoxDecoration(
+                                          color: theme.colorScheme.surface,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: theme
+                                                .colorScheme
+                                                .outlineVariant,
+                                          ),
+                                        ),
+                                        footer: _buildComposerFooter(theme),
+                                        emojiPanelHeight: _emojiPanelHeight,
+                                        onEmojiPanelChanged: (show) {
                                           setState(
-                                              () => _richFallback = false);
-                                        }
-                                      }
-                                    : null,
-                                mentionDataSource: (term) =>
-                                    DiscourseService().searchUsers(
-                                      term: term,
-                                      topicId: widget.topicId,
-                                      categoryId: widget.categoryId,
-                                      includeGroups:
-                                          !_isInPrivateMessageContext, // 私信不允许提及群组
+                                            () => _showEmojiPanel = show,
+                                          );
+                                        },
+                                        mentionDataSource: (term) =>
+                                            DiscourseService().searchUsers(
+                                              term: term,
+                                              topicId: widget.topicId,
+                                              categoryId: widget.categoryId,
+                                              includeGroups:
+                                                  !_isInPrivateMessageContext,
+                                            ),
+                                        onFallbackToPlain: () {
+                                          if (mounted) {
+                                            setState(
+                                              () => _richFallback = true,
+                                            );
+                                          }
+                                        },
+                                        // 主动切源码(可经工具栏「富文本
+                                        // 模式」切回,导入门禁重跑)
+                                        onSwitchToSource: () {
+                                          if (mounted) {
+                                            setState(
+                                              () => _richFallback = true,
+                                            );
+                                          }
+                                        },
+                                      ))
+                              : MarkdownEditor(
+                                  key: _editorKey,
+                                  controller: _contentController,
+                                  focusNode: _contentFocusNode,
+                                  hintText: context.l10n.editor_hintText,
+                                  expands: true,
+                                  toolbarAtTop: true,
+                                  editorMargin: const EdgeInsets.fromLTRB(
+                                    16,
+                                    8,
+                                    16,
+                                    0,
+                                  ),
+                                  editorDecoration: BoxDecoration(
+                                    color: theme.colorScheme.surface,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: theme.colorScheme.outlineVariant,
                                     ),
-                              ),
+                                  ),
+                                  footer: _buildComposerFooter(theme),
+                                  emojiPanelHeight: _emojiPanelHeight,
+                                  onEmojiPanelChanged: (show) {
+                                    setState(() => _showEmojiPanel = show);
+                                  },
+                                  // 源码 → 富文本(仅富文本开关开着且当前
+                                  // 处于主动切换态;门禁降级也允许重试 ——
+                                  // 内容可能已改到可导入)
+                                  onSwitchToRich:
+                                      ref
+                                          .watch(preferencesProvider)
+                                          .useRichComposer
+                                      ? () {
+                                          if (mounted) {
+                                            setState(
+                                              () => _richFallback = false,
+                                            );
+                                          }
+                                        }
+                                      : null,
+                                  mentionDataSource: (term) =>
+                                      DiscourseService().searchUsers(
+                                        term: term,
+                                        topicId: widget.topicId,
+                                        categoryId: widget.categoryId,
+                                        includeGroups:
+                                            !_isInPrivateMessageContext, // 私信不允许提及群组
+                                      ),
+                                ),
                         ),
                       ),
                     ],
