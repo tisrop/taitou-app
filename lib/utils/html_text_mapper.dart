@@ -31,6 +31,9 @@ class HtmlTextMapper {
       final normalizedSelected = _normalize(selectedPlainText);
       if (normalizedSelected.isEmpty) return null;
 
+      // 全选时完整 cooked 就是最准确的对应片段。
+      if (normalizedFull == normalizedSelected) return cooked;
+
       final matchStart = normalizedFull.indexOf(normalizedSelected);
       if (matchStart == -1) return null;
       final matchEnd = matchStart + normalizedSelected.length;
@@ -71,9 +74,11 @@ class HtmlTextMapper {
         }
 
         if (isFullySelected) {
-          // 完整选中：返回父元素 HTML（保留 <b>、<em> 等格式标记）
+          // 只有父元素没有其他文本兄弟时才返回 outerHtml；否则会把未选中的
+          // <br> 分隔行一并带入引用。
           final parent = startNode.node.parentNode;
-          if (parent is dom.Element) {
+          if (parent is dom.Element &&
+              _normalize(parent.text) == _normalize(startNode.node.text ?? '')) {
             return parent.outerHtml;
           }
         }
@@ -344,6 +349,19 @@ class HtmlTextMapper {
     List<_TextNodeInfo> result,
     StringBuffer buffer,
   ) {
+    // lightbox 的 meta 是悬浮遮罩，不属于可选择正文。锚点只投影图片
+    // title/alt，避免文件名和尺寸重复计入后破坏后续文本偏移。
+    if (node is dom.Element &&
+        node.localName == 'a' &&
+        (node.classes.contains('lightbox') ||
+            node.classes.contains('d-lazyload'))) {
+      final img = node.querySelector('img');
+      if (img != null) {
+        _collectTextNodes(img, result, buffer);
+      }
+      return;
+    }
+
     if (node.nodeType == dom.Node.TEXT_NODE) {
       final text = node.text ?? '';
       if (text.isNotEmpty) {
