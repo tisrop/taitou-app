@@ -282,15 +282,28 @@ class EditorImeClient with TextInputClient {
     final value = _unformat(rawValue);
     if (value == null) {
       // 文本不以 pad 开头。只有「恰好等于上次值去掉 pad」才是真·段首退格
-      // (IME 只删了 pad)；其余空值回显或陈旧回显一律
-      // 视为平台状态失真 → 重喂权威状态,**绝不**触发合并(否则空回显会
-      // 把段落错误合并)。
+      // (IME 只删了 pad)；移动端把整个窗口删成空串则按清空落地；其余
+      // 空值回显或陈旧回显一律视为平台状态失真 → 重喂权威状态。
       final expectedRemainder = _lastSent.text.startsWith(_padChar)
           ? _lastSent.text.substring(1)
           : null;
       if (expectedRemainder != null && rawValue.text == expectedRemainder) {
         state.sealHistory();
         state.mergeWithPrevious(blockId);
+      } else if (rawValue.text.isEmpty &&
+          expectedRemainder != null &&
+          expectedRemainder.isNotEmpty &&
+          defaultTargetPlatform == TargetPlatform.android) {
+        _log('IME window cleared — apply as clear');
+        state.sealHistory();
+        final selection = state.selection;
+        if (selection != null && !selection.isCollapsed) {
+          state.deleteSelection();
+        } else {
+          final length = state.textBlockById(blockId)?.content.length ?? 0;
+          state.imeReplace(blockId, 0, length, '', caretOffset: 0);
+        }
+        state.sealHistory();
       }
       syncFromState(show: false, force: true);
       return;

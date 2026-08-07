@@ -6,6 +6,7 @@
 library;
 
 import 'package:characters/characters.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo_render/src/editor/input/editor_ime_client.dart';
@@ -261,6 +262,73 @@ void main() {
       expect(state.blocks.length, 1);
       expect((state.blocks[0] as TextBlock).content.text, '第一段second');
       expect(state.selection!.extent.offset, 3);
+    });
+  });
+
+  group('Android IME 整窗清空', () {
+    test('整窗含 pad 删成空串时清空当前段', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final (state, ime) = makeAttached();
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+
+      expect((state.blocks[0] as TextBlock).content.text, '');
+      expect(state.blocks.length, 2, reason: '只清空当前段，不合并段落');
+      expect(state.selection!.extent.offset, 0);
+    });
+
+    test('清空作为独立 undo 步', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final (state, ime) = makeAttached(paragraphs: const ['第一段']);
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+      expect((state.blocks[0] as TextBlock).content.text, '');
+
+      state.undo();
+      expect((state.blocks[0] as TextBlock).content.text, '第一段');
+    });
+
+    test('已升格的跨段全选在整窗清空时删除全文', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final (state, ime) = makeAttached(
+        paragraphs: const ['abcde', 'fgh'],
+        caret: 2,
+      );
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '${pad}abcde',
+          selection: const TextSelection(baseOffset: 1, extentOffset: 6),
+          composing: TextRange.empty,
+        ),
+      );
+      expect(state.selection!.isCollapsed, false);
+
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+
+      final text = state.blocks
+          .whereType<TextBlock>()
+          .map((block) => block.content.text)
+          .join();
+      expect(text, '');
     });
   });
 
