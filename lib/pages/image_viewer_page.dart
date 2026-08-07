@@ -232,6 +232,7 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
         widget.heroSourceFit == BoxFit.cover && thumbUrl != null;
     return Hero(
       tag: tag,
+      transitionOnUserGestures: true,
       flightShuttleBuilder: !coverSource
           ? (_, _, _, _, _) => child
           : (flightContext, animation, direction, fromContext, toContext) {

@@ -560,6 +560,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                                 flairColor: _user?.flairColor,
                                 avatar: Hero(
                                   tag: 'user_avatar_${_user?.username ?? ''}',
+                                  transitionOnUserGestures: true,
                                   child: SmartAvatar(
                                     imageUrl: _user?.getAvatarUrl() != null
                                         ? _user!.getAvatarUrl(size: 144)
