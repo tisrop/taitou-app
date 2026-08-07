@@ -19,6 +19,7 @@ final pad = EditorImeClient.padCharForTesting;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  _softBreakTests();
 
   (EditorState, EditorImeClient) makeAttached({
     List<String> paragraphs = const ['第一段', 'second'],
@@ -462,6 +463,108 @@ void main() {
       );
       expect((state.blocks[0] as TextBlock).content.text, 'hi world');
       expect(state.selection!.extent.offset, 2);
+    });
+  });
+}
+
+/// 段内软换行必须在普通 IME 编辑后保持不变。
+void _softBreakTests() {
+  group('段内软换行', () {
+    (EditorState, EditorImeClient) attach(String text, {int? caret}) {
+      final offset = caret ?? text.length;
+      final state = EditorState(
+        blocks: [
+          TextBlock(id: 'b0', content: EditableTextContent(text: text)),
+        ],
+      );
+      state.updateSelection(
+        EditorSelection.collapsed(
+          EditorPosition(blockId: 'b0', offset: offset),
+        ),
+      );
+      final ime = EditorImeClient(state: state);
+      ime.debugAttachToBlock(
+        'b0',
+        EditorImeClient.debugFormat(
+          TextEditingValue(
+            text: text,
+            selection: TextSelection.collapsed(offset: offset),
+          ),
+        ),
+      );
+      return (state, ime);
+    }
+
+    String textOf(EditorState state) =>
+        (state.blocks.first as TextBlock).content.text;
+
+    test('末尾打字时保留既有软换行', () {
+      const text = '第一行\n第二行\n第三行';
+      final (state, ime) = attach(text);
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad$text*',
+          selection: TextSelection.collapsed(offset: text.length + 2),
+        ),
+      );
+      expect(textOf(state), '$text*');
+    });
+
+    test('中间打字时保留既有软换行', () {
+      const text = '第一行\n第二行';
+      final (state, ime) = attach(text, caret: 3);
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad第一行X\n第二行',
+          selection: const TextSelection.collapsed(offset: 5),
+        ),
+      );
+      expect(textOf(state), '第一行X\n第二行');
+    });
+
+    test('平台新插入的纯换行仍转换为分段', () {
+      const text = '第一行\n第二行';
+      final (state, ime) = attach(text);
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad$text\n',
+          selection: TextSelection.collapsed(offset: text.length + 2),
+        ),
+      );
+      expect(state.blocks.length, 2);
+      expect(textOf(state), text, reason: '既有软换行不应被删除');
+    });
+
+    test('混合替换剥换行后修正光标位置', () {
+      final (state, ime) = attach('abc', caret: 2);
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '${EditorImeClient.padCharForTesting}aX\nYc',
+          selection: TextSelection.collapsed(offset: 5),
+        ),
+      );
+      expect(textOf(state), 'aXYc');
+      expect(state.blocks.length, 1);
+      expect(state.selection!.extent.offset, 3);
+    });
+
+    test('混合替换后回喂无换行基线，下一击不错位', () {
+      final (state, ime) = attach('abc', caret: 2);
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '${EditorImeClient.padCharForTesting}aX\nYc',
+          selection: TextSelection.collapsed(offset: 5),
+        ),
+      );
+      expect(ime.debugLastSent.text.contains('\n'), isFalse);
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '${EditorImeClient.padCharForTesting}aXYZc',
+          selection: TextSelection.collapsed(offset: 5),
+        ),
+      );
+      expect(textOf(state), 'aXYZc');
+      expect(state.selection!.extent.offset, 4);
     });
   });
 }

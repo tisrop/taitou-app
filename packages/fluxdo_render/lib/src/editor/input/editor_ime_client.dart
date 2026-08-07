@@ -315,29 +315,31 @@ class EditorImeClient with TextInputClient {
           text: state.textBlockById(blockId)?.content.text ?? '',
         );
 
-    // 平台可能插入 '\n'(部分 IME 的回车路径不走 performAction)——
-    // 编辑器语义是分段,拦下来转 splitParagraph。
-    if (value.text.contains('\n')) {
-      final cleaned = value.text.replaceAll('\n', '');
-      if (cleaned == prev.text) {
+    // 换行按来源区分:新插入的 '\n' 是回车；段内既有的 '\n' 是
+    // cook `<br>` 导入的软换行，必须保留。只清理 diff 插入段里的换行，
+    // 避免编辑一次就把整段已有换行全部洗掉。
+    var sanitizedText = value.text;
+    var caret = value.selection.extentOffset;
+    final rawDiff = diffWithCaret(prev.text, sanitizedText, caret);
+    if (rawDiff != null && rawDiff.inserted.contains('\n')) {
+      final withoutBreaks = rawDiff.inserted.replaceAll('\n', '');
+      if (withoutBreaks.isEmpty && rawDiff.oldEnd == rawDiff.start) {
         state.splitBlock();
         syncFromState(show: false);
         return;
       }
-      // 混合变更(罕见):先按纯文本处理,'\n' 剥掉。
+      sanitizedText = sanitizedText.substring(0, rawDiff.start) +
+          withoutBreaks +
+          sanitizedText.substring(rawDiff.start + rawDiff.inserted.length);
+      for (var i = 0; i < rawDiff.inserted.length; i++) {
+        if (rawDiff.inserted[i] == '\n' && rawDiff.start + i < caret) {
+          caret--;
+        }
+      }
     }
-    // 剥 '\n'(编辑器语义是分段,不进文本)。注意**不能**在这里剥 FFFC:
-    // 窗口文本里的 FFFC 是既有原子的合法哨兵,整体剥除会被 diff 误判为
-    // "删除了原子"。幻造哨兵只可能出现在**新插入段**里 → 对 diff.inserted
-    // 单独 sanitize(见下)。
-    final sanitizedText = value.text.replaceAll('\n', '');
 
     // 三段式 diff(对比上次值,caret 锚定):公共前缀/后缀 → 中段即变更。
-    final diff = diffWithCaret(
-      prev.text,
-      sanitizedText,
-      value.selection.extentOffset,
-    );
+    final diff = diffWithCaret(prev.text, sanitizedText, caret);
 
     final composing = value.composing;
 
@@ -390,7 +392,7 @@ class EditorImeClient with TextInputClient {
       diff.start,
       diff.oldEnd,
       cleanInserted,
-      caretOffset: (value.selection.extentOffset - phantomCount).clamp(
+      caretOffset: (caret - phantomCount).clamp(
         0,
         sanitizedText.length - phantomCount,
       ),
@@ -422,10 +424,10 @@ class EditorImeClient with TextInputClient {
       }
     }
 
-    // reconcile:若应用后文档与 IME 认知不一致(编辑器改写了内容,
-    // 比如剥了 '\n'/幻造 FFFC/input rule 转换),回喂纠正。
+    // reconcile 要与平台窗口原文比较。若插入段的换行被剥掉，文档会
+    // 等于 sanitizedText，但平台仍持有换行；此时也必须强制回喂纠正。
     final now = state.textBlockById(blockId);
-    if (now != null && now.content.text != sanitizedText) {
+    if (now != null && now.content.text != value.text) {
       syncFromState(show: false, force: true);
     }
   }
