@@ -687,6 +687,10 @@ class Post {
   // 帖子头部徽章
   final List<GrantedBadge>? badgesGranted; // 帖子头部显示的徽章
 
+  // 纪念日 / 生日（纯日期，格式 "YYYY-MM-DD"；生日年份可能是隐私假值）
+  final String? userCakedate; // 加入社区的纪念日（年份为真实注册年份）
+  final String? userBirthdate; // 生日（只使用月/日判断）
+
   // 用户 ID（用于打赏等功能）
   final int? userId;
 
@@ -807,6 +811,8 @@ class Post {
     this.userTitle,
     this.userStatus,
     this.badgesGranted,
+    this.userCakedate,
+    this.userBirthdate,
     this.userId,
     this.moderator = false,
     this.admin = false,
@@ -918,6 +924,8 @@ class Post {
       badgesGranted: (json['badges_granted'] as List<dynamic>?)
           ?.map((e) => GrantedBadge.fromJson(e as Map<String, dynamic>))
           .toList(),
+      userCakedate: json['user_cakedate'] as String?,
+      userBirthdate: json['user_birthdate'] as String?,
       userId: json['user_id'] as int?,
       moderator: json['moderator'] as bool? ?? false,
       admin: json['admin'] as bool? ?? false,
@@ -1084,6 +1092,8 @@ class Post {
     String? userTitle,
     UserStatus? userStatus,
     List<GrantedBadge>? badgesGranted,
+    String? userCakedate,
+    String? userBirthdate,
     int? userId,
     bool? moderator,
     bool? admin,
@@ -1169,6 +1179,8 @@ class Post {
       userTitle: userTitle ?? this.userTitle,
       userStatus: userStatus ?? this.userStatus,
       badgesGranted: badgesGranted ?? this.badgesGranted,
+      userCakedate: userCakedate ?? this.userCakedate,
+      userBirthdate: userBirthdate ?? this.userBirthdate,
       userId: userId ?? this.userId,
       moderator: moderator ?? this.moderator,
       admin: admin ?? this.admin,
@@ -1201,6 +1213,26 @@ class Post {
       editReason: clearEditReason ? null : (editReason ?? this.editReason),
     );
   }
+
+  /// [dateStr] 的月/日是否与本机今天一致。使用纯日历比较，避免时区换算。
+  static bool _isTodayMonthDay(String? dateStr) {
+    if (dateStr == null || dateStr.length < 10) return false;
+    final month = int.tryParse(dateStr.substring(5, 7));
+    final day = int.tryParse(dateStr.substring(8, 10));
+    if (month == null || day == null) return false;
+    final now = DateTime.now();
+    return month == now.month && day == now.day;
+  }
+
+  /// 今天是否是用户加入社区的纪念日；注册当年不计为周年。
+  bool get isTodayCakeday {
+    if (!_isTodayMonthDay(userCakedate)) return false;
+    final year = int.tryParse(userCakedate!.substring(0, 4));
+    return year != null && year != DateTime.now().year;
+  }
+
+  /// 今天是否是用户生日；生日年份可能是隐私假值，只比较月/日。
+  bool get isTodayBirthday => _isTodayMonthDay(userBirthdate);
 }
 
 /// Policy 用户摘要（精简字段：id / username / avatar_template）
