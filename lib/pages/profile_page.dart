@@ -85,17 +85,22 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
   }
 
-  /// 下拉刷新
-  Future<void> _refreshData() async {
+  /// 刷新页面数据。
+  ///
+  /// 下拉刷新已有独立的圆片指示器，因此仅在没有外部指示器的刷新入口
+  /// 显示 AppBar loading，避免同屏出现两套加载状态。
+  Future<void> _refreshData({bool showAppBarIndicator = true}) async {
     if (!mounted) return;
-    setState(() => _isRefreshing = true);
+    if (showAppBarIndicator) setState(() => _isRefreshing = true);
     try {
       await Future.wait([
         ref.read(currentUserProvider.notifier).refreshSilently(force: true),
         ref.read(userSummaryProvider.notifier).refresh(),
       ]);
     } finally {
-      if (mounted) setState(() => _isRefreshing = false);
+      if (mounted && showAppBarIndicator) {
+        setState(() => _isRefreshing = false);
+      }
     }
   }
 
@@ -402,7 +407,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     return DesktopRefreshIndicator(
       refreshNotifier: masterRefreshNotifier,
       shouldRefresh: () => widget.isActive,
-      onRefresh: _refreshData,
+      onRefresh: () => _refreshData(showAppBarIndicator: false),
       child: ListView(
         controller: _scrollController,
         // 底部让出 extendBody 注入的底栏高度
@@ -517,7 +522,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     return DesktopRefreshIndicator(
       refreshNotifier: masterRefreshNotifier,
       shouldRefresh: () => widget.isActive,
-      onRefresh: _refreshData,
+      onRefresh: () => _refreshData(showAppBarIndicator: false),
       child: ListView(
         controller: _rightScrollController,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
