@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:m3e_ui/m3e_ui.dart';
@@ -63,5 +65,52 @@ void main() {
     await tester.pumpAndSettle();
     expect(refreshed, 1);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('刷新圆片在 SizeTransition 内保留阴影空间', (tester) async {
+    final refreshCompleter = Completer<void>();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: M3eRefreshIndicator(
+            onRefresh: () => refreshCompleter.future,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [SizedBox(height: 1000)],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.fling(find.byType(ListView), const Offset(0, 400), 1000);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final badge = find.byWidgetPredicate(
+      (widget) =>
+          widget is Material &&
+          widget.elevation == 3 &&
+          widget.shape is CircleBorder,
+    );
+    expect(badge, findsOneWidget);
+
+    final reveal = find.ancestor(
+      of: badge,
+      matching: find.byType(SizeTransition),
+    );
+    expect(reveal, findsOneWidget);
+
+    final badgeRect = tester.getRect(badge);
+    final revealRect = tester.getRect(reveal);
+    expect(badgeRect.top, 40, reason: '增加阴影留白后应保持原 displacement');
+    expect(
+      revealRect.bottom - badgeRect.bottom,
+      greaterThanOrEqualTo(6),
+      reason: '裁剪边界应在圆片下方保留阴影空间',
+    );
+
+    refreshCompleter.complete();
+    await tester.pumpAndSettle();
   });
 }
