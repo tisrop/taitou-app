@@ -1036,9 +1036,18 @@ class FluxdoRenderCallbacks {
       mathInlineBuilder: _mathInlineBuilder,
       oneboxBuilder: _oneboxHandler(const []),
       imageGridBuilder: _imageGridBuilder,
-      // 无 post → 无法做接受/撤销 + 票数交互,返回 null 让子包出 fallback 占位。
+      // 无 post → 无法做接受/撤销交互,返回 null 让子包出 fallback 占位。
       policyBuilder: (ctx, node) => null,
-      pollBuilder: (ctx, node) => null,
+      // 富文本编辑器拿不到票数与投票交互数据，但 cooked poll 中仍有
+      // 标题、选项和属性，展示静态预览比通用占位更接近最终发布效果。
+      pollBuilder: (ctx, node) {
+        if (node.rawHtml.isEmpty) return null;
+        return legacy_poll.buildPollStaticPreview(
+          context: ctx,
+          theme: Theme.of(ctx),
+          element: _elementFromHtml(node.rawHtml),
+        );
+      },
       chatTranscriptBuilder: _chatTranscriptHandler(heroTagNamespace, topicId),
       svgBuilder: _svgBuilder,
       videoBuilder: _videoBuilder,

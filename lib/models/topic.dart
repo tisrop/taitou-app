@@ -116,6 +116,7 @@ class Poll {
   final String results;
   final List<PollOption> options;
   final int voters;
+  final String? chartType;
 
   Poll({
     required this.id,
@@ -125,6 +126,7 @@ class Poll {
     required this.results,
     required this.options,
     required this.voters,
+    this.chartType,
   });
 
   factory Poll.fromJson(Map<String, dynamic> json) {
@@ -140,6 +142,7 @@ class Poll {
               .toList() ??
           [],
       voters: json['voters'] as int? ?? 0,
+      chartType: json['chart_type'] as String?,
     );
   }
 }

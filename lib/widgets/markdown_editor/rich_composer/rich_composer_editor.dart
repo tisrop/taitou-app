@@ -24,6 +24,7 @@ import 'package:fluxdo_render/fluxdo_render.dart'
         CalloutKind,
         CodeBlockNode,
         OneboxNode,
+        PollNode,
         QuoteCardNode,
         EmojiRun,
         ImageRun,
@@ -88,6 +89,7 @@ NodeFactory buildComposerNodeFactory(BuildContext context) {
     mathBlockBuilder: callbacks.mathBlockBuilder,
     mathInlineBuilder: callbacks.mathInlineBuilder,
     svgBuilder: callbacks.svgBuilder,
+    pollBuilder: callbacks.pollBuilder,
   );
 }
 
@@ -1270,11 +1272,15 @@ class RichComposerEditorState extends State<RichComposerEditor> {
   /// 投票构建器产出 BBCode，再复用富编辑器统一的 markdown → cook 插入
   /// 链路。这样投票仍作为原子岛呈现，提交时由文档序列化器还原为 raw。
   Future<void> _insertPoll() async {
+    flushToController();
     final existing = RegExp(
       r'\[poll(?:\s|\])',
       caseSensitive: false,
     ).allMatches(widget.controller.text).length;
-    final spec = await showPollBuilderDialog(context);
+    final spec = await showPollBuilderDialog(
+      context,
+      existingPollCount: existing,
+    );
     if (spec == null || !mounted) return;
     await insertMarkdownSnippet(spec.toBBCode(existingPollCount: existing));
   }
@@ -1298,6 +1304,23 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     if (editor == null) return;
 
     final source = serializeIslandNode(island.node);
+
+    // 表单能够完整建模的 poll 优先回到创建时的构建器；不支持的复杂
+    // poll（如 ranked_choice）仍走下面的源码编辑兜底，避免信息丢失。
+    if (island.node is PollNode) {
+      final spec = PollSpec.tryParse(source);
+      if (spec != null) {
+        final edited = await showPollBuilderDialog(context, initial: spec);
+        if (edited == null || !mounted) return;
+        final markdown = edited.toBBCode();
+        if (markdown == source) return;
+        final fragment = await markdownToDoc(markdown);
+        if (!mounted || fragment == null) return;
+        editor.replaceIsland(island.id, fragment);
+        return;
+      }
+    }
+
     final text = await _showMarkdownDialog(
       title: '编辑源码',
       confirmLabel: '应用',
