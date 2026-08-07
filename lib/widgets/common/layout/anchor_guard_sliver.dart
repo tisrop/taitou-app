@@ -141,13 +141,29 @@ class RenderAnchorGuardSliver extends RenderSliver {
   double _baseViewportAnchor = 0.0;
   Size _baseViewportSize = Size.zero;
 
-  /// 连续修正保险丝:修正后 pixels 必然偏离基线、下一趟只能重建基线,
-  /// 理论上不存在连环修正;万一有布局怪癖打破该假设,到 3 次直接放弃,
-  /// 宁可跳一下也不逼近 viewport 的布局循环上限。
+  /// 连续修正保险丝:同帧内最多修正 3 次，跨帧的连续动画正常放行。
   int _correctionStreak = 0;
+  Duration _streakFrame = Duration.zero;
 
   /// 位移小于该值不修正:吸收文本重排的亚像素噪音,避免无意义的重排趟数
   static const _minCorrection = 0.5;
+
+  // 零尺寸哨兵的约束可能在 viewport 重排后保持不变，导致布局缓存继续
+  // 暴露旧 correction。记录发出时的 pixels；修正落地后把旧几何视为已消费。
+  ScrollPosition? _correctionOffset;
+  double _correctionEmitPixels = 0;
+
+  @override
+  SliverGeometry? get geometry {
+    final current = super.geometry;
+    final offset = _correctionOffset;
+    if (current?.scrollOffsetCorrection != null &&
+        offset != null &&
+        (!offset.hasPixels || offset.pixels != _correctionEmitPixels)) {
+      return SliverGeometry.zero;
+    }
+    return current;
+  }
 
   void _invalidateBaseline() {
     _anchorBox = null;
@@ -186,6 +202,8 @@ class RenderAnchorGuardSliver extends RenderSliver {
           ? -1.0
           : 1.0;
       geometry = SliverGeometry(scrollOffsetCorrection: sign * correction!);
+      _correctionOffset = offset;
+      _correctionEmitPixels = offset.pixels;
     }
   }
 
@@ -210,6 +228,12 @@ class RenderAnchorGuardSliver extends RenderSliver {
         viewport.anchor == _baseViewportAnchor &&
         viewport.size == _baseViewportSize;
 
+    final frameNow = SchedulerBinding.instance.currentFrameTimeStamp;
+    if (frameNow != _streakFrame) {
+      _streakFrame = frameNow;
+      _correctionStreak = 0;
+    }
+
     if (canCompare && _correctionStreak < 3) {
       final top = _boxTopInViewport(anchor, viewport);
       final delta = top - _anchorTop;
@@ -217,6 +241,9 @@ class RenderAnchorGuardSliver extends RenderSliver {
         // 锚往下移 Δ(上方内容变高)→ pixels 需同增 Δ 把它拉回原位;
         // 变矮同理(Δ 为负)
         _correctionStreak++;
+        // correctBy 后 pixels 会同步增加 delta，提前推进基线，避免逐帧动画
+        // 的下一帧因 pixels 不匹配而漏掉一次锚定。
+        _basePixels += delta;
         _pendingLogDelta += delta;
         _scheduleLog();
         return delta;
@@ -342,6 +369,7 @@ class RenderAnchorGuardSliver extends RenderSliver {
   @override
   void detach() {
     _invalidateBaseline();
+    _correctionOffset = null;
     super.detach();
   }
 

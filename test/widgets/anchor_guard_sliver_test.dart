@@ -53,6 +53,72 @@ class _AnchorHarnessState extends State<_AnchorHarness> {
   }
 }
 
+class _ReverseAnchorHarness extends StatefulWidget {
+  const _ReverseAnchorHarness({super.key});
+
+  @override
+  State<_ReverseAnchorHarness> createState() => _ReverseAnchorHarnessState();
+}
+
+class _ReverseAnchorHarnessState extends State<_ReverseAnchorHarness> {
+  final controller = ScrollController();
+  final centerKey = GlobalKey();
+  double bodyHeight = 40;
+
+  void growBody(double delta) {
+    AnchorGuardSliver.arm();
+    setState(() => bodyHeight += delta);
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget filler(Color color) =>
+        SizedBox(height: 100, child: ColoredBox(color: color));
+
+    return MaterialApp(
+      home: Scaffold(
+        body: CustomScrollView(
+          controller: controller,
+          center: centerKey,
+          scrollCacheExtent: ScrollCacheExtent.pixels(2000),
+          slivers: [
+            const AnchorGuardSliver(),
+            SliverList.builder(
+              itemCount: 10,
+              itemBuilder: (context, index) {
+                if (index != 2) return filler(Colors.green);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(
+                      key: ValueKey('reverse-anchor'),
+                      height: 40,
+                      child: Text('折叠标题'),
+                    ),
+                    SizedBox(height: bodyHeight),
+                  ],
+                );
+              },
+            ),
+            SliverList.builder(
+              key: centerKey,
+              itemCount: 10,
+              itemBuilder: (context, index) => filler(Colors.amber),
+            ),
+            const AnchorGuardSliver(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 void main() {
   testWidgets('单盒 sliver 上方插入内容时保持锚点位置', (tester) async {
     final harnessKey = GlobalKey<_AnchorHarnessState>();
@@ -75,5 +141,29 @@ void main() {
       harnessKey.currentState!.controller.offset,
       closeTo(offsetBefore + 120, 0.01),
     );
+  });
+
+  testWidgets('反向半场连续多帧增长时每帧只消费一次修正', (tester) async {
+    final harnessKey = GlobalKey<_ReverseAnchorHarnessState>();
+    await tester.pumpWidget(_ReverseAnchorHarness(key: harnessKey));
+
+    harnessKey.currentState!.controller.jumpTo(-450);
+    await tester.pump();
+    await tester.pump();
+
+    final anchor = find.byKey(const ValueKey('reverse-anchor'));
+    expect(anchor, findsOneWidget);
+    final topBefore = tester.getTopLeft(anchor).dy;
+
+    for (var frame = 0; frame < 6; frame++) {
+      harnessKey.currentState!.growBody(16);
+      await tester.pump(const Duration(milliseconds: 16));
+      final topNow = tester.getTopLeft(anchor).dy;
+      expect(
+        topNow,
+        closeTo(topBefore, 0.5),
+        reason: '第 ${frame + 1} 帧不应漏修或重复消费修正',
+      );
+    }
   });
 }
