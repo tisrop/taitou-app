@@ -56,6 +56,7 @@ import 'services/log/log_writer.dart';
 import 'services/download_service.dart';
 import 'services/migration_service.dart';
 import 'services/navigation/app_route_observer.dart';
+import 'services/navigation/back_exit_guard.dart';
 import 'services/webview_settings.dart';
 import 'services/user_presence_service.dart';
 import 'models/user.dart';
@@ -715,7 +716,7 @@ class _MainPageState extends ConsumerState<MainPage>
   Timer? _pendingSingleTap;
   List<NavEntry> _lastResolvedEntries = const [];
   Timer? _resumeDebounceTimer;
-  DateTime? _lastBackPressTime;
+  final BackExitGuard _backExitGuard = BackExitGuard();
 
   // 不能是 const，需要传入 isActive
 
@@ -1268,12 +1269,9 @@ class _MainPageState extends ConsumerState<MainPage>
           NotificationQuickPanel.dismiss();
           return;
         }
-        final now = DateTime.now();
-        if (_lastBackPressTime != null &&
-            now.difference(_lastBackPressTime!).inMilliseconds < 2000) {
+        if (_backExitGuard.shouldExit()) {
           SystemNavigator.pop();
         } else {
-          _lastBackPressTime = now;
           ToastService.showInfo(S.current.toast_pressAgainToExit);
         }
       },
