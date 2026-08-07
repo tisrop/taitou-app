@@ -734,6 +734,7 @@ extension _UserActions on _TopicDetailPageState {
 
     final quote = QuoteBuilder.build(
       markdown: markdown,
+      displayName: post.name,
       username: post.username,
       postNumber: post.postNumber,
       topicId: widget.topicId,
@@ -1094,6 +1095,7 @@ extension _UserActions on _TopicDetailPageState {
     // 构建引用格式
     final quote = QuoteBuilder.build(
       markdown: markdown,
+      displayName: post.name,
       username: post.username,
       postNumber: post.postNumber,
       topicId: widget.topicId,
