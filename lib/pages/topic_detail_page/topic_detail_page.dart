@@ -55,6 +55,7 @@ import '../../widgets/common/text/emoji_text.dart';
 import '../../widgets/common/misc/error_view.dart';
 import '../../providers/nested_topic_provider.dart';
 import 'controllers/topic_detail_controller.dart';
+import 'controllers/topic_header_visibility.dart';
 import 'widgets/nested_post_list.dart';
 import 'widgets/topic_detail_overlay.dart';
 import 'widgets/topic_post_list.dart';
@@ -734,9 +735,14 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
       // header 不在视图中（未加载或滚动到了远处）
       // 如果滚动位置在顶部附近（比如刚切换视图模式），header 很快就会出现，
       // 先设为不可见状态，等 header 渲染后由滚动事件再次触发更新
-      final atTop =
-          _controller.scrollController.hasClients &&
-          _controller.scrollController.offset <= barHeight;
+      final atTop = shouldTreatMissingTopicHeaderAsTop(
+        hasFirstPost: _hasFirstPost,
+        hasScrollClients: _controller.scrollController.hasClients,
+        scrollOffset: _controller.scrollController.hasClients
+            ? _controller.scrollController.offset
+            : 0,
+        appBarHeight: barHeight,
+      );
       if (atTop) {
         _showTitleNotifier.value = false;
         _isScrolledUnderNotifier.value = false;
