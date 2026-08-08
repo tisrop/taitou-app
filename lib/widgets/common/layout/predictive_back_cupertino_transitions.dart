@@ -17,6 +17,10 @@
 //    idle」,并在手势窗口结束时把 phase 归位。Cupertino 边缘/全屏拖拽
 //    同样会置位 popGestureInProgress,但不会经过系统 predictive-back
 //    回调,必须用 phase 区分手势来源。
+// 5. Activity 进入后台时主动取消活跃手势,避免系统省略终止回调后
+//    userGestureInProgress 永久卡住。
+// 6. 路由转场未结束时静默认领预测返回:不驱动当前动画,commit
+//    排队 maybePop,避免无人认领时系统 fallback 露出窗口底色。
 //
 // Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
@@ -147,6 +151,19 @@ class _PredictiveBackGestureDetectorState
     return widget.route.isCurrent && widget.route.popGestureEnabled;
   }
 
+  bool get _shouldClaimDuringTransition {
+    final route = widget.route;
+    return route.isCurrent &&
+        !route.isFirst &&
+        !route.willHandlePopInternally &&
+        route.popDisposition != RoutePopDisposition.doNotPop &&
+        route.animation?.isCompleted == false;
+  }
+
+  // A silent claim keeps Android from falling back to a whole-window
+  // animation while the route's own transition is still settling.
+  bool _silentClaim = false;
+
   _PredictiveBackPhase get phase => _phase;
   _PredictiveBackPhase _phase = _PredictiveBackPhase.idle;
   set phase(_PredictiveBackPhase phase) {
@@ -177,8 +194,18 @@ class _PredictiveBackGestureDetectorState
 
   @override
   bool handleStartBackGesture(PredictiveBackEvent backEvent) {
-    final bool gestureInProgress = !backEvent.isButtonEvent && _isEnabled;
-    if (!gestureInProgress) {
+    _silentClaim = false;
+    if (backEvent.isButtonEvent) {
+      phase = _PredictiveBackPhase.idle;
+      startBackEvent = currentBackEvent = null;
+      return false;
+    }
+    if (!_isEnabled) {
+      if (_shouldClaimDuringTransition) {
+        _gestureForceCancelled = false;
+        _silentClaim = true;
+        return true;
+      }
       phase = _PredictiveBackPhase.idle;
       startBackEvent = currentBackEvent = null;
       return false;
@@ -194,7 +221,7 @@ class _PredictiveBackGestureDetectorState
 
   @override
   void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
-    if (_gestureForceCancelled) return;
+    if (_gestureForceCancelled || _silentClaim) return;
 
     phase = _PredictiveBackPhase.update;
 
@@ -207,6 +234,10 @@ class _PredictiveBackGestureDetectorState
   @override
   void handleCancelBackGesture() {
     if (_gestureForceCancelled) return;
+    if (_silentClaim) {
+      _silentClaim = false;
+      return;
+    }
 
     phase = _PredictiveBackPhase.cancel;
 
@@ -217,6 +248,16 @@ class _PredictiveBackGestureDetectorState
   @override
   void handleCommitBackGesture() {
     if (_gestureForceCancelled) return;
+    if (_silentClaim) {
+      _silentClaim = false;
+      final navigator = widget.route.navigator;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (navigator?.mounted ?? false) {
+          navigator!.maybePop();
+        }
+      });
+      return;
+    }
 
     phase = _PredictiveBackPhase.commit;
 
@@ -229,6 +270,11 @@ class _PredictiveBackGestureDetectorState
     super.didChangeAppLifecycleState(state);
     if (state != AppLifecycleState.hidden &&
         state != AppLifecycleState.paused) {
+      return;
+    }
+    if (_silentClaim) {
+      _silentClaim = false;
+      _gestureForceCancelled = true;
       return;
     }
     if (!_ownsPredictiveBackGesture || _gestureForceCancelled) return;
