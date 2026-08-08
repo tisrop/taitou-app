@@ -136,6 +136,12 @@ class _PredictiveBackGestureDetector extends StatefulWidget {
 class _PredictiveBackGestureDetectorState
     extends State<_PredictiveBackGestureDetector>
     with WidgetsBindingObserver {
+  // Ownership lasts through the route's commit/cancel settling animation.
+  bool _ownsPredictiveBackGesture = false;
+
+  // Android can omit the terminal callback when backgrounding mid-gesture.
+  bool _gestureForceCancelled = false;
+
   /// True when the predictive back gesture is enabled.
   bool get _isEnabled {
     return widget.route.isCurrent && widget.route.popGestureEnabled;
@@ -178,6 +184,8 @@ class _PredictiveBackGestureDetectorState
       return false;
     }
 
+    _gestureForceCancelled = false;
+    _ownsPredictiveBackGesture = true;
     phase = _PredictiveBackPhase.start;
     widget.route.handleStartBackGesture(progress: 1 - backEvent.progress);
     startBackEvent = currentBackEvent = backEvent;
@@ -186,6 +194,8 @@ class _PredictiveBackGestureDetectorState
 
   @override
   void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
+    if (_gestureForceCancelled) return;
+
     phase = _PredictiveBackPhase.update;
 
     widget.route.handleUpdateBackGestureProgress(
@@ -196,6 +206,8 @@ class _PredictiveBackGestureDetectorState
 
   @override
   void handleCancelBackGesture() {
+    if (_gestureForceCancelled) return;
+
     phase = _PredictiveBackPhase.cancel;
 
     widget.route.handleCancelBackGesture();
@@ -204,9 +216,30 @@ class _PredictiveBackGestureDetectorState
 
   @override
   void handleCommitBackGesture() {
+    if (_gestureForceCancelled) return;
+
     phase = _PredictiveBackPhase.commit;
 
     widget.route.handleCommitBackGesture();
+    startBackEvent = currentBackEvent = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state != AppLifecycleState.hidden &&
+        state != AppLifecycleState.paused) {
+      return;
+    }
+    if (!_ownsPredictiveBackGesture || _gestureForceCancelled) return;
+    if (phase != _PredictiveBackPhase.start &&
+        phase != _PredictiveBackPhase.update) {
+      return;
+    }
+
+    _gestureForceCancelled = true;
+    phase = _PredictiveBackPhase.cancel;
+    widget.route.handleCancelBackGesture();
     startBackEvent = currentBackEvent = null;
   }
 
@@ -217,6 +250,7 @@ class _PredictiveBackGestureDetectorState
   void _handleUserGestureChanged() {
     if (_userGestureInProgress?.value == false) {
       phase = _PredictiveBackPhase.idle;
+      _ownsPredictiveBackGesture = false;
     }
   }
 
