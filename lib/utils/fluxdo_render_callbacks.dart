@@ -29,6 +29,7 @@ import '../services/emoji_handler.dart';
 import '../services/highlighter_service.dart';
 import '../services/toast_service.dart';
 import '../utils/discourse_url_parser.dart';
+import '../utils/html_to_markdown.dart';
 import '../utils/link_launcher.dart';
 import '../utils/svg_utils.dart';
 import '../utils/url_helper.dart';
@@ -1325,10 +1326,35 @@ class FluxdoRenderCallbacks {
       topicId: topicId,
       onQuoteImage: liveQuoteHandler,
       position: position,
+      quoteMarkdown: _uploadMarkdownForImage(image),
       heroTag: heroTag,
       imageWidth: image.naturalWidth ?? image.width,
       imageHeight: image.naturalHeight ?? image.height,
       fileSizeText: image.fileSizeText,
+    );
+  }
+
+  /// 图片引用优先保留 Discourse upload:// 短链，避免把站内上传退化为
+  /// CDN 完整地址。回退顺序：base62Sha1 → origSrc → src。
+  static String? _uploadMarkdownForImage(ImageRun image) {
+    String src;
+    final base62Sha1 = image.base62Sha1;
+    if (base62Sha1 != null && base62Sha1.isNotEmpty) {
+      src = 'upload://$base62Sha1';
+      final ext = HtmlToMarkdown.extensionFromUrl(image.src) ??
+          HtmlToMarkdown.extensionFromUrl(image.lightboxUrl) ??
+          HtmlToMarkdown.extensionFromUrl(image.origSrc);
+      if (ext != null) src = '$src.$ext';
+    } else {
+      final origSrc = image.origSrc;
+      src = (origSrc != null && origSrc.isNotEmpty) ? origSrc : image.src;
+    }
+    if (src.isEmpty) return null;
+    return HtmlToMarkdown.buildImageMarkdown(
+      src: src,
+      alt: image.alt.isNotEmpty ? image.alt : 'image',
+      width: image.width?.round().toString(),
+      height: image.height?.round().toString(),
     );
   }
 

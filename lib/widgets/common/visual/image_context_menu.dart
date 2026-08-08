@@ -66,6 +66,7 @@ class ImageContextMenu {
     void Function(String quote, Post post)? onQuoteImage,
     Offset? position,
     VoidCallback? onClose,
+    String? quoteMarkdown,
     String? heroTag,
     ImageContextMenuPresentation? presentation,
     VoidCallback? onMarkAd,
@@ -92,6 +93,7 @@ class ImageContextMenu {
         onQuoteImage: onQuoteImage,
         position: position,
         onClose: onClose,
+        quoteMarkdown: quoteMarkdown,
         heroTag: heroTag,
       );
     } else if (effectivePresentation ==
@@ -104,6 +106,7 @@ class ImageContextMenu {
         post: post,
         topicId: topicId,
         onQuoteImage: onQuoteImage,
+        quoteMarkdown: quoteMarkdown,
         heroTag: heroTag,
         onMarkAd: effectiveOnMarkAd,
         imageWidth: imageWidth,
@@ -120,6 +123,7 @@ class ImageContextMenu {
         topicId: topicId,
         onQuoteImage: onQuoteImage,
         onClose: onClose,
+        quoteMarkdown: quoteMarkdown,
         heroTag: heroTag,
       );
     }
@@ -135,6 +139,7 @@ class ImageContextMenu {
     Post? post,
     int? topicId,
     void Function(String quote, Post post)? onQuoteImage,
+    String? quoteMarkdown,
     String? heroTag,
     VoidCallback? onMarkAd,
     double? imageWidth,
@@ -239,6 +244,7 @@ class ImageContextMenu {
                             post: post,
                             topicId: topicId,
                             onQuoteImage: onQuoteImage,
+                            quoteMarkdown: quoteMarkdown,
                             heroTag: heroTag,
                           ),
                         ),
@@ -295,6 +301,7 @@ class ImageContextMenu {
     void Function(String quote, Post post)? onQuoteImage,
     required Offset position,
     VoidCallback? onClose,
+    String? quoteMarkdown,
     String? heroTag,
   }) {
     final overlayRenderObject = Overlay.of(context).context.findRenderObject();
@@ -308,6 +315,7 @@ class ImageContextMenu {
         post: post,
         topicId: topicId,
         onQuoteImage: onQuoteImage,
+        quoteMarkdown: quoteMarkdown,
         heroTag: heroTag,
       );
       return;
@@ -391,6 +399,7 @@ class ImageContextMenu {
         topicId: topicId,
         onQuoteImage: onQuoteImage,
         onClose: onClose,
+        quoteMarkdown: quoteMarkdown,
         heroTag: heroTag,
       );
     });
@@ -406,6 +415,7 @@ class ImageContextMenu {
     int? topicId,
     void Function(String quote, Post post)? onQuoteImage,
     VoidCallback? onClose,
+    String? quoteMarkdown,
     String? heroTag,
   }) {
     AppBottomSheet.show(
@@ -461,7 +471,7 @@ class ImageContextMenu {
                 onTap: () {
                   Navigator.pop(ctx);
                   final quote = QuoteBuilder.build(
-                    markdown: '![image]($originalUrl)',
+                    markdown: quoteMarkdown ?? '![image]($originalUrl)',
                     displayName: post.name,
                     username: post.username,
                     postNumber: post.postNumber,
@@ -477,7 +487,7 @@ class ImageContextMenu {
                 onTap: () {
                   Navigator.pop(ctx);
                   final quote = QuoteBuilder.build(
-                    markdown: '![image]($originalUrl)',
+                    markdown: quoteMarkdown ?? '![image]($originalUrl)',
                     displayName: post.name,
                     username: post.username,
                     postNumber: post.postNumber,
@@ -512,6 +522,7 @@ class ImageContextMenu {
     int? topicId,
     void Function(String quote, Post post)? onQuoteImage,
     VoidCallback? onClose,
+    String? quoteMarkdown,
     String? heroTag,
   }) {
     switch (action) {
@@ -532,7 +543,7 @@ class ImageContextMenu {
       case 'quote':
         if (post != null && topicId != null && onQuoteImage != null) {
           final quote = QuoteBuilder.build(
-            markdown: '![image]($originalUrl)',
+            markdown: quoteMarkdown ?? '![image]($originalUrl)',
             displayName: post.name,
             username: post.username,
             postNumber: post.postNumber,
@@ -543,7 +554,7 @@ class ImageContextMenu {
       case 'copyQuote':
         if (post != null && topicId != null) {
           final quote = QuoteBuilder.build(
-            markdown: '![image]($originalUrl)',
+            markdown: quoteMarkdown ?? '![image]($originalUrl)',
             displayName: post.name,
             username: post.username,
             postNumber: post.postNumber,
