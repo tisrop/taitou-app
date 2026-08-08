@@ -33,10 +33,20 @@ import 'storage/resilient_secure_storage.dart';
 /// - auth_redirect 用 discourse://auth_redirect(站点 allowed_user_api_auth_redirects
 ///   默认白名单,无需站方配置);App 已在 Android/iOS/macOS/Linux 注册 discourse
 ///   scheme,系统浏览器授权后深链回 App(DiscourseHub 同款流程)
+/// - scopes 无 write 时,key 只能承载本次授权附带的 OTP,无法用于后续自愈;
+///   登录流程结束后立即撤销并清除,避免长期保留无用途的永久凭据
 class UserApiKeyService {
-  UserApiKeyService._();
+  UserApiKeyService._({
+    ResilientSecureStorage? storage,
+    CookieJarService? cookieJar,
+  }) : _storage = storage ?? ResilientSecureStorage(),
+       _cookieJar = cookieJar ?? CookieJarService();
   static final UserApiKeyService _instance = UserApiKeyService._();
   factory UserApiKeyService() => _instance;
+
+  @visibleForTesting
+  UserApiKeyService.forTesting({required ResilientSecureStorage storage})
+    : this._(storage: storage);
 
   static const _keyPrivateKey = 'user_api_key_rsa_private';
   static const _keyApiKey = 'user_api_key_key';
@@ -49,11 +59,15 @@ class UserApiKeyService {
   static const String applicationName = '抬头';
   static const String scopes = 'one_time_password';
 
+  /// 只有 write scope 能支持后续 POST /user-api-key/otp 会话自愈。
+  static bool get keyWorthKeeping =>
+      scopes.split(',').map((scope) => scope.trim()).contains('write');
+
   /// 自愈冷却:失败后短期内不再重试,避免 key 已撤销时反复打服务端
   static const Duration _selfHealCooldown = Duration(minutes: 10);
 
-  final _storage = ResilientSecureStorage();
-  final _cookieJar = CookieJarService();
+  final ResilientSecureStorage _storage;
+  final CookieJarService _cookieJar;
 
   DateTime? _lastSelfHealFailureAt;
   Future<Map<String, dynamic>?>? _activeSelfHeal;
@@ -73,23 +87,42 @@ class UserApiKeyService {
     _lastSelfHealFailureAt = null;
   }
 
+  /// 撤销指定 User API Key。Discourse 允许 key 调用该端点自我撤销,
+  /// 即使其 scope 不匹配任何普通 API 路由。
+  Future<bool> revokeKey(Dio dio, String apiKey) async {
+    if (apiKey.isEmpty) return false;
+    try {
+      await dio.post(
+        '/user-api-key/revoke',
+        options: Options(
+          headers: {'User-Api-Key': apiKey},
+          extra: const {'skipAuthCheck': true, 'skipCsrf': true},
+        ),
+      );
+      _log('info', 'user_api_key_revoked', '已撤销 User API Key');
+      return true;
+    } catch (e) {
+      _log('warning', 'user_api_key_revoke_failed', '撤销 User API Key 失败(忽略)', {
+        'errorType': e.runtimeType.toString(),
+        if (e is DioException) 'statusCode': e.response?.statusCode,
+      });
+      return false;
+    }
+  }
+
   /// 显式登出时尽力撤销服务端 key(失败不阻塞登出)
   Future<void> revokeAndClear(Dio dio) async {
     final key = await readApiKey();
     if (key != null && key.isNotEmpty) {
-      try {
-        await dio.post(
-          '/user-api-key/revoke',
-          options: Options(
-            headers: {'User-Api-Key': key},
-            extra: const {'skipAuthCheck': true, 'skipCsrf': true},
-          ),
-        );
-      } catch (e) {
-        debugPrint('[UserApiKey] 撤销 key 失败(忽略): $e');
-      }
+      await revokeKey(dio, key);
     }
     await clearKey();
+  }
+
+  /// 授权登录完成后的用完即焚:不含 write scope 时撤销并清除临时 key。
+  Future<void> burnAfterLoginIfUseless(Dio dio) async {
+    if (keyWorthKeeping) return;
+    await revokeAndClear(dio);
   }
 
   Future<String> _ensureClientId() async {
