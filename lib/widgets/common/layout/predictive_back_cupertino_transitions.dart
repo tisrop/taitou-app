@@ -12,7 +12,11 @@
 // 2. transitionDuration 800ms → 400ms(Cupertino 时长),commit 动画
 //    Interval 分母同步改为 400 → commit 仍是完整 400ms(与 Android
 //    原生一致);
-// 3. 只保留 shared-element 变体(fullscreen 变体未使用,未拷贝)。
+// 3. 只保留 shared-element 变体(fullscreen 变体未使用,未拷贝);
+// 4. 预测返回判定从单独的 popGestureInProgress 收紧为「且 phase 非
+//    idle」,并在手势窗口结束时把 phase 归位。Cupertino 边缘/全屏拖拽
+//    同样会置位 popGestureInProgress,但不会经过系统 predictive-back
+//    回调,必须用 phase 区分手势来源。
 //
 // Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
@@ -21,6 +25,7 @@
 import 'dart:ui' show clampDouble;
 
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -28,12 +33,15 @@ import 'package:flutter/services.dart';
 ///
 /// 预测返回手势(Android U+)期间与系统手势联动显示 shared-element 预览;
 /// 其余导航(push、按钮/程序化 pop、其它平台)走 Cupertino 滑动转场。
-class PredictiveBackCupertinoPageTransitionsBuilder extends PageTransitionsBuilder {
+class PredictiveBackCupertinoPageTransitionsBuilder
+    extends PageTransitionsBuilder {
   const PredictiveBackCupertinoPageTransitionsBuilder();
 
   @override
-  Duration get transitionDuration =>
-      const Duration(milliseconds: _PredictiveBackSharedElementPageTransitionState._kTransitionMilliseconds);
+  Duration get transitionDuration => const Duration(
+    milliseconds: _PredictiveBackSharedElementPageTransitionState
+        ._kTransitionMilliseconds,
+  );
 
   @override
   Widget buildTransitions<T>(
@@ -56,7 +64,8 @@ class PredictiveBackCupertinoPageTransitionsBuilder extends PageTransitionsBuild
             // pop gesture. Otherwise, for things like button presses or other
             // programmatic navigation, fall back to
             // CupertinoPageTransitionsBuilder.
-            if (route.popGestureInProgress) {
+            if (route.popGestureInProgress &&
+                phase != _PredictiveBackPhase.idle) {
               return _PredictiveBackSharedElementPageTransition(
                 isDelegatedTransition: true,
                 animation: animation,
@@ -68,8 +77,13 @@ class PredictiveBackCupertinoPageTransitionsBuilder extends PageTransitionsBuild
               );
             }
 
-            return const CupertinoPageTransitionsBuilder()
-                .buildTransitions(route, context, animation, secondaryAnimation, child);
+            return const CupertinoPageTransitionsBuilder().buildTransitions(
+              route,
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+            );
           },
     );
   }
@@ -106,16 +120,21 @@ enum _PredictiveBackPhase {
 }
 
 class _PredictiveBackGestureDetector extends StatefulWidget {
-  const _PredictiveBackGestureDetector({required this.route, required this.builder});
+  const _PredictiveBackGestureDetector({
+    required this.route,
+    required this.builder,
+  });
 
   final _PredictiveBackGestureDetectorWidgetBuilder builder;
   final PageRoute<dynamic> route;
 
   @override
-  State<_PredictiveBackGestureDetector> createState() => _PredictiveBackGestureDetectorState();
+  State<_PredictiveBackGestureDetector> createState() =>
+      _PredictiveBackGestureDetectorState();
 }
 
-class _PredictiveBackGestureDetectorState extends State<_PredictiveBackGestureDetector>
+class _PredictiveBackGestureDetectorState
+    extends State<_PredictiveBackGestureDetector>
     with WidgetsBindingObserver {
   /// True when the predictive back gesture is enabled.
   bool get _isEnabled {
@@ -152,12 +171,14 @@ class _PredictiveBackGestureDetectorState extends State<_PredictiveBackGestureDe
 
   @override
   bool handleStartBackGesture(PredictiveBackEvent backEvent) {
-    phase = _PredictiveBackPhase.start;
     final bool gestureInProgress = !backEvent.isButtonEvent && _isEnabled;
     if (!gestureInProgress) {
+      phase = _PredictiveBackPhase.idle;
+      startBackEvent = currentBackEvent = null;
       return false;
     }
 
+    phase = _PredictiveBackPhase.start;
     widget.route.handleStartBackGesture(progress: 1 - backEvent.progress);
     startBackEvent = currentBackEvent = backEvent;
     return true;
@@ -167,7 +188,9 @@ class _PredictiveBackGestureDetectorState extends State<_PredictiveBackGestureDe
   void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
     phase = _PredictiveBackPhase.update;
 
-    widget.route.handleUpdateBackGestureProgress(progress: 1 - backEvent.progress);
+    widget.route.handleUpdateBackGestureProgress(
+      progress: 1 - backEvent.progress,
+    );
     currentBackEvent = backEvent;
   }
 
@@ -189,24 +212,54 @@ class _PredictiveBackGestureDetectorState extends State<_PredictiveBackGestureDe
 
   // End WidgetsBindingObserver.
 
+  ValueListenable<bool>? _userGestureInProgress;
+
+  void _handleUserGestureChanged() {
+    if (_userGestureInProgress?.value == false) {
+      phase = _PredictiveBackPhase.idle;
+    }
+  }
+
+  void _subscribeUserGesture() {
+    final notifier = widget.route.navigator?.userGestureInProgressNotifier;
+    if (identical(notifier, _userGestureInProgress)) {
+      return;
+    }
+    _userGestureInProgress?.removeListener(_handleUserGestureChanged);
+    _userGestureInProgress = notifier;
+    _userGestureInProgress?.addListener(_handleUserGestureChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PredictiveBackGestureDetector oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _subscribeUserGesture();
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _subscribeUserGesture();
   }
 
   @override
   void dispose() {
+    _userGestureInProgress?.removeListener(_handleUserGestureChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final _PredictiveBackPhase effectivePhase = widget.route.popGestureInProgress
-        ? phase
-        : _PredictiveBackPhase.idle;
-    return widget.builder(context, effectivePhase, startBackEvent, currentBackEvent);
+    final _PredictiveBackPhase effectivePhase =
+        widget.route.popGestureInProgress ? phase : _PredictiveBackPhase.idle;
+    return widget.builder(
+      context,
+      effectivePhase,
+      startBackEvent,
+      currentBackEvent,
+    );
   }
 }
 
@@ -278,7 +331,10 @@ class _PredictiveBackSharedElementPageTransitionState
 
   // Provides a smooth transition between the default radius and the
   // _kDeviceBorderRadius, when the display corner radii are unavailable.
-  final Tween<double> _borderRadiusTween = Tween<double>(begin: 0.0, end: _kDeviceBorderRadius);
+  final Tween<double> _borderRadiusTween = Tween<double>(
+    begin: 0.0,
+    end: _kDeviceBorderRadius,
+  );
 
   // The route fades out after commit.
   final Tween<double> _opacityTween = Tween<double>(begin: 1.0, end: 0.0);
@@ -324,7 +380,9 @@ class _PredictiveBackSharedElementPageTransitionState
     final double rawYShift = currentTouchY - startTouchY;
     final double easedYShift =
         // This curve was eyeballed on a Pixel 9 running Android 16.
-        Curves.easeOut.transform(clampDouble(rawYShift.abs() / screenHeight, 0.0, 1.0)) *
+        Curves.easeOut.transform(
+          clampDouble(rawYShift.abs() / screenHeight, 0.0, 1.0),
+        ) *
         rawYShift.sign *
         yShiftMax;
 
@@ -360,8 +418,14 @@ class _PredictiveBackSharedElementPageTransitionState
         // The y position before commit is given by the vertical drag, not by an
         // animation.
         begin: switch (widget.currentBackEvent?.swipeEdge) {
-          SwipeEdge.left => Offset(xShift, _getYShiftPosition(screenSize.height)),
-          SwipeEdge.right => Offset(-xShift, _getYShiftPosition(screenSize.height)),
+          SwipeEdge.left => Offset(
+            xShift,
+            _getYShiftPosition(screenSize.height),
+          ),
+          SwipeEdge.right => Offset(
+            -xShift,
+            _getYShiftPosition(screenSize.height),
+          ),
           null => Offset(xShift, _getYShiftPosition(screenSize.height)),
         },
         end: Offset.zero,
@@ -372,7 +436,10 @@ class _PredictiveBackSharedElementPageTransitionState
   void _updateCurvedAnimations() {
     _curvedAnimation?.dispose();
     _curvedAnimationReversed?.dispose();
-    _curvedAnimation = CurvedAnimation(parent: widget.animation, curve: _kCommitInterval);
+    _curvedAnimation = CurvedAnimation(
+      parent: widget.animation,
+      curve: _kCommitInterval,
+    );
     _curvedAnimationReversed = CurvedAnimation(
       parent: ReverseAnimation(widget.animation),
       curve: _kCommitInterval,
@@ -386,7 +453,8 @@ class _PredictiveBackSharedElementPageTransitionState
     if (widget.animation != oldWidget.animation) {
       _updateCurvedAnimations();
     }
-    if (widget.phase != oldWidget.phase && widget.phase == _PredictiveBackPhase.commit) {
+    if (widget.phase != oldWidget.phase &&
+        widget.phase == _PredictiveBackPhase.commit) {
       _updateAnimations(MediaQuery.sizeOf(context));
     }
   }
@@ -426,7 +494,9 @@ class _PredictiveBackSharedElementPageTransitionState
               child: ClipRRect(
                 borderRadius:
                     MediaQuery.displayCornerRadiiOf(context) ??
-                    BorderRadius.circular(_borderRadiusTween.evaluate(_bounceAnimation)),
+                    BorderRadius.circular(
+                      _borderRadiusTween.evaluate(_bounceAnimation),
+                    ),
                 child: child,
               ),
             ),

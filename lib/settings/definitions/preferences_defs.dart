@@ -91,6 +91,15 @@ List<SettingsGroup> buildPreferencesGroups(BuildContext context) {
           onChanged: (ref, v) =>
               ref.read(preferencesProvider.notifier).setPortraitLock(v),
         ),
+        SwitchModel(
+          id: 'fullscreenSwipeBack',
+          title: l10n.preferences_fullscreenSwipeBack,
+          subtitle: l10n.preferences_fullscreenSwipeBackDesc,
+          icon: Symbols.swipe_right_rounded,
+          getValue: (ref) => ref.watch(preferencesProvider).fullscreenSwipeBack,
+          onChanged: (ref, v) =>
+              ref.read(preferencesProvider.notifier).setFullscreenSwipeBack(v),
+        ),
       ],
     ),
     SettingsGroup(

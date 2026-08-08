@@ -21,6 +21,7 @@ import 'services/highlighter_service.dart';
 import 'widgets/common/misc/notification_icon_button.dart';
 import 'widgets/common/misc/clipboard_topic_link_snack_content.dart';
 import 'widgets/common/layout/anchor_guard_sliver.dart';
+import 'widgets/common/layout/fullscreen_swipe_back.dart';
 import 'widgets/common/layout/predictive_back_cupertino_transitions.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -469,6 +470,16 @@ const _pageTransitionsTheme = PageTransitionsTheme(
   },
 );
 
+/// 「全屏侧滑返回」开启时，在 Android 原转场树里追加整页 iOS 式返回
+/// 手势。视觉保持不变，只扩大手势探测区。
+const _fullscreenSwipePageTransitionsTheme = PageTransitionsTheme(
+  builders: <TargetPlatform, PageTransitionsBuilder>{
+    TargetPlatform.android: FullscreenSwipeBackTransitionsBuilder(
+      PredictiveBackCupertinoPageTransitionsBuilder(),
+    ),
+  },
+);
+
 /// M3E 按钮按压形变,参数对照 Compose ButtonSmallTokens 标准:
 /// ContainerShapeRound = CornerFull(Stadium)→ PressedContainerShape =
 /// CornerSmall(8dp)。形状插值由 Material 内部 ImplicitlyAnimatedWidget
@@ -503,14 +514,20 @@ ButtonStyle _m3eIconButtonShapeStyle() => ButtonStyle(
 
 /// light/dark 共用的 ThemeData 装配(两侧必须对称,尤其 M3eFlags ——
 /// ThemeData.lerp 对单边缺失的 extension 不插值而是瞬时并入)。
-ThemeData _buildAppTheme(ColorScheme scheme, ThemeState themeState) {
+ThemeData _buildAppTheme(
+  ColorScheme scheme,
+  ThemeState themeState, {
+  required bool fullscreenSwipeBack,
+}) {
   final m3e = themeState.m3eEnabled;
   final buttonStyle = m3e ? _m3ePressedShapeStyle() : null;
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
     fontFamily: themeState.fontFamilyName,
-    pageTransitionsTheme: _pageTransitionsTheme,
+    pageTransitionsTheme: fullscreenSwipeBack
+        ? _fullscreenSwipePageTransitionsTheme
+        : _pageTransitionsTheme,
     iconTheme: _appIconTheme(scheme.onSurface),
     primaryIconTheme: _appIconTheme(scheme.onPrimary),
     extensions: [M3eFlags(enabled: m3e)],
@@ -556,6 +573,11 @@ class MainApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeState = ref.watch(themeProvider);
+    final fullscreenSwipeBack = ref.watch(
+      preferencesProvider.select(
+        (preferences) => preferences.fullscreenSwipeBack,
+      ),
+    );
     ref.listen<Locale?>(localeProvider, (_, next) {
       unawaited(_syncSlangLocale(next));
     });
@@ -609,10 +631,18 @@ class MainApp extends ConsumerWidget {
               // 系统字体（chinese_font_library 自带的 ThemeData.useSystemChineseFont
               // 会强制改为 Roboto，导致字体显得比之前粗）。
               theme: _withChineseFallback(
-                _buildAppTheme(lightScheme, themeState),
+                _buildAppTheme(
+                  lightScheme,
+                  themeState,
+                  fullscreenSwipeBack: fullscreenSwipeBack,
+                ),
               ),
               darkTheme: _withChineseFallback(
-                _buildAppTheme(darkScheme, themeState),
+                _buildAppTheme(
+                  darkScheme,
+                  themeState,
+                  fullscreenSwipeBack: fullscreenSwipeBack,
+                ),
               ),
               builder: (context, child) {
                 final brightness = Theme.of(context).brightness;
