@@ -771,16 +771,16 @@ class _MainPageState extends ConsumerState<MainPage>
       }
     });
 
+    // 提前捕获根 Provider 容器：认证广播可能落在 MainPage 的
+    // deactivate/重挂载窗口，回调中再通过 context 查祖先会中断刷新链。
+    final appContainer = ProviderScope.containerOf(context, listen: false);
     _authStateSub = ref.listenManual<AsyncValue<void>>(authStateProvider, (
       _,
       next,
     ) {
       next.whenData((_) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          AppStateRefresher.refreshAll(
-            ProviderScope.containerOf(context, listen: false),
-          );
+          AppStateRefresher.refreshAll(appContainer);
         });
       });
     });

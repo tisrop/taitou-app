@@ -171,34 +171,33 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _goToLogin() async {
+    // 提前捕获根 Provider 容器：登录路由弹出或页面重挂载时，本元素可能
+    // 短暂 deactivate（此时 mounted 仍为 true），但祖先查找已经不安全。
+    final container = ProviderScope.containerOf(context, listen: false);
     final result = await Navigator.of(
       context,
     ).push<bool>(MaterialPageRoute(builder: (_) => const LoginPage()));
-    if (result == true && mounted) {
-      final loading = LoadingDialog.show(
-        context,
-        message: context.l10n.profile_loadingData,
-      );
-      try {
-        // 等加载弹框首帧结束后再刷新 provider，避免登录路由恢复时和
-        // Overlay/TickerMode 的构建时机相撞。
-        await WidgetsBinding.instance.endOfFrame;
-        if (!mounted) return;
+    if (result != true) return;
 
-        AppStateRefresher.refreshAll(
-          ProviderScope.containerOf(context, listen: false),
-        );
+    // 先让路由弹出与重挂载稳定，再无条件刷新数据。即使本页面已被替换，
+    // 根 ProviderScope 仍然存活，登录态也必须及时广播给当前界面。
+    await AppStateRefresher.refreshAfterRouteTransition(container);
 
-        await Future.wait([
-          ref.read(currentUserProvider.future),
-          ref.read(userSummaryProvider.future),
-        ]).timeout(const Duration(seconds: 10));
-      } catch (e) {
-        debugPrint('[ProfilePage] 登录后刷新失败/超时: $e');
-        // 超时或错误时继续
-      } finally {
-        loading.hide();
-      }
+    if (!mounted) return;
+    final loading = LoadingDialog.show(
+      context,
+      message: S.current.profile_loadingData,
+    );
+    try {
+      await Future.wait([
+        container.read(currentUserProvider.future),
+        container.read(userSummaryProvider.future),
+      ]).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('[ProfilePage] 登录后刷新失败/超时: $e');
+      // 超时或错误时继续
+    } finally {
+      loading.hide();
     }
   }
 

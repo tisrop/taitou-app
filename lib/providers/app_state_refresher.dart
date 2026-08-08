@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core_providers.dart';
 import 'bookmark_name_suggestions_provider.dart';
@@ -17,6 +18,17 @@ class AppStateRefresher {
   AppStateRefresher._();
 
   static DateTime? _lastRefreshTime;
+
+  /// 等待当前导航帧收口后，使用调用前捕获的根容器刷新全局状态。
+  ///
+  /// 页面从登录路由返回时可能正处于 deactivate/重挂载窗口；此时
+  /// `mounted` 仍可能为 true，但通过 `context` 查找祖先已经不安全。
+  static Future<void> refreshAfterRouteTransition(
+    ProviderContainer container,
+  ) async {
+    await WidgetsBinding.instance.endOfFrame;
+    refreshAll(container);
+  }
 
   /// 调用方用 [ProviderScope.containerOf] 取 container 后传入，
   /// 避免 [Future.delayed] 闭包持有的 [WidgetRef] 在延迟期间随 widget unmount 失效，
