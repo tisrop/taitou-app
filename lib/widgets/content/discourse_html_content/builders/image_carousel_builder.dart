@@ -351,6 +351,7 @@ class _CarouselSlideState extends State<_CarouselSlide>
       onTap: () => widget.onTap(context, widget.index, url),
       child: Hero(
         tag: heroTag,
+        transitionOnUserGestures: true,
         child: Image(
           image: ResizeImage(
             discourseImageProvider(url),

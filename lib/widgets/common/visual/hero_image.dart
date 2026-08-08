@@ -91,6 +91,7 @@ class _HeroImageState extends State<HeroImage> {
           opacity: shouldHide ? 0.0 : 1.0,
           child: Hero(
             tag: heroTag,
+            transitionOnUserGestures: true,
             // 飞行动画：返回纯图片，并在 pop 飞行结束时设置 isPopping
             flightShuttleBuilder: (flightContext, animation, direction, fromContext, toContext) {
               if (direction == HeroFlightDirection.pop) {

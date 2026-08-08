@@ -1,9 +1,12 @@
 import 'package:extended_image_lite/extended_image_lite.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/pages/image_viewer_page.dart';
 
 void main() {
+  final binding = TestWidgetsFlutterBinding.ensureInitialized();
+
   Future<ImageGestureController> openViewer(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -59,4 +62,39 @@ void main() {
     expect(controller.details?.totalScale, 1);
     await tester.pump(const Duration(milliseconds: 400));
   });
+
+  testWidgets(
+    '预测返回手势开始时归位图片缩放',
+    (tester) async {
+      final controller = await openViewer(tester);
+      zoomTo(controller, 2.5);
+      expect(controller.details?.totalScale, 2.5);
+
+      await binding.defaultBinaryMessenger.handlePlatformMessage(
+        'flutter/backgesture',
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall('startBackGesture', {
+            'touchOffset': <double>[0, 300],
+            'progress': 0.0,
+            'swipeEdge': 0,
+          }),
+        ),
+        (_) {},
+      );
+      await tester.pump();
+
+      expect(controller.details?.totalScale, 1);
+
+      await binding.defaultBinaryMessenger.handlePlatformMessage(
+        'flutter/backgesture',
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall('commitBackGesture'),
+        ),
+        (_) {},
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('open'), findsOneWidget);
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.android}),
+  );
 }
