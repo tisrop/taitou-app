@@ -1832,6 +1832,13 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
               _scheduleCheckTitleVisibility();
             }
           });
+        } else if (shouldRecheckMissingTopicHeader(
+          previousHasFirstPost: _hasFirstPost,
+          nextHasFirstPost: hasFirstPost,
+        )) {
+          // 中途楼层进入时 false → false 不触发上方状态变更，但首帧内容
+          // 已压在 AppBar 下，仍需主动刷新 scrolled-under 状态。
+          _scheduleCheckTitleVisibility();
         }
 
         // 自动打开回复框（从草稿进入时）

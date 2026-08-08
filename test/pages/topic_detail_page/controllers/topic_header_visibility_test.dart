@@ -46,4 +46,28 @@ void main() {
       isFalse,
     );
   });
+
+  test('首帖状态连续为未加载时仍需重新检查标题栏', () {
+    expect(
+      shouldRecheckMissingTopicHeader(
+        previousHasFirstPost: false,
+        nextHasFirstPost: false,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldRecheckMissingTopicHeader(
+        previousHasFirstPost: true,
+        nextHasFirstPost: true,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldRecheckMissingTopicHeader(
+        previousHasFirstPost: false,
+        nextHasFirstPost: true,
+      ),
+      isFalse,
+    );
+  });
 }
