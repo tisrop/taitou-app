@@ -28,4 +28,46 @@ void main() {
     expect(hero.tag, 'profile-avatar');
     expect(hero.transitionOnUserGestures, isTrue);
   });
+
+  testWidgets('从非 PageRoute 弹层打开时禁用 Hero 配对', (tester) async {
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocaleUtils.supportedLocales,
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (dialogContext) => TextButton(
+                  onPressed: () => ImageViewerPage.open(
+                    dialogContext,
+                    'https://example.com/image.png',
+                    heroTag: 'dialog-image',
+                  ),
+                  child: const Text('open viewer'),
+                ),
+              ),
+              child: const Text('open dialog'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open dialog'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('open viewer'));
+    await tester.pump();
+
+    final viewer = tester.widget<ImageViewerPage>(
+      find.byType(ImageViewerPage),
+    );
+    expect(viewer.heroTag, isNull);
+  });
 }

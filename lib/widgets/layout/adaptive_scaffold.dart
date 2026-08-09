@@ -55,7 +55,9 @@ class AdaptiveScaffold extends ConsumerWidget {
         : selectedIndex;
 
     final railWidth = extendedRail ? 180.0 : 72.0;
-    final overlayLeftInset = showRail ? railWidth + 1.0 : 0.0;
+    final overlayLeftInset = showRail
+        ? MediaQuery.paddingOf(context).left + railWidth + 1.0
+        : 0.0;
 
     return Stack(
       children: [

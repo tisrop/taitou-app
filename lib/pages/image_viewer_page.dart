@@ -106,6 +106,12 @@ class ImageViewerPage extends ConsumerStatefulWidget {
     BoxFit? heroSourceFit,
     double heroSourceRadius = 0,
   }) {
+    // Hero 只会在同一 Navigator 的两个 PageRoute 之间飞行。从 dialog
+    // 等 PopupRoute 打开时禁用配对，避免查看器误走 Hero 退场路径。
+    if (ModalRoute.of(context) is! PageRoute) {
+      heroTag = null;
+      heroTags = null;
+    }
     return Navigator.push(
       context,
       PageRouteBuilder(
