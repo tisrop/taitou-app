@@ -43,6 +43,7 @@ import '../services/emoji_handler.dart';
 import '../services/log/log_writer.dart';
 import '../widgets/layout/master_detail_layout.dart';
 import '../widgets/user/trust_level_info_sheet.dart';
+import '../widgets/auth/qr_login_sheet.dart';
 
 /// 个人页面
 class ProfilePage extends ConsumerStatefulWidget {
@@ -951,7 +952,24 @@ class _ProfileHeader extends ConsumerWidget {
             _ProfileAvatarSection(userId: userId, isLoggedIn: isLoggedIn),
             const SizedBox(width: 20),
             const Expanded(child: _ProfileInfoSection()),
-            if (isLoggedIn)
+            if (isLoggedIn) ...[
+              IconButton(
+                tooltip: context.l10n.login_qrShowCode,
+                onPressed: () => showQrLoginSheet(context, username: username),
+                icon: const Icon(Symbols.qr_code_rounded, size: 18),
+                style: IconButton.styleFrom(
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest,
+                  foregroundColor: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant,
+                  minimumSize: const Size.square(32),
+                  maximumSize: const Size.square(32),
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+              const SizedBox(width: 8),
               CircleAvatar(
                 radius: 16,
                 backgroundColor: Theme.of(
@@ -963,6 +981,7 @@ class _ProfileHeader extends ConsumerWidget {
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
+            ],
           ],
         ),
       ),

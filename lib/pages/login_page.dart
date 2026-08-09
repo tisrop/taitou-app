@@ -19,6 +19,7 @@ import '../widgets/auth/two_factor_dialog.dart';
 import '../widgets/common/visual/ambient_background.dart';
 import '../widgets/common/visual/floating_logo.dart';
 import 'package:m3e_ui/m3e_ui.dart';
+import 'qr_login_scan_page.dart';
 import 'webview_login_page.dart';
 
 /// 应用内登录页。
@@ -442,7 +443,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  /// 分割线 + 其他方式登录 (OAuth / Passkey 等走 WebViewLoginPage)
+  /// 分割线 + 其他方式登录 (扫码 / 浏览器授权 / OAuth 等)
   Widget _buildAltLogin(BuildContext context, ColorScheme scheme) {
     final theme = Theme.of(context);
     return Column(
@@ -453,6 +454,21 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           const _DividerWithLabel(label: '或'),
           const SizedBox(height: 16),
         ],
+        OutlinedButton.icon(
+          onPressed: _loginWithQrScan,
+          icon: const Icon(Symbols.qr_code_scanner_rounded, size: 20),
+          label: Text(context.l10n.login_scanToLogin),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 52),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(28),
+            ),
+            side: BorderSide(
+              color: scheme.outlineVariant.withValues(alpha: 0.6),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: _browserAuthLaunching ? null : _loginWithBrowserAuth,
           icon: _browserAuthLaunching
@@ -500,6 +516,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         ),
       ],
     );
+  }
+
+  Future<void> _loginWithQrScan() async {
+    final result = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => const QrLoginScanPage()));
+    if (result == true && mounted) Navigator.of(context).pop(true);
   }
 }
 

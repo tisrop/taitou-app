@@ -34,24 +34,52 @@ void main() {
 
     expect(await service.readApiKey(), isNull);
   });
+
+  test('跨设备凭据使用独立 client 并只申请一次性登录 scope', () async {
+    final storage = _MemorySecureStorage(null);
+    final adapter = _RecordingAdapter(statusCode: 200);
+    final dio = Dio(BaseOptions(baseUrl: 'https://openxinsheng.com'))
+      ..httpClientAdapter = adapter;
+    final service = UserApiKeyService.forTesting(storage: storage);
+
+    await expectLater(
+      service.createCrossDeviceKey(dio),
+      throwsA(isA<StateError>()),
+    );
+
+    final request = adapter.request!;
+    expect(request.method, 'POST');
+    expect(request.path, '/user-api-key');
+    expect(request.extra['skipAuthCheck'], isTrue);
+    expect(request.extra['skipRedirect'], isTrue);
+    final data = request.data as Map<String, dynamic>;
+    expect(data['application_name'], UserApiKeyService.qrApplicationName);
+    expect(data['scopes'], UserApiKeyService.scopes);
+    expect(data['auth_redirect'], UserApiKeyService.authRedirect);
+    expect(data['client_id'], isNotEmpty);
+    expect(data['nonce'], isNotEmpty);
+    expect(data['public_key'], contains('BEGIN PUBLIC KEY'));
+  });
 }
 
 class _MemorySecureStorage implements ResilientSecureStorage {
-  _MemorySecureStorage(this.value);
+  _MemorySecureStorage(String? apiKey) {
+    if (apiKey != null) values['user_api_key_key'] = apiKey;
+  }
 
-  String? value;
+  final Map<String, String> values = {};
 
   @override
-  Future<String?> read({required String key}) async => value;
+  Future<String?> read({required String key}) async => values[key];
 
   @override
   Future<void> write({required String key, required String value}) async {
-    this.value = value;
+    values[key] = value;
   }
 
   @override
   Future<void> delete({required String key}) async {
-    value = null;
+    values.remove(key);
   }
 }
 

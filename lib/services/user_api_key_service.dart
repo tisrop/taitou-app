@@ -51,12 +51,14 @@ class UserApiKeyService {
   static const _keyPrivateKey = 'user_api_key_rsa_private';
   static const _keyApiKey = 'user_api_key_key';
   static const _keyClientId = 'user_api_key_client_id';
+  static const _keyQrClientId = 'user_api_key_qr_client_id';
   // nonce 持久化:跨重启存活。冷启动 getInitialLink 会重放上次的
   // auth_redirect 深链,内存态 nonce 会丢失导致每次重启误报"回调解析失败"。
   static const _keyPendingNonce = 'user_api_key_pending_nonce';
 
   static const String authRedirect = 'discourse://auth_redirect';
   static const String applicationName = '抬头';
+  static const String qrApplicationName = '$applicationName QR Login';
   static const String scopes = 'one_time_password';
 
   /// 只有 write scope 能支持后续 POST /user-api-key/otp 会话自愈。
@@ -130,6 +132,17 @@ class UserApiKeyService {
     if (clientId == null || clientId.isEmpty) {
       clientId = const Uuid().v4();
       await _storage.write(key: _keyClientId, value: clientId);
+    }
+    return clientId;
+  }
+
+  /// 扫码分享使用独立且稳定的 client id。重新生成时，Discourse 只会
+  /// 撤销上一枚分享 key，不会影响本机浏览器授权创建的 key。
+  Future<String> _ensureQrClientId() async {
+    var clientId = await _storage.read(key: _keyQrClientId);
+    if (clientId == null || clientId.isEmpty) {
+      clientId = const Uuid().v4();
+      await _storage.write(key: _keyQrClientId, value: clientId);
     }
     return clientId;
   }
@@ -216,6 +229,102 @@ class UserApiKeyService {
     } catch (e) {
       debugPrint('[UserApiKey] payload 解密失败: $e');
       return null;
+    }
+  }
+
+  // ---------- 跨设备扫码 ----------
+
+  /// 为另一台设备创建独立的零权限 User API Key 与一次性 OTP。
+  ///
+  /// key 本身没有普通 API 权限，扫码端兑换 OTP 后会立即自我吊销；
+  /// 展示端关闭弹层或二维码过期时也会尽力撤销。
+  Future<({String apiKey, String otp})> createCrossDeviceKey(Dio dio) async {
+    final publicKeyPem = await ensurePublicKeyPem();
+    final clientId = await _ensureQrClientId();
+    final nonce = const Uuid().v4();
+
+    try {
+      final response = await dio.post(
+        '/user-api-key',
+        data: {
+          'application_name': qrApplicationName,
+          'client_id': clientId,
+          'scopes': scopes,
+          'public_key': publicKeyPem,
+          'nonce': nonce,
+          'auth_redirect': authRedirect,
+        },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+          headers: const {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+          },
+          followRedirects: false,
+          validateStatus: (status) =>
+              status != null && status >= 200 && status < 400,
+          extra: const {'skipAuthCheck': true, 'skipRedirect': true},
+        ),
+      );
+
+      final body = response.data;
+      Map<String, dynamic>? map;
+      if (body is Map<String, dynamic>) {
+        map = body;
+      } else if (body is String && body.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(body);
+          if (decoded is Map<String, dynamic>) map = decoded;
+        } catch (_) {}
+      }
+
+      var redirectUrl = map?['redirect_url']?.toString();
+      if (redirectUrl == null || redirectUrl.isEmpty) {
+        redirectUrl = response.headers.value('location');
+      }
+      if (redirectUrl == null || redirectUrl.isEmpty) {
+        _log('warning', 'cross_device_key_no_redirect', '创建扫码登录 key 未返回授权结果', {
+          'statusCode': response.statusCode,
+          'hasPayload': map?['payload'] != null,
+        });
+        throw StateError('服务端未返回授权结果');
+      }
+
+      final uri = Uri.parse(redirectUrl);
+      final payloadParam = uri.queryParameters['payload'];
+      final otpParam = uri.queryParameters['oneTimePassword'];
+      if (payloadParam == null || payloadParam.isEmpty) {
+        throw StateError('授权结果缺少 payload');
+      }
+      if (otpParam == null || otpParam.isEmpty) {
+        throw StateError('授权结果缺少一次性登录令牌');
+      }
+
+      final decrypted = await _decrypt(payloadParam);
+      if (decrypted == null) throw StateError('授权结果解密失败');
+      final payload = jsonDecode(decrypted) as Map<String, dynamic>;
+      if (payload['nonce'] != nonce) throw StateError('授权结果 nonce 不匹配');
+
+      final apiKey = payload['key'] as String?;
+      if (apiKey == null || apiKey.isEmpty) {
+        throw StateError('授权结果无 API Key');
+      }
+      final otp = await _decrypt(otpParam);
+      if (otp == null || otp.isEmpty) {
+        throw StateError('一次性登录令牌解密失败');
+      }
+
+      _log('info', 'cross_device_key_created', '已创建扫码登录凭据', {
+        'apiKeyLen': apiKey.length,
+        'otpLen': otp.length,
+      });
+      return (apiKey: apiKey, otp: otp);
+    } on DioException catch (e) {
+      _log('warning', 'cross_device_key_failed', '创建扫码登录凭据失败', {
+        'statusCode': e.response?.statusCode,
+        'errorType': e.type.toString(),
+      });
+      rethrow;
     }
   }
 
