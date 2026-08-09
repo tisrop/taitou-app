@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:fluxdo/l10n/s.dart';
 import 'package:fluxdo/models/tag_search_result.dart';
 import 'package:fluxdo/services/discourse/discourse_service.dart';
+import 'package:fluxdo/services/preloaded_data_service.dart';
 import 'package:fluxdo/services/toast_service.dart';
 import 'package:fluxdo/widgets/common/overlay/app_bottom_sheet.dart';
 import 'package:fluxdo/widgets/common/misc/topic_badges.dart';
@@ -95,11 +96,14 @@ class _TagSelectionSheetState extends State<TagSelectionSheet> {
     setState(() => _isLoading = true);
 
     try {
+      // Discourse 会校验 limit 不得超过站点的 max_tag_search_results。
+      // 不能写死固定值，否则站点调低该配置后接口会直接返回 400。
+      final limit = await PreloadedDataService().getMaxTagSearchResults();
       final result = await DiscourseService().searchTags(
         query: query,
         categoryId: widget.categoryId,
         selectedTags: _currentSelectedTags,
-        limit: 8,
+        limit: limit,
         filterForInput: widget.filterForInput,
       );
 

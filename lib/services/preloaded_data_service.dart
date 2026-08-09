@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:flutter/material.dart';
 import '../constants.dart';
 import '../models/topic.dart';
@@ -212,6 +212,26 @@ class PreloadedDataService {
       if (parsed != null && parsed > 0) return parsed;
     }
     return null;
+  }
+
+  /// 获取标签搜索结果上限。
+  ///
+  /// Discourse 会拒绝超过 `max_tag_search_results` 的 limit，因此不能在
+  /// 客户端写死一个固定值。读取不到配置时返回 null，由调用方省略 limit，
+  /// 交给服务端采用自己的默认行为。
+  Future<int?> getMaxTagSearchResults() async {
+    await _ensureLoaded();
+    return parsePositiveIntSetting(_siteSettings?['max_tag_search_results']);
+  }
+
+  @visibleForTesting
+  static int? parsePositiveIntSetting(Object? value) {
+    final parsed = switch (value) {
+      int number => number,
+      String text => int.tryParse(text),
+      _ => null,
+    };
+    return parsed != null && parsed > 0 ? parsed : null;
   }
 
   /// 获取话题标题最小长度

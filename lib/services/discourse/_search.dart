@@ -74,11 +74,16 @@ mixin _SearchMixin on _DiscourseServiceBase {
         queryParams['selected_tags'] = selectedTags;
       }
 
-      final response = await _dio.get('/tags/filter/search', queryParameters: queryParams);
+      final response = await _dio.get(
+        '/tags/filter/search',
+        queryParameters: queryParams,
+      );
       return TagSearchResult.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
       debugPrint('[DiscourseService] searchTags failed: $e');
-      return TagSearchResult(results: []);
+      // TagSelectionSheet 会使用预加载的热门标签做降级。这里必须继续抛出，
+      // 否则网络/参数错误会伪装成“搜索成功但没有标签”，降级永远不会触发。
+      rethrow;
     }
   }
 
