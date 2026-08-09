@@ -29,6 +29,7 @@ import '../../utils/blocked_user_filter.dart';
 import '../../utils/responsive.dart';
 import '../../utils/share_utils.dart';
 import '../../providers/preferences_provider.dart';
+import '../../providers/bookmark_sync_controller.dart';
 import '../../providers/theme_provider.dart';
 import '../reading_settings_page.dart';
 import '../../providers/selected_topic_provider.dart';

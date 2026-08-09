@@ -22,6 +22,10 @@ extension _PostFooterBookmarkActions on _PostFooterSectionState {
       });
       ToastService.showSuccess(S.current.common_bookmarkAdded);
 
+      unawaited(
+        ref.read(bookmarkSyncControllerProvider.notifier).pullFirstPage(),
+      );
+
       // 触发 Notion 自动同步:post 级 -> 只同步这一条,独立 page
       unawaited(
         NotionBookmarkAutoSync.tryTriggerPost(
@@ -53,6 +57,9 @@ extension _PostFooterBookmarkActions on _PostFooterSectionState {
       final bookmarkId = _bookmarkId ?? widget.post.bookmarkId;
       if (bookmarkId != null) {
         await _service.deleteBookmark(bookmarkId);
+        await ref
+            .read(bookmarkSyncControllerProvider.notifier)
+            .purgeLocal(bookmarkId);
         if (mounted) {
           setState(() {
             _isBookmarked = false;

@@ -855,6 +855,10 @@ extension _UserActions on _TopicDetailPageState {
       final bookmarkId = await DiscourseService().bookmarkPost(post.id);
       if (!mounted) return;
 
+      unawaited(
+        ref.read(bookmarkSyncControllerProvider.notifier).pullFirstPage(),
+      );
+
       notifier.updatePost(
         post.copyWith(
           bookmarked: true,

@@ -2,12 +2,14 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:m3e_ui/m3e_ui.dart';
 
 import '../../l10n/s.dart';
 import '../../models/category.dart';
 import '../../models/topic.dart';
 import '../../models/topic_card_style.dart';
 import '../../pages/bookmarks/bookmarks_models.dart';
+import '../../providers/bookmark_sync_controller.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/preferences_provider.dart';
 import '../topic/topic_card_layout.dart';
@@ -42,6 +44,8 @@ class BookmarksListContent extends ConsumerWidget {
     required this.hasMore,
     required this.isLoadMoreFailed,
     required this.isLoadingMore,
+    this.syncState = const BookmarkSyncState(),
+    this.onRetrySync,
     required this.onRetryLoadMore,
     required this.onEditBookmark,
     required this.onQuickRenameBookmark,
@@ -63,6 +67,8 @@ class BookmarksListContent extends ConsumerWidget {
   final bool hasMore;
   final bool isLoadMoreFailed;
   final bool isLoadingMore;
+  final BookmarkSyncState syncState;
+  final VoidCallback? onRetrySync;
   final VoidCallback onRetryLoadMore;
   final Future<void> Function(Topic topic) onEditBookmark;
   final Future<bool> Function(Topic topic, String? name) onQuickRenameBookmark;
@@ -159,19 +165,7 @@ class BookmarksListContent extends ConsumerWidget {
     Map<int, Category>? categoryMap,
   ) {
     if (topics.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Symbols.bookmark_rounded, size: 64, color: Colors.grey),
-            const SizedBox(height: 16),
-            Text(
-              context.l10n.bookmarks_empty,
-              style: const TextStyle(color: Colors.grey),
-            ),
-          ],
-        ),
-      );
+      return _buildEmptyState(context);
     }
 
     final summaries = _memoSummaries(topics);
@@ -231,8 +225,8 @@ class BookmarksListContent extends ConsumerWidget {
           final cardWidth = isMobile
               ? viewportWidth
               : (viewportWidth > Breakpoints.maxContentWidth
-                  ? Breakpoints.maxContentWidth
-                  : viewportWidth);
+                    ? Breakpoints.maxContentWidth
+                    : viewportWidth);
           final layout = TopicCardLayout.obtain(
             identity: bookmarkTopicIdentity(topic),
             topic: topic,
@@ -244,8 +238,8 @@ class BookmarksListContent extends ConsumerWidget {
             bandReminder: reminderAt == null
                 ? null
                 : (reminderExpired
-                    ? context.l10n.bookmarks_expired
-                    : ' ${TimeUtils.formatDetailTime(reminderAt)}'),
+                      ? context.l10n.bookmarks_expired
+                      : ' ${TimeUtils.formatDetailTime(reminderAt)}'),
             bandExpired: reminderExpired,
             statsAvailableWidth: statsAvailableWidth ?? 460,
             emojiUrlOf: topicCardEmojiUrlResolver,
@@ -257,22 +251,22 @@ class BookmarksListContent extends ConsumerWidget {
             onMiddleClick: () => onMiddleClick(topic),
             onLongPress: enableLongPress
                 ? () => TopicPreviewDialog.show(
-                      context,
-                      topic: topic,
-                      onOpen: () => onTap(topic),
-                      actions: topic.bookmarkId != null
-                          ? _buildPreviewActions(context, topic)
-                          : null,
-                      customActionPanelBuilder: topic.bookmarkId != null
-                          ? (_) => BookmarkPreviewQuickEditor(
-                                initialName: topic.bookmarkName,
-                                suggestions: bookmarkNameSuggestions,
-                                suggestionsLoader: bookmarkNameSuggestionsLoader,
-                                onSave: (value) =>
-                                    onQuickRenameBookmark(topic, value),
-                              )
-                          : null,
-                    )
+                    context,
+                    topic: topic,
+                    onOpen: () => onTap(topic),
+                    actions: topic.bookmarkId != null
+                        ? _buildPreviewActions(context, topic)
+                        : null,
+                    customActionPanelBuilder: topic.bookmarkId != null
+                        ? (_) => BookmarkPreviewQuickEditor(
+                            initialName: topic.bookmarkName,
+                            suggestions: bookmarkNameSuggestions,
+                            suggestionsLoader: bookmarkNameSuggestionsLoader,
+                            onSave: (value) =>
+                                onQuickRenameBookmark(topic, value),
+                          )
+                        : null,
+                  )
                 : null,
           );
           if (!isMobile) {
@@ -357,6 +351,64 @@ class BookmarksListContent extends ConsumerWidget {
         ),
         Expanded(child: swipeRegion),
       ],
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    final theme = Theme.of(context);
+    if (syncState.isInitialSync && syncState.isSyncing) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const LoadingSpinner(size: 32),
+            const SizedBox(height: 16),
+            Text(
+              context.l10n.bookmarks_initialSyncing,
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      );
+    }
+    if (syncState.isInitialSync && syncState.isFailed) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Symbols.sync_problem_rounded,
+              size: 64,
+              color: theme.colorScheme.outline,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              context.l10n.bookmarks_syncFailed,
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            if (onRetrySync != null) ...[
+              const SizedBox(height: 12),
+              FilledButton.tonal(
+                onPressed: onRetrySync,
+                child: Text(context.l10n.common_retry),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Symbols.bookmark_rounded, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text(
+            context.l10n.bookmarks_empty,
+            style: const TextStyle(color: Colors.grey),
+          ),
+        ],
+      ),
     );
   }
 

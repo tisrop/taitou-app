@@ -404,6 +404,10 @@ extension PostUpdateMethods on TopicDetailNotifier {
     final newBookmarkId = await service.bookmarkTopic(currentDetail.id);
     if (!ref.mounted) throw Exception(S.current.error_providerDisposed);
 
+    unawaited(
+      ref.read(bookmarkSyncControllerProvider.notifier).pullFirstPage(),
+    );
+
     state = AsyncValue.data(currentDetail.copyWith(
       bookmarked: true,
       bookmarkId: newBookmarkId,
@@ -421,6 +425,9 @@ extension PostUpdateMethods on TopicDetailNotifier {
 
     final service = ref.read(discourseServiceProvider);
     await service.deleteBookmark(bookmarkId);
+    await ref
+        .read(bookmarkSyncControllerProvider.notifier)
+        .purgeLocal(bookmarkId);
     if (!ref.mounted) return;
 
     state = AsyncValue.data(currentDetail.copyWith(

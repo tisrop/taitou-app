@@ -9,6 +9,7 @@ import '../../../../../l10n/s.dart';
 import '../../../../../constants.dart';
 import '../../../../../models/topic.dart';
 import '../../../../../providers/discourse_providers.dart';
+import '../../../../../providers/bookmark_sync_controller.dart';
 import '../../../../../providers/preferences_provider.dart';
 import '../../../../../utils/blocked_user_filter.dart';
 import '../../../../../utils/frame_jank_monitor.dart';

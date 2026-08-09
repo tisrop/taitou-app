@@ -2,23 +2,39 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+export 'current_username_provider.dart' show currentUsernameProvider;
+
 import '../models/topic.dart';
 import '../pages/bookmarks/bookmarks_models.dart';
+import '../storage/bookmark_cache_dao.dart';
 import '../utils/paged_async_notifier.dart';
 import '../utils/pagination_helper.dart';
-import 'bookmarks_reconciler.dart';
+import 'bookmark_sync_controller.dart';
 import 'bookmarks_repository.dart';
 import 'core_providers.dart';
+import 'current_username_provider.dart';
 
 final bookmarksPageLoaderProvider = Provider<BookmarkPageLoader>((ref) {
   final service = ref.read(discourseServiceProvider);
   return (page, limit) => service.getUserBookmarks(page: page, limit: limit);
 });
 
-/// 当前账号 username，作为本地书签缓存的隔离键；抽出来便于测试注入。
-final currentUsernameProvider = FutureProvider<String?>((ref) async {
-  return ref.read(discourseServiceProvider).getUsername();
-});
+/// 删除书签后统一清理本地缓存，供非 Consumer 入口调用。
+Future<void> purgeBookmarkFromLocalCache(
+  ProviderContainer container,
+  int bookmarkId,
+) {
+  return container
+      .read(bookmarkSyncControllerProvider.notifier)
+      .purgeLocal(bookmarkId);
+}
+
+/// 添加或编辑书签后静默拉取第一页，使本地列表及时反映服务端状态。
+Future<void> refreshBookmarkListCacheSilently(ProviderContainer container) {
+  return container
+      .read(bookmarkSyncControllerProvider.notifier)
+      .pullFirstPage();
+}
 
 /// 分页助手（所有用户内容列表共用）
 final _topicPaginationHelper = PaginationHelpers.forTopics<Topic>(
@@ -86,10 +102,10 @@ final browsingHistoryProvider =
       return BrowsingHistoryNotifier();
     });
 
-/// 书签 Notifier：本地缓存 + 远端对账 + 本地分页。
+/// 书签 Notifier：本地缓存 + 本地分页。
 ///
-/// 数据来源是 [BookmarksRepository]（Hive 本地缓存），通过 watch 订阅变更。
-/// 网络对账委托给 [BookmarksReconciler]。
+/// 数据来源是 [BookmarksRepository]，通过 watch 订阅变更。网络对账、
+/// 节流和失败状态由全局 [BookmarkSyncController] 管理。
 ///
 /// **本地分页**：build 时先拿 [BookmarksRepository.idsOrderedByUpdated]（仅 id
 /// 顺序，不反序列化 payload），首屏 hydrate [_pageSize] 条；UI 滚到底调
@@ -98,11 +114,10 @@ final browsingHistoryProvider =
 class BookmarksNotifier extends AsyncNotifier<List<Topic>> {
   late BookmarksRepository _repo;
   String? _accountId;
-  bool _isReconciling = false;
-  bool _isLastReconcileFailed = false;
   bool _isLoadingMore = false;
   bool _isLoadMoreFailed = false;
-  ReconcileMode? _ongoingMode;
+  bool _isRefreshingFromRepository = false;
+  bool _repositoryRefreshPending = false;
   StreamSubscription<void>? _repoSubscription;
 
   /// 当前账号下所有 bookmark_id 的完整顺序（按 updated_at DESC）。
@@ -114,18 +129,14 @@ class BookmarksNotifier extends AsyncNotifier<List<Topic>> {
   /// 单次 hydrate 的批量大小。
   static const int _pageSize = 30;
 
-  bool get isReconciling => _isReconciling;
-  bool get isLastReconcileFailed => _isLastReconcileFailed;
-  ReconcileMode? get ongoingReconcileMode => _ongoingMode;
-
   /// 本地缓存里是否还有未 hydrate 的条目。
   bool get hasMore => _loadedCount < _orderedIds.length;
 
+  /// 本地分页 hydrate 是否进行中。
+  bool get isLoadingMore => _isLoadingMore;
+
   /// 上一次 [loadMore] 是否失败。
   bool get isLoadMoreFailed => _isLoadMoreFailed;
-
-  /// 兼容旧 UI：映射到"对账进行中"。
-  bool get isHydratingAll => _isReconciling;
 
   @override
   Future<List<Topic>> build() async {
@@ -139,33 +150,18 @@ class BookmarksNotifier extends AsyncNotifier<List<Topic>> {
 
     _repoSubscription = _repo.watch().listen((_) {
       if (!ref.mounted) return;
-      unawaited(_refreshFromRepository());
+      _scheduleRepositoryRefresh();
     });
     ref.onDispose(() {
       _repoSubscription?.cancel();
     });
 
     _orderedIds = await _repo.idsOrderedByUpdated(username);
-    final reconciler = await ref.read(bookmarksReconcilerProvider.future);
 
-    if (_orderedIds.isEmpty) {
-      // 首次进入（本地空）：阻塞做完整对账。仅此一次。
-      _isReconciling = true;
-      try {
-        final report = await reconciler.fullReconcile(username);
-        _isLastReconcileFailed =
-            report.stopReason == ReconcileStopReason.errored;
-      } catch (_) {
-        _isLastReconcileFailed = true;
-      } finally {
-        _isReconciling = false;
-      }
-      _orderedIds = await _repo.idsOrderedByUpdated(username);
-      return _hydrateFirstPage(username);
-    }
-
-    // 非首次：先吐第一页，后台跑增量或定期完整对账。
-    unawaited(_runBackgroundReconcile(reconciler, username));
+    // 同步不阻塞本地首屏；每页写入会通过 repository.watch 流式推回。
+    unawaited(
+      ref.read(bookmarkSyncControllerProvider.notifier).ensureFreshness(),
+    );
     return _hydrateFirstPage(username);
   }
 
@@ -179,33 +175,21 @@ class BookmarksNotifier extends AsyncNotifier<List<Topic>> {
     return records.map((r) => r.topic).toList(growable: false);
   }
 
-  Future<void> _runBackgroundReconcile(
-    BookmarksReconciler reconciler,
-    String accountId,
-  ) async {
-    if (_isReconciling) return;
-    final mode = reconciler.isFullReconcileDue(accountId)
-        ? ReconcileMode.full
-        : ReconcileMode.incremental;
-    // autoDispose provider：用户在对账期间切走页面时如果不 keepAlive，notifier
-    // 会被销毁，导致 finally 里的 _emit 写不进 state（sync 按钮卡在 loading）。
-    final keepAliveLink = ref.keepAlive();
-    _isReconciling = true;
-    _ongoingMode = mode;
-    _isLastReconcileFailed = false;
-    _emit();
+  void _scheduleRepositoryRefresh() {
+    _repositoryRefreshPending = true;
+    if (_isRefreshingFromRepository) return;
+    unawaited(_drainRepositoryRefreshes());
+  }
+
+  Future<void> _drainRepositoryRefreshes() async {
+    _isRefreshingFromRepository = true;
     try {
-      final report = mode == ReconcileMode.full
-          ? await reconciler.fullReconcile(accountId)
-          : await reconciler.incrementalReconcile(accountId);
-      _isLastReconcileFailed = report.stopReason == ReconcileStopReason.errored;
-    } catch (_) {
-      _isLastReconcileFailed = true;
+      while (_repositoryRefreshPending && ref.mounted) {
+        _repositoryRefreshPending = false;
+        await _refreshFromRepository();
+      }
     } finally {
-      _isReconciling = false;
-      _ongoingMode = null;
-      _emit();
-      keepAliveLink.close();
+      _isRefreshingFromRepository = false;
     }
   }
 
@@ -229,42 +213,10 @@ class BookmarksNotifier extends AsyncNotifier<List<Topic>> {
     );
   }
 
-  /// 下拉刷新：拉第一页 upsert，不翻多页、不删除（spec 中明确不是"对账"）。
-  Future<void> refresh() async {
-    final accountId = _accountId;
-    if (accountId == null) return;
-    final reconciler = await ref.read(bookmarksReconcilerProvider.future);
-    await reconciler.pullToRefresh(accountId);
+  /// 下拉刷新：仅拉第一页 upsert，不翻多页、不删除。
+  Future<void> refresh() {
     // 写入会经由 repository.watch 通知 _refreshFromRepository。
-  }
-
-  /// 手动对账：触发完整对账，UI 通常会在调用前后展示加载条与结果 toast。
-  Future<ReconcileReport?> manualFullReconcile() async {
-    final accountId = _accountId;
-    if (accountId == null) return null;
-    if (_isReconciling) return null;
-    final reconciler = await ref.read(bookmarksReconcilerProvider.future);
-    // autoDispose provider：用户点同步后页面被切走（或 widget 被回收）会让
-    // notifier 被销毁，finally 里 _emit 写不进 state → sync 按钮卡 loading。
-    // 用 keepAlive 在对账期间保住 notifier，结束后释放即可正常 autoDispose。
-    final keepAliveLink = ref.keepAlive();
-    _isReconciling = true;
-    _ongoingMode = ReconcileMode.full;
-    _isLastReconcileFailed = false;
-    _emit();
-    try {
-      final report = await reconciler.fullReconcile(accountId);
-      _isLastReconcileFailed = report.stopReason == ReconcileStopReason.errored;
-      return report;
-    } catch (_) {
-      _isLastReconcileFailed = true;
-      return null;
-    } finally {
-      _isReconciling = false;
-      _ongoingMode = null;
-      _emit();
-      keepAliveLink.close();
-    }
+    return ref.read(bookmarkSyncControllerProvider.notifier).pullFirstPage();
   }
 
   /// 加载下一批本地缓存中的书签条目。
@@ -275,6 +227,7 @@ class BookmarksNotifier extends AsyncNotifier<List<Topic>> {
     if (!hasMore) return;
     _isLoadingMore = true;
     _isLoadMoreFailed = false;
+    _emit();
     try {
       final end = (_loadedCount + _pageSize) > _orderedIds.length
           ? _orderedIds.length
@@ -283,10 +236,7 @@ class BookmarksNotifier extends AsyncNotifier<List<Topic>> {
       final records = await _repo.readByIds(accountId, ids);
       if (!ref.mounted) return;
       final current = state.value ?? const <Topic>[];
-      final merged = <Topic>[
-        ...current,
-        ...records.map((r) => r.topic),
-      ];
+      final merged = <Topic>[...current, ...records.map((r) => r.topic)];
       _loadedCount = merged.length;
       state = AsyncValue.data(List<Topic>.unmodifiable(merged));
     } catch (_) {
@@ -294,6 +244,7 @@ class BookmarksNotifier extends AsyncNotifier<List<Topic>> {
       _emit();
     } finally {
       _isLoadingMore = false;
+      _emit();
     }
   }
 
@@ -327,6 +278,24 @@ class BookmarksNotifier extends AsyncNotifier<List<Topic>> {
     final accountId = _accountId;
     if (accountId == null) return;
     await _repo.deleteOne(accountId, bookmarkId);
+  }
+
+  /// 先删除本地条目，返回备份供服务端失败时回滚。
+  Future<BookmarkCacheEntry?> removeBookmarkOptimistically(
+    int bookmarkId,
+  ) async {
+    final accountId = _accountId;
+    if (accountId == null) return null;
+    final backup = await _repo.findOne(accountId, bookmarkId);
+    await _repo.deleteOne(accountId, bookmarkId);
+    return backup;
+  }
+
+  Future<void> restoreBookmark(BookmarkCacheEntry? backup) async {
+    if (backup == null) return;
+    final accountId = _accountId;
+    if (accountId == null) return;
+    await _repo.upsertOne(accountId, backup);
   }
 
   /// 兼容旧 API：同步移除本地某条书签（实际异步写入 repository）。

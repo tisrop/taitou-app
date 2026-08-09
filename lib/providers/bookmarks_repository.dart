@@ -145,6 +145,11 @@ class BookmarksRepository {
     return _dao.snapshotById(accountId);
   }
 
+  /// 读取单条缓存，供乐观删除失败时回滚。
+  Future<BookmarkCacheEntry?> findOne(String accountId, int bookmarkId) {
+    return _dao.findOne(accountId, bookmarkId);
+  }
+
   Future<Set<int>> allBookmarkIds(String accountId) {
     return _dao.allBookmarkIds(accountId);
   }

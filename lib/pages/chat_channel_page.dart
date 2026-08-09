@@ -19,6 +19,7 @@ import '../models/chat/gif.dart';
 import '../models/topic.dart';
 import '../providers/chat/chat_channel_list_provider.dart';
 import '../providers/chat/chat_list_provider.dart';
+import '../providers/bookmark_sync_controller.dart';
 import '../providers/core_providers.dart';
 import '../services/app_error_handler.dart';
 import '../services/emoji_handler.dart';
@@ -689,13 +690,21 @@ class _ChatChannelPageState extends ConsumerState<ChatChannelPage> {
   Future<void> _toggleMessageBookmark(ChatMessage message) async {
     try {
       final service = ref.read(discourseServiceProvider);
-      final updated = message.bookmarkId == null
-          ? message.copyWith(
-              bookmarkId: await service.bookmarkChatMessage(message.id),
-            )
-          : message.copyWith(clearBookmark: true);
-      if (message.bookmarkId != null) {
-        await service.deleteBookmark(message.bookmarkId!);
+      final bookmarkId = message.bookmarkId;
+      late final ChatMessage updated;
+      if (bookmarkId == null) {
+        updated = message.copyWith(
+          bookmarkId: await service.bookmarkChatMessage(message.id),
+        );
+        unawaited(
+          ref.read(bookmarkSyncControllerProvider.notifier).pullFirstPage(),
+        );
+      } else {
+        await service.deleteBookmark(bookmarkId);
+        await ref
+            .read(bookmarkSyncControllerProvider.notifier)
+            .purgeLocal(bookmarkId);
+        updated = message.copyWith(clearBookmark: true);
       }
       if (!mounted) return;
       ref
