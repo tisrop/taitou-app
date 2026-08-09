@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show protected;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
@@ -45,15 +46,8 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
   }
 
   Future<User?> _loadUserWithCache(DiscourseService service) async {
-    final hasToken = await service.isLoggedIn();
-    if (!hasToken) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_cacheKey);
-      await prefs.remove(_cacheUserKey);
-      return null;
-    }
-
-    // 先尝试从 SP 读取缓存
+    // provider 可能在首页预加载完成前就被 watch。先发布上次会话缓存，
+    // 再由预加载数据和用户接口渐进补全，避免头像、入口和通知徽章白等。
     final prefs = await SharedPreferences.getInstance();
     final cached = prefs.getString(_cacheKey);
     User? cachedUser;
@@ -61,16 +55,31 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
       try {
         final json = jsonDecode(cached) as Map<String, dynamic>;
         cachedUser = User.fromCacheJson(json);
+        state = AsyncValue.data(cachedUser);
       } catch (_) {
         // 缓存损坏，忽略
       }
     }
 
+    final hasToken = await checkLoggedIn(service);
+    if (!hasToken) {
+      await prefs.remove(_cacheKey);
+      await prefs.remove(_cacheUserKey);
+      return null;
+    }
+
     try {
-      final user = await _loadUser(service);
-      if (user != null) {
-        _saveCache(prefs, user);
-        return user;
+      final preloadedUser = await fetchPreloadedCurrentUser(service);
+      if (preloadedUser != null) {
+        state = AsyncValue.data(preloadedUser);
+      }
+      final user = await fetchCurrentUser(service);
+      final resolved = user == null
+          ? preloadedUser
+          : (preloadedUser == null ? user : _mergeUser(user, preloadedUser));
+      if (resolved != null) {
+        _saveCache(prefs, resolved);
+        return resolved;
       }
       // 网络返回 null 但本地有缓存时，保守处理：保留缓存返回，
       // 避免短暂鉴权抖动把 UI 误判成已登出。
@@ -83,6 +92,17 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
       rethrow;
     }
   }
+
+  @protected
+  Future<bool> checkLoggedIn(DiscourseService service) => service.isLoggedIn();
+
+  @protected
+  Future<User?> fetchPreloadedCurrentUser(DiscourseService service) =>
+      service.getPreloadedCurrentUser();
+
+  @protected
+  Future<User?> fetchCurrentUser(DiscourseService service) =>
+      service.getCurrentUser();
 
   Future<User?> _loadUser(DiscourseService service) async {
     final preloadedUser = await service.getPreloadedCurrentUser();

@@ -58,6 +58,9 @@ class PreloadedDataService {
         },
       );
 
+  @visibleForTesting
+  PreloadedDataService.forTesting(this._dio);
+
   /// 是否已加载数据
   bool get isLoaded => _loaded;
   Map<String, dynamic>? get currentUserSync => _currentUser;
@@ -535,7 +538,10 @@ class PreloadedDataService {
       );
 
       final html = response.data as String;
-      await _parsePreloadedDataFromHtml(html);
+      final parsed = await _parsePreloadedDataFromHtml(html);
+      if (!parsed) {
+        throw const FormatException('首页 HTML 未解析出 data-preloaded 数据');
+      }
       debugPrint('[PreloadedData] 数据加载成功');
       _loaded = true;
       // 预热完成后仅更新站点基础数据和 sitekey。cf_clearance 自动续期
