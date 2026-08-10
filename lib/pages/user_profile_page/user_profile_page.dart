@@ -7,6 +7,7 @@ import '../../models/user.dart';
 import '../../providers/discourse_providers.dart';
 import '../../services/discourse_cache_manager.dart';
 import '../../utils/time_utils.dart';
+import '../../utils/responsive.dart';
 import '../../widgets/common/text/relative_time_text.dart';
 import '../../utils/number_utils.dart';
 import 'package:dio/dio.dart';
@@ -267,15 +268,48 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
       );
     }
 
-    // 计算 pinned header 高度
-    final double pinnedHeaderHeight = kToolbarHeight + MediaQuery.of(context).padding.top + 36; // 36 是 TabBar 高度
+    final pinnedHeaderHeight =
+        kToolbarHeight + MediaQuery.paddingOf(context).top + 36;
 
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (UserProfileWideLayout.shouldUse(constraints.maxWidth)) {
+          return _buildWideBody(theme, currentUser);
+        }
+        return _buildNarrowBody(theme, currentUser, pinnedHeaderHeight);
+      },
+    );
+  }
+
+  Widget _constrainWide(Widget child) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: Breakpoints.maxContentWidth),
+        child: child,
+      ),
+    );
+  }
+
+  List<Widget> _buildTabViews() {
+    return _tabFilters.asMap().entries.map((entry) {
+      final index = entry.key;
+      final filter = entry.value;
+      return ExtendedVisibilityDetector(
+        uniqueKey: Key('tab_$index'),
+        child: _constrainWide(_buildTab(filter)),
+      );
+    }).toList();
+  }
+
+  Widget _buildNarrowBody(
+    ThemeData theme,
+    User? currentUser,
+    double pinnedHeaderHeight,
+  ) {
     return Scaffold(
+      key: const ValueKey('user-profile-narrow'),
       body: ScrollConfiguration(
-        // 禁用 overscroll indicator：Material 3 在 Android 上默认
-        // StretchingOverscrollIndicator，与 NestedScrollView/SliverAppBar
-        // 组合存在 framework bug（flutter/flutter #100967、#116522、#100538），
-        // 表现为上滑松手时 tab 区域回弹抖动（与 topics_page 同因同修）。
+        // Material 3 的拉伸回弹与 NestedScrollView/SliverAppBar 组合会抖动。
         behavior: ScrollConfiguration.of(
           context,
         ).copyWith(scrollbars: false, overscroll: false),
@@ -288,49 +322,581 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
           ],
           body: TabBarView(
             controller: _tabController,
-            children: _tabFilters.asMap().entries.map((entry) {
-              final index = entry.key;
-              final filter = entry.value;
-              return ExtendedVisibilityDetector(
-                uniqueKey: Key('tab_$index'),
-                child: _buildTab(filter),
-              );
-            }).toList(),
+            children: _buildTabViews(),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildSliverAppBar(BuildContext context, ThemeData theme, User? currentUser) {
+  Widget _buildWideBody(ThemeData theme, User? currentUser) {
+    final isOwnProfile =
+        currentUser != null &&
+        _user != null &&
+        currentUser.username == _user!.username;
+    return Scaffold(
+      key: const ValueKey('user-profile-wide'),
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            key: const ValueKey('user-profile-wide-info-panel'),
+            width: UserProfileWideLayout.infoPanelWidth,
+            child: _buildWideInfoPanel(theme, isOwnProfile),
+          ),
+          SizedBox(
+            width: 1,
+            child: ColoredBox(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.4),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              children: [
+                // Tab 行与列表同一条限宽轴线,避免"标签顶在左上角、
+                // 内容居中"的错位感。
+                Material(
+                  color: theme.scaffoldBackgroundColor,
+                  child: SafeArea(
+                    bottom: false,
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: Breakpoints.maxContentWidth,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 4),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: _buildTabBar(theme),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: _buildTabViews(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 宽版左栏:顶部头图横幅 + 头像骑缝叠在横幅下缘,下方信息用主题
+  /// 配色正常排版。竖版那套「白字压满幅头图」平铺到整栏全高会把左栏
+  /// 闷成一大块深色(实测被否),头图只作横幅、信息区回到正常底色。
+  Widget _buildWideInfoPanel(ThemeData theme, bool isOwnProfile) {
     final bgUrl = _user?.backgroundUrl;
     final hasBackground = bgUrl != null && bgUrl.isNotEmpty;
-    // Standard toolbar height is usually 56.0 + status bar height
-    final double pinnedHeight = kToolbarHeight + MediaQuery.of(context).padding.top;
-    // 横屏时屏幕高度有限，限制 expandedHeight 不超过屏幕高度的 70%
-    final screenHeight = MediaQuery.of(context).size.height;
-    final double expandedHeight = 410.0.clamp(0.0, screenHeight * 0.7);
-
-    // Check if there is any info to show (for the "About" popup)
+    const bannerHeight = UserProfileWideLayout.bannerHeight;
+    const avatarRadius = UserProfileWideLayout.avatarRadius;
     final hasBio = _user?.bio != null && _user!.bio!.isNotEmpty;
     final hasLocation = _user?.location != null && _user!.location!.isNotEmpty;
     final hasWebsite = _user?.website != null && _user!.website!.isNotEmpty;
     final hasJoinedAt = _user?.createdAt != null;
     final hasInfo = hasBio || hasLocation || hasWebsite || hasJoinedAt;
 
-    // 检查是否是自己
-    final isOwnProfile = currentUser != null && _user != null && currentUser.username == _user!.username;
+    final banner = SizedBox(
+      height: bannerHeight,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // 个人主页可能长时间停留,装饰背景不常驻刷新(与竖版同口径)。
+          const GrainGradientBackground(),
+          if (hasBackground)
+            Image(
+              image: discourseImageProvider(UrlHelper.resolveUrlWithCdn(bgUrl)),
+              fit: BoxFit.cover,
+              alignment: Alignment.center,
+              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                if (wasSynchronouslyLoaded || frame != null) {
+                  return AnimatedOpacity(
+                    opacity: frame != null ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: child,
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+          // 轻压暗:保住悬浮按钮可读性,不吃头图本身。
+          Container(color: Colors.black.withValues(alpha: 0.2)),
+        ],
+      ),
+    );
 
-    return SliverAppBar(
-      expandedHeight: expandedHeight,
-      pinned: true,
-      stretch: true,
-      elevation: 0,
-      scrolledUnderElevation: 0,
-      backgroundColor: Colors.transparent, // Transparent to show FlexibleSpaceBar background
-      surfaceTintColor: Colors.transparent, // Prevent M3 tint
-      iconTheme: const IconThemeData(color: Colors.white),
-      actions: [
+    return ColoredBox(
+      color: theme.scaffoldBackgroundColor,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      banner,
+                      Positioned(
+                        left: 20,
+                        bottom: -avatarRadius,
+                        child: _buildWideAvatar(theme),
+                      ),
+                    ],
+                  ),
+                  // 头像下半部分的骑缝空间,右侧顺势放关注按钮。
+                  SizedBox(
+                    height: avatarRadius + 12,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 20),
+                        child: _buildWideFollowButton(isOwnProfile),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                (_user?.name?.isNotEmpty == true)
+                                    ? _user!.name!
+                                    : (_user?.username ?? ''),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            if (_user?.status != null) ...[
+                              const SizedBox(width: 8),
+                              _buildStatusEmoji(_user!.status!),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            if (_user?.username != null)
+                              Flexible(
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onTap: () => copyUsernameToClipboard(
+                                    _user!.username,
+                                  ),
+                                  child: Text(
+                                    '@${_user!.username}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(width: 10),
+                            TrustLevelBadge(
+                              level: _user?.trustLevel ?? 0,
+                              backgroundColor:
+                                  theme.colorScheme.secondaryContainer,
+                              foregroundColor:
+                                  theme.colorScheme.onSecondaryContainer,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 3,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              textStyle: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              onTap: () => TrustLevelInfoSheet.show(
+                                context: context,
+                                currentLevel: _user?.trustLevel ?? 0,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // 封禁/禁言与简介互斥(与竖版一致)。
+                        if (_user!.isSuspended || _user!.isSilenced) ...[
+                          GestureDetector(
+                            onTap: () => showUserInfoDialog(context, _user!),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (_user!.isSuspended) ...[
+                                  _buildRestrictionBanner(
+                                    icon: Symbols.block_rounded,
+                                    label: _user!.isSuspendedForever
+                                        ? context
+                                              .l10n
+                                              .userProfile_suspendedBannerForever
+                                        : context.l10n
+                                              .userProfile_suspendedBannerUntil(
+                                                TimeUtils.formatFullDate(
+                                                  _user!.suspendedTill,
+                                                ),
+                                              ),
+                                    reason: _user!.suspendReason,
+                                    color: Colors.redAccent,
+                                    reasonColor:
+                                        theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                  if (_user!.isSilenced)
+                                    const SizedBox(height: 8),
+                                ],
+                                if (_user!.isSilenced)
+                                  _buildRestrictionBanner(
+                                    icon: Symbols.mic_off_rounded,
+                                    label: _user!.isSilencedForever
+                                        ? context
+                                              .l10n
+                                              .userProfile_silencedBannerForever
+                                        : context.l10n
+                                              .userProfile_silencedBannerUntil(
+                                                TimeUtils.formatFullDate(
+                                                  _user!.silencedTill,
+                                                ),
+                                              ),
+                                    reason: _user!.silenceReason,
+                                    color: Colors.orangeAccent,
+                                    reasonColor:
+                                        theme.colorScheme.onSurfaceVariant,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ] else
+                          InkWell(
+                            onTap: hasInfo
+                                ? () => showUserInfoDialog(context, _user!)
+                                : null,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: hasBio
+                                        ? CollapsedHtmlContent(
+                                            html: _user!.bio!,
+                                            maxLines: 4,
+                                            overflow: TextOverflow.ellipsis,
+                                            textStyle: theme
+                                                .textTheme
+                                                .bodyMedium
+                                                ?.copyWith(height: 1.4),
+                                          )
+                                        : Text(
+                                            context.l10n.userProfile_noBio,
+                                            style: theme.textTheme.bodyMedium
+                                                ?.copyWith(
+                                                  color: theme
+                                                      .colorScheme
+                                                      .onSurfaceVariant,
+                                                  fontStyle: FontStyle.italic,
+                                                ),
+                                          ),
+                                  ),
+                                  if (hasInfo) ...[
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      Symbols.chevron_right_rounded,
+                                      size: 16,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 24),
+                        _buildWideStats(),
+                        if (_user?.lastPostedAt != null ||
+                            _user?.lastSeenAt != null) ...[
+                          const SizedBox(height: 20),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Symbols.flash_on_rounded,
+                                size: 14,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 6),
+                              RelativeTimeText(
+                                dateTime:
+                                    _user?.lastSeenAt ?? _user!.lastPostedAt!,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // 悬浮顶栏:返回 + 操作按钮,渐变黑纱保证压图可读。
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black45, Colors.transparent],
+                ),
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: IconTheme(
+                    data: const IconThemeData(color: Colors.white),
+                    child: Row(
+                      children: [
+                        const BackButton(color: Colors.white),
+                        const Spacer(),
+                        ..._buildHeaderActions(isOwnProfile),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWideAvatar(ThemeData theme) {
+    final avatarUrl = _user!.getAvatarUrl(size: 144);
+    return GestureDetector(
+      onTap: avatarUrl.isEmpty
+          ? null
+          : () => ImageViewerPage.open(
+              context,
+              _user!.getAvatarUrl(size: 360),
+              heroTag: 'user_avatar_${_user!.username}',
+            ),
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: theme.scaffoldBackgroundColor,
+            width: 4,
+          ),
+        ),
+        child: AvatarWithFlair(
+          flairSize: 34,
+          flairRight: -8,
+          flairBottom: -4,
+          flairUrl: _user?.flairUrl,
+          flairName: _user?.flairName,
+          flairBgColor: _user?.flairBgColor,
+          flairColor: _user?.flairColor,
+          avatar: Hero(
+            tag: 'user_avatar_${_user?.username ?? ''}',
+            transitionOnUserGestures: true,
+            child: SmartAvatar(
+              imageUrl: avatarUrl.isEmpty ? null : avatarUrl,
+              radius: UserProfileWideLayout.avatarRadius,
+              fallbackText: _user?.username,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWideFollowButton(bool isOwnProfile) {
+    if (_user == null || _user!.canFollow != true || isOwnProfile) {
+      return const SizedBox.shrink();
+    }
+    if (_isFollowLoading) {
+      return const SizedBox(
+        width: 32,
+        height: 32,
+        child: Padding(
+          padding: EdgeInsets.all(6),
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    return _isFollowed
+        ? FilledButton.tonalIcon(
+            onPressed: _toggleFollow,
+            icon: const Icon(Symbols.check_rounded, size: 16),
+            label: Text(context.l10n.userProfile_followed),
+          )
+        : FilledButton.icon(
+            onPressed: _toggleFollow,
+            icon: const Icon(Symbols.add_rounded, size: 16),
+            label: Text(context.l10n.userProfile_follow),
+          );
+  }
+
+  /// 宽版统计区:数值大字+标签小字上下排,Wrap 流式铺开(竖版的
+  /// 单行小字挤排是为头图区省高度,左栏不缺纵向空间)。
+  Widget _buildWideStats() {
+    final items = <Widget>[
+      if (_user?.totalFollowing != null)
+        _buildWideStat(
+          NumberUtils.formatCount(_user!.totalFollowing!),
+          context.l10n.userProfile_following,
+          _user!.totalFollowing!,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => FollowListPage(
+                username: widget.username,
+                isFollowing: true,
+              ),
+            ),
+          ),
+        ),
+      if (_user?.totalFollowers != null)
+        _buildWideStat(
+          NumberUtils.formatCount(_user!.totalFollowers!),
+          context.l10n.userProfile_followers,
+          _user!.totalFollowers!,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => FollowListPage(
+                username: widget.username,
+                isFollowing: false,
+              ),
+            ),
+          ),
+        ),
+      if (_summary != null) ...[
+        _buildWideStat(
+          NumberUtils.formatCount(_summary!.likesReceived),
+          context.l10n.userProfile_statsLikes,
+          _summary!.likesReceived,
+        ),
+        _buildWideStat(
+          NumberUtils.formatCount(_summary!.daysVisited),
+          context.l10n.userProfile_statsVisits,
+          _summary!.daysVisited,
+        ),
+        _buildWideStat(
+          NumberUtils.formatCount(_summary!.topicCount),
+          context.l10n.userProfile_statsTopics,
+          _summary!.topicCount,
+        ),
+        _buildWideStat(
+          NumberUtils.formatCount(_summary!.postCount),
+          context.l10n.userProfile_statsReplies,
+          _summary!.postCount,
+        ),
+      ],
+    ];
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Wrap(spacing: 28, runSpacing: 16, children: items);
+  }
+
+  Widget _buildWideStat(
+    String value,
+    String label,
+    int rawValue, {
+    VoidCallback? onTap,
+  }) {
+    final theme = Theme.of(context);
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+    return Tooltip(
+      message: '$rawValue',
+      child: onTap == null
+          ? content
+          : InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(8),
+              child: content,
+            ),
+    );
+  }
+
+  TabBar _buildTabBar(ThemeData theme) {
+    return TabBar(
+      controller: _tabController,
+      isScrollable: true,
+      tabAlignment: TabAlignment.start,
+      labelColor: theme.colorScheme.primary,
+      unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
+      indicatorColor: theme.colorScheme.primary,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+      indicatorSize: TabBarIndicatorSize.label,
+      dividerColor: Colors.transparent,
+      tabs: [
+        Tab(height: 36, text: context.l10n.userProfile_tabSummary),
+        Tab(height: 36, text: context.l10n.userProfile_tabActivity),
+        Tab(height: 36, text: context.l10n.userProfile_tabTopics),
+        Tab(height: 36, text: context.l10n.userProfile_tabReplies),
+        Tab(height: 36, text: context.l10n.userProfile_tabLikes),
+        Tab(height: 36, text: context.l10n.userProfile_tabReactions),
+        Tab(height: 36, text: context.l10n.userProfile_tabBoosts),
+        Tab(height: 36, text: context.l10n.userProfile_tabVotes),
+        Tab(height: 36, text: context.l10n.userProfile_tabSolved),
+      ],
+    );
+  }
+
+  List<Widget> _buildHeaderActions(bool isOwnProfile) {
+    return [
         IconButton(
           icon: const Icon(Symbols.search_rounded),
           onPressed: () => _openUserSearch(),
@@ -425,7 +991,38 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
             ];
           },
         ),
-      ],
+      ];
+  }
+
+  Widget _buildSliverAppBar(BuildContext context, ThemeData theme, User? currentUser) {
+    final bgUrl = _user?.backgroundUrl;
+    final hasBackground = bgUrl != null && bgUrl.isNotEmpty;
+    // Standard toolbar height is usually 56.0 + status bar height
+    final double pinnedHeight = kToolbarHeight + MediaQuery.of(context).padding.top;
+    // 横屏时屏幕高度有限，限制 expandedHeight 不超过屏幕高度的 70%
+    final screenHeight = MediaQuery.of(context).size.height;
+    final double expandedHeight = 410.0.clamp(0.0, screenHeight * 0.7);
+
+    // Check if there is any info to show (for the "About" popup)
+    final hasBio = _user?.bio != null && _user!.bio!.isNotEmpty;
+    final hasLocation = _user?.location != null && _user!.location!.isNotEmpty;
+    final hasWebsite = _user?.website != null && _user!.website!.isNotEmpty;
+    final hasJoinedAt = _user?.createdAt != null;
+    final hasInfo = hasBio || hasLocation || hasWebsite || hasJoinedAt;
+
+    // 检查是否是自己
+    final isOwnProfile = currentUser != null && _user != null && currentUser.username == _user!.username;
+
+    return SliverAppBar(
+      expandedHeight: expandedHeight,
+      pinned: true,
+      stretch: true,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      backgroundColor: Colors.transparent, // Transparent to show FlexibleSpaceBar background
+      surfaceTintColor: Colors.transparent, // Prevent M3 tint
+      iconTheme: const IconThemeData(color: Colors.white),
+      actions: _buildHeaderActions(isOwnProfile),
       // Bottom 参数承载 TabBar，并应用圆角背景，这样它会“浮”在 FlexibleSpace 背景图之上
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(36),
@@ -436,28 +1033,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
           clipBehavior: Clip.antiAlias,
           child: Material(
             color: Theme.of(context).scaffoldBackgroundColor,
-            child: TabBar(
-            controller: _tabController,
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            labelColor: theme.colorScheme.primary,
-            unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
-            indicatorColor: theme.colorScheme.primary,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 12),
-            indicatorSize: TabBarIndicatorSize.label,
-            dividerColor: Colors.transparent,
-            tabs: [
-              Tab(height: 36, text: context.l10n.userProfile_tabSummary),
-              Tab(height: 36, text: context.l10n.userProfile_tabActivity),
-              Tab(height: 36, text: context.l10n.userProfile_tabTopics),
-              Tab(height: 36, text: context.l10n.userProfile_tabReplies),
-              Tab(height: 36, text: context.l10n.userProfile_tabLikes),
-              Tab(height: 36, text: context.l10n.userProfile_tabReactions),
-              Tab(height: 36, text: context.l10n.userProfile_tabBoosts),
-              Tab(height: 36, text: context.l10n.userProfile_tabVotes),
-              Tab(height: 36, text: context.l10n.userProfile_tabSolved),
-            ],
-          ),
+            child: _buildTabBar(theme),
           ),
         ),
       ),
@@ -957,6 +1533,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
     required String label,
     required String? reason,
     required Color color,
+    Color? reasonColor,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -991,7 +1568,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.8),
+                color: reasonColor ?? Colors.white.withValues(alpha: 0.8),
                 fontSize: 12,
                 height: 1.4,
               ),
