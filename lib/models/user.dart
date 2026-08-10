@@ -79,6 +79,9 @@ class User {
   final bool admin;
   final bool moderator;
 
+  /// discourse-assign 插件加的字段，只在 CurrentUserSerializer 中下发。
+  final bool canAssign;
+
   User({
     required this.id,
     required this.username,
@@ -129,6 +132,7 @@ class User {
     this.silencedTill,
     this.admin = false,
     this.moderator = false,
+    this.canAssign = false,
   });
 
   User copyWith({
@@ -140,6 +144,7 @@ class User {
     bool? muted,
     bool? ignored,
     bool? canChat,
+    bool? canAssign,
   }) {
     return User(
       id: id,
@@ -195,6 +200,7 @@ class User {
       silencedTill: silencedTill,
       admin: admin,
       moderator: moderator,
+      canAssign: canAssign ?? this.canAssign,
     );
   }
 
@@ -275,6 +281,7 @@ class User {
       silencedTill: TimeUtils.parseUtcTime(json['silenced_till'] as String?),
       admin: json['admin'] as bool? ?? false,
       moderator: json['moderator'] as bool? ?? false,
+      canAssign: json['can_assign'] as bool? ?? false,
     );
   }
 
@@ -297,6 +304,7 @@ class User {
     'gamification_score': gamificationScore,
     'admin': admin,
     'moderator': moderator,
+    'can_assign': canAssign,
   };
 
   /// 从缓存 JSON 恢复（不再调用 resolveUrl/fixHtml，直接读取）
@@ -319,6 +327,7 @@ class User {
       gamificationScore: json['gamification_score'] as int?,
       admin: json['admin'] as bool? ?? false,
       moderator: json['moderator'] as bool? ?? false,
+      canAssign: json['can_assign'] as bool? ?? false,
     );
   }
 

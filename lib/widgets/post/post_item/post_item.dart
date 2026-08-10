@@ -16,6 +16,7 @@ import '../post_boost/boost_actions.dart';
 import '../post_boost/boost_danmaku.dart';
 import '../post_signature_block.dart';
 import '../small_action_item.dart';
+import '../../topic/assign_sheet.dart';
 import 'quote_selection_helper.dart';
 import 'render_parse_cache.dart';
 import 'widgets/post_footer_section/post_footer_section.dart';
@@ -60,6 +61,12 @@ class PostItem extends ConsumerStatefulWidget {
   /// OP 帖专属插槽: 仅在 postNumber == 1 时生效, 透传给 PostFooterSection
   final Widget? opTopSlot;
 
+  /// 帖子级指定信息；非空时在正文下方显示指定标签。
+  final PostAssignmentInfo? assignmentInfo;
+
+  /// 当前用户是否可执行帖子级指定。
+  final bool canAssignPost;
+
   const PostItem({
     super.key,
     required this.post,
@@ -91,6 +98,8 @@ class PostItem extends ConsumerStatefulWidget {
     this.onShowPostDetail,
     this.hideRepliesButton = false,
     this.opTopSlot,
+    this.assignmentInfo,
+    this.canAssignPost = false,
   });
 
   @override
@@ -152,8 +161,21 @@ class _PostItemState extends ConsumerState<PostItem> {
       '${(post.cooked.length / 1000).toStringAsFixed(1)}k',
     );
 
-    if (post.postType == PostTypes.smallAction) {
-      return SmallActionItem(post: post, selected: widget.selected);
+    // discourse-assign 的指定/取消指定系统帖:SiteSetting.assigns_public
+    // 关闭时插件把这些帖子建成 whisper(post_type=4)而不是 small_action
+    // (post_type=3)——只按 post_type 判断会漏掉这部分,它们就会落到下面
+    // 正常帖子的渲染分支,带点赞/回复/更多按钮,而这些系统帖压根不支持
+    // 这些互动,点了就出错。action_code 才是 Discourse 真正用来标记"这是
+    // 系统生成的操作记录帖"的字段,不管 post_type 是 3 还是 4 都会带上,
+    // 普通用户帖永远不会有这个字段——用它兜底判断更准。
+    if (post.postType == PostTypes.smallAction ||
+        (post.actionCode?.isNotEmpty ?? false)) {
+      return SmallActionItem(
+        post: post,
+        topicId: widget.topicId,
+        selected: widget.selected,
+        onEdit: widget.onEdit,
+      );
     }
 
     final danmakuPref = ref.watch(
@@ -321,6 +343,11 @@ class _PostItemState extends ConsumerState<PostItem> {
                 ],
               ),
             ),
+              if (widget.assignmentInfo != null)
+                _PostAssignmentBadge(
+                  info: widget.assignmentInfo!,
+                  topicId: widget.topicId,
+                ),
             // 用户签名
             if (PostSignatureBlock.shouldRender(
               ref,
@@ -383,6 +410,14 @@ class _PostItemState extends ConsumerState<PostItem> {
               onShowPostDetail: widget.onShowPostDetail,
               hideRepliesButton: widget.hideRepliesButton,
               opTopSlot: widget.opTopSlot,
+                canAssignPost:
+                    widget.canAssignPost && widget.assignmentInfo == null,
+                onAssignPost: () => showPostAssignDialog(
+                  context,
+                  ref,
+                  topicId: widget.topicId,
+                  postId: post.id,
+                ),
               onAcceptedAnswerChanged: (accepted) {
                 if (!mounted) return;
                 setState(() {
@@ -410,4 +445,85 @@ class _ShortPostNewEngineRenderData {
     required this.parsedNodes,
     required this.callbacks,
   });
+}
+
+/// "已指定给 X"标签(帖子级)——点开是编辑/取消的小菜单,对齐官方
+/// Web 端"正文下方、签名上方"的位置和交互。
+class _PostAssignmentBadge extends ConsumerWidget {
+  const _PostAssignmentBadge({required this.info, required this.topicId});
+
+  final PostAssignmentInfo info;
+  final int topicId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => showPostAssignDialog(
+          context,
+          ref,
+          topicId: topicId,
+          postId: info.postId,
+          current: info,
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.assignment_ind_rounded,
+                size: 16,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  '已指定给 ${info.displayName}',
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                icon: Icon(
+                  Icons.more_vert_rounded,
+                  size: 16,
+                  color: theme.colorScheme.primary,
+                ),
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    showPostAssignDialog(
+                      context,
+                      ref,
+                      topicId: topicId,
+                      postId: info.postId,
+                      current: info,
+                    );
+                  } else if (value == 'cancel') {
+                    unassignPost(ref, topicId: topicId, postId: info.postId);
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'edit', child: Text('编辑指定')),
+                  PopupMenuItem(value: 'cancel', child: Text('取消指定')),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

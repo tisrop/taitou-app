@@ -165,6 +165,8 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
       seenNotificationId: preloadedUser.seenNotificationId,
       notificationChannelPosition: preloadedUser.notificationChannelPosition,
       canChat: preloadedUser.canChat,
+      // /u/username.json 不带 can_assign，保留预加载权限位。
+      canAssign: user.canAssign || preloadedUser.canAssign,
     );
   }
 

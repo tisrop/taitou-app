@@ -24,6 +24,7 @@ import 'package:fluxdo_render/fluxdo_render.dart'
 import '../../../widgets/post/post_item/post_item.dart';
 import '../../../widgets/post/post_item/render_parse_cache.dart';
 import '../../../widgets/post/post_item/segmented_long_post.dart';
+import '../../../widgets/post/small_action_item.dart' show PostTypes;
 import '../../../widgets/post/quote_image_scope.dart';
 import 'topic_detail_header.dart';
 import 'shared_issue_button.dart';
@@ -107,6 +108,9 @@ class TopicPostList extends StatefulWidget {
   final String? highlightBoostUsername;
   final bool hideHeaderTitle;
 
+  /// 当前用户是否可执行帖子级指定。
+  final bool canAssignPost;
+
   const TopicPostList({
     super.key,
     required this.detail,
@@ -118,6 +122,7 @@ class TopicPostList extends StatefulWidget {
     required this.highlightPostNumber,
     this.highlightBoostUsername,
     this.hideHeaderTitle = false,
+    this.canAssignPost = false,
     required this.isLoggedIn,
     required this.hasMoreBefore,
     required this.hasMoreAfter,
@@ -747,7 +752,16 @@ class _TopicPostListState extends State<TopicPostList> {
       final longPostCache = _longPostDataFor(post);
       newEngineData = longPostCache.newEngineData;
       longChunks = longPostCache.chunks;
-      final useLongSegments = longChunks.isNotEmpty;
+      // discourse-assign 等插件的指定/取消指定系统帖,cooked 里塞几十个
+      // emoji <img> 就很容易超过长帖分段阈值——这条 chunk 化直出路径是
+      // topic_post_list.dart 自己直接调 LongPostHeaderSegment/Footer,完全
+      // 绕过 PostItem.build() 里"是不是系统操作帖"的判断,系统帖一旦被
+      // 判成"长帖"就会被当成能点赞/回复的普通帖子整个渲染出来。系统帖
+      // 永远走 shortPost(内部再分流到 SmallActionItem),不参与长帖分段。
+      final bool isSystemActionPost =
+          post.postType == PostTypes.smallAction ||
+          (post.actionCode?.isNotEmpty ?? false);
+      final useLongSegments = !isSystemActionPost && longChunks.isNotEmpty;
 
       postIndexToScrollIndex[postIndex] = segments.length;
       postNumberToIndex[post.postNumber] = postIndex;
@@ -1369,6 +1383,8 @@ class _TopicPostListState extends State<TopicPostList> {
           onQuoteImage: onQuoteImage,
           onExpandHiddenPost: onExpandHiddenPost,
           useReplyDialog: useReplyDialog,
+          assignmentInfo: detail.indirectlyAssignedTo[post.id],
+          canAssignPost: widget.canAssignPost,
           topicTitle: detail.title,
           isPrivateMessageTopic: detail.isPrivateMessage,
           isPmWithNonHumanUser: detail.pmWithNonHumanUser,

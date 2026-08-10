@@ -78,6 +78,10 @@ class PostFooterSection extends ConsumerStatefulWidget {
   /// "+ Boost" 火箭按钮出现在 action bar。
   final bool? danmakuActive;
 
+  /// 当前用户是否可指定这条帖子。
+  final bool canAssignPost;
+  final VoidCallback? onAssignPost;
+
   const PostFooterSection({
     super.key,
     required this.post,
@@ -102,6 +106,8 @@ class PostFooterSection extends ConsumerStatefulWidget {
     this.highlightBoostUsername,
     this.opTopSlot,
     this.danmakuActive,
+    this.canAssignPost = false,
+    this.onAssignPost,
   });
 
   @override

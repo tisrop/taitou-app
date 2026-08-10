@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import '../../models/topic.dart';
+import '../../models/assignment.dart';
 import '../../models/nested_topic.dart';
 import '../../models/topic_vote.dart';
 import '../../models/shared_issue.dart';
@@ -76,6 +77,7 @@ part '_policy.dart';
 part '_revisions.dart';
 part '_onebox.dart';
 part '_reviewables.dart';
+part '_assign.dart';
 part '_gamification.dart';
 part '_chat.dart';
 part '_gifs.dart';
@@ -143,6 +145,7 @@ class DiscourseService extends _DiscourseServiceBase
         _RevisionsMixin,
         _OneboxMixin,
         _ReviewablesMixin,
+        _AssignMixin,
         _GamificationMixin,
         _ChatMixin,
         _GifsMixin {
