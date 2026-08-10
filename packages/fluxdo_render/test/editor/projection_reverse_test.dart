@@ -1,7 +1,31 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fluxdo_render/src/node/inline_node.dart';
+import 'package:fluxdo_render/src/selection/projection_builder.dart';
 import 'package:fluxdo_render/src/selection/projection.dart';
 
 void main() {
+  test('Markdown 标记只占渲染空间，不进入内容与复制投影', () {
+    final projection = buildInlineProjection(const [
+      TextRun('**', isMarkdownMarker: true),
+      TextRun('abc'),
+      TextRun('**', isMarkdownMarker: true),
+    ]);
+
+    expect(projection.renderLength, 7);
+    expect(projection.contentLength, 3);
+    expect(projection.projectAll(), 'abc');
+    expect(projection.renderOffsetForContent(0), 2);
+    expect(projection.renderOffsetForContent(1), 3);
+    expect(projection.renderOffsetForContent(3), 7);
+    expect(projection.contentOffsetForRender(0), 0);
+    expect(projection.contentOffsetForRender(1), 0);
+    expect(projection.contentOffsetForRender(2), 0);
+    expect(projection.contentOffsetForRender(3), 1);
+    expect(projection.contentOffsetForRender(5), 3);
+    expect(projection.contentOffsetForRender(6), 3);
+    expect(projection.contentOffsetForRender(7), 3);
+  });
+
   // 模拟一个含行内代码的段落:
   //   文本: "说 [pad]`var x`[pad] 完"
   //   render:  说(0)空(1) pad(2) v a r 空 x (3..7) pad(8) 空(9) 完(10)

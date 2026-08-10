@@ -19,22 +19,30 @@ sealed class InlineNode {
 /// 纯文本片段。
 @immutable
 class TextRun extends InlineNode {
-  const TextRun(this.text);
+  const TextRun(this.text, {this.isMarkdownMarker = false});
 
   final String text;
+
+  /// 仅用于富文本编辑态显示的 Markdown 分隔符。
+  ///
+  /// 标记参与渲染，但不属于编辑内容：投影层会把它映射成零内容宽度，
+  /// 因此复制、IME、光标与选区仍使用原始语义文本坐标。
+  final bool isMarkdownMarker;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is TextRun &&
           runtimeType == other.runtimeType &&
-          text == other.text;
+          text == other.text &&
+          isMarkdownMarker == other.isMarkdownMarker;
 
   @override
-  int get hashCode => text.hashCode;
+  int get hashCode => Object.hash(text, isMarkdownMarker);
 
   @override
-  String toString() => 'TextRun(${text.length} chars)';
+  String toString() =>
+      'TextRun(${text.length} chars${isMarkdownMarker ? ", markdown marker" : ""})';
 }
 
 /// `<em>` / `<i>` 斜体,可包含嵌套行内子节点。

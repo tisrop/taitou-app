@@ -125,6 +125,15 @@ List<SettingsGroup> buildPreferencesGroups(BuildContext context) {
               ref.read(preferencesProvider.notifier).setUseRichComposer(v),
         ),
         SwitchModel(
+          id: 'instantRendering',
+          title: l10n.preferences_instantRendering,
+          subtitle: l10n.preferences_instantRenderingDesc,
+          icon: Symbols.code_rounded,
+          getValue: (ref) => ref.watch(preferencesProvider).instantRendering,
+          onChanged: (ref, v) =>
+              ref.read(preferencesProvider.notifier).setInstantRendering(v),
+        ),
+        SwitchModel(
           id: 'aiPostReview',
           title: l10n.preferences_aiPostReview,
           subtitle: l10n.preferences_aiPostReviewDesc,

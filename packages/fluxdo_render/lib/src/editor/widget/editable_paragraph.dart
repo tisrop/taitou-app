@@ -17,7 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../flatten/inline_flattener.dart';
-import '../../node/inline_node.dart' show ImageRun;
+import '../../node/inline_node.dart' show ImageRun, InlineNode, TextRun;
 import '../../render/block_text_styles.dart';
 import '../../render/emoji_handler.dart' show EmojiImageBuilder;
 import '../../render/image_handler.dart' show ImageContentBuilder;
@@ -35,6 +35,7 @@ class EditableParagraph extends StatefulWidget {
     required this.baseStyle,
     this.composing = TextRange.empty,
     this.listMarkerOrdinal = 1,
+    this.showMarkdownSyntax = false,
     this.imageContentBuilder,
     this.emojiImageBuilder,
   });
@@ -61,6 +62,9 @@ class EditableParagraph extends StatefulWidget {
   /// 有序列表项显示序号(派生渲染态,FluxdoEditor 按连续 run 扫描计算)。
   final int listMarkerOrdinal;
 
+  /// 当前段落是否显示 Markdown 分隔符（即时渲染模式的活动块）。
+  final bool showMarkdownSyntax;
+
   @override
   State<EditableParagraph> createState() => _EditableParagraphState();
 }
@@ -81,10 +85,7 @@ class _EditableParagraphState extends State<EditableParagraph> {
       // forEditing:spoiler=淡底纹(内容可见)、link=主题色下划线纯文本
       // (真 SpoilerRun 的粒子 WidgetSpan / LinkRun 的 recognizer 都会
       // 破坏编辑手势与光标)。
-      widget.block.content.toInlines(
-        forEditing: true,
-        editingLinkColor: _linkColor,
-      ),
+      _editingInlines(),
       _effectiveStyle,
       // 行内图片原子(裸图):走宿主图片管线(upload 解析/解码上限),
       // 但包 AbsorbPointer 冻结图自身交互(查看器 tap/Hero/右键菜单都
@@ -106,6 +107,25 @@ class _EditableParagraphState extends State<EditableParagraph> {
     return r;
   }
 
+  List<InlineNode> _editingInlines() {
+    final inlines = widget.block.content.toInlines(
+      forEditing: true,
+      editingLinkColor: _linkColor,
+      showMarkdownSyntax: widget.showMarkdownSyntax,
+    );
+    if (!widget.showMarkdownSyntax) return inlines;
+
+    final block = widget.block;
+    final prefix = switch (block.kind) {
+      TextBlockKind.heading => '${'#' * block.headingLevel} ',
+      TextBlockKind.listItem =>
+        block.ordered ? '${widget.listMarkerOrdinal}. ' : '- ',
+      TextBlockKind.paragraph => '',
+    };
+    if (prefix.isEmpty) return inlines;
+    return [TextRun(prefix, isMarkdownMarker: true), ...inlines];
+  }
+
   Color? _linkColor;
 
   @override
@@ -125,6 +145,10 @@ class _EditableParagraphState extends State<EditableParagraph> {
     if (oldWidget.block.content != widget.block.content ||
         oldWidget.block.kind != widget.block.kind ||
         oldWidget.block.headingLevel != widget.block.headingLevel ||
+        oldWidget.block.ordered != widget.block.ordered ||
+        oldWidget.block.depth != widget.block.depth ||
+        oldWidget.listMarkerOrdinal != widget.listMarkerOrdinal ||
+        oldWidget.showMarkdownSyntax != widget.showMarkdownSyntax ||
         oldWidget.baseStyle != widget.baseStyle) {
       _disposeResult();
     }
@@ -246,30 +270,38 @@ class _EditableParagraphState extends State<EditableParagraph> {
     // hardEdge 裁掉(症状:圆点消失)。阅读端 buildList 每层都有
     // padding-left,同理。
     if (block.isListItem) {
-      final markerColor =
-          style.color ?? Theme.of(context).colorScheme.onSurface;
-      final markerStyle = style.copyWith(
-        fontFeatures: const [FontFeature.tabularFigures()],
-      );
-      boxed = Padding(
-        padding: EdgeInsets.only(left: em * 1.5 * (block.depth + 1)),
-        child: HtmlListItem(
-          textDirection: Directionality.of(context),
-          marker: block.ordered
-              ? Text(
-                  '${widget.listMarkerOrdinal}.',
-                  style: markerStyle,
-                  maxLines: 1,
-                  softWrap: false,
-                )
-              : ListMarkerDot(
-                  depth: block.depth,
-                  color: markerColor,
-                  textStyle: markerStyle,
-                ),
+      if (widget.showMarkdownSyntax) {
+        // 活动列表块用真实 Markdown 前缀替代悬挂圆点/序号，避免重复。
+        boxed = Padding(
+          padding: EdgeInsets.only(left: em * 1.5 * block.depth),
           child: boxed,
-        ),
-      );
+        );
+      } else {
+        final markerColor =
+            style.color ?? Theme.of(context).colorScheme.onSurface;
+        final markerStyle = style.copyWith(
+          fontFeatures: const [FontFeature.tabularFigures()],
+        );
+        boxed = Padding(
+          padding: EdgeInsets.only(left: em * 1.5 * (block.depth + 1)),
+          child: HtmlListItem(
+            textDirection: Directionality.of(context),
+            marker: block.ordered
+                ? Text(
+                    '${widget.listMarkerOrdinal}.',
+                    style: markerStyle,
+                    maxLines: 1,
+                    softWrap: false,
+                  )
+                : ListMarkerDot(
+                    depth: block.depth,
+                    color: markerColor,
+                    textStyle: markerStyle,
+                  ),
+            child: boxed,
+          ),
+        );
+      }
     }
 
     // heading 上下 margin(阅读端 buildHeading 同款)。

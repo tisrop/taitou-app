@@ -172,8 +172,10 @@ class EditableTextContent {
   ) {
     for (final node in nodes) {
       switch (node) {
-        case TextRun(:final text):
-          _appendText(buf, marks, activeKinds, sanitizeText(text));
+        case TextRun(:final text, :final isMarkdownMarker):
+          if (!isMarkdownMarker) {
+            _appendText(buf, marks, activeKinds, sanitizeText(text));
+          }
         case LineBreakRun():
           _appendText(buf, marks, activeKinds, '\n');
         case EmRun(:final children):
@@ -289,9 +291,13 @@ class EditableTextContent {
   /// 后者的 TapGestureRecognizer 会抢编辑器手势),改用纯 TextSpan 视觉
   /// 替代:spoiler=淡灰底纹(内容可见可编辑,对齐官方 rich editor 光标
   /// 内显形语义的简化),link=[editingLinkColor] 字色 + 下划线。
+  ///
+  /// [showMarkdownSyntax]:仅与 [forEditing] 同时为 true 时，在 mark 边界
+  /// 注入零内容 Markdown 分隔符；默认关闭，阅读态与现有调用完全不变。
   List<InlineNode> toInlines({
     bool forEditing = false,
     Color? editingLinkColor,
+    bool showMarkdownSyntax = false,
   }) {
     if (text.isEmpty) return const [];
 
@@ -310,12 +316,18 @@ class EditableTextContent {
     }
     final points = cuts.toList()..sort();
 
-    // 2. 逐片段构建
+    // 2. 逐片段构建。即时渲染只在编辑态生效；每个区间边界
+    // 先关闭旧 mark 再开启新 mark，标记本身是零内容 TextRun。
     final out = <InlineNode>[];
+    final revealSyntax = forEditing && showMarkdownSyntax;
     for (var i = 0; i + 1 < points.length; i++) {
       final s = points[i];
       final e = points[i + 1];
       if (s >= e) continue;
+      if (revealSyntax) {
+        _appendMarkdownMarkers(out, marks, s, closing: true);
+        _appendMarkdownMarkers(out, marks, s, closing: false);
+      }
       final piece = text.substring(s, e);
       if (piece == '\n') {
         out.add(const LineBreakRun());
@@ -345,8 +357,66 @@ class EditableTextContent {
       out.add(_wrapPiece(piece, kinds, href,
           forEditing: forEditing, editingLinkColor: editingLinkColor));
     }
+    if (revealSyntax) {
+      _appendMarkdownMarkers(out, marks, text.length, closing: true);
+    }
     return out;
   }
+
+  /// Markdown 分隔符的稳定嵌套顺序（外 → 内）。关闭时反向。
+  static int _markdownMarkOrder(MarkKind kind) => switch (kind) {
+        MarkKind.spoilerInline => 0,
+        MarkKind.link => 1,
+        MarkKind.strong => 2,
+        MarkKind.em => 3,
+        MarkKind.underline => 4,
+        MarkKind.lineThrough => 5,
+        MarkKind.inlineCode => 6,
+      };
+
+  static void _appendMarkdownMarkers(
+    List<InlineNode> out,
+    List<MarkSpan> marks,
+    int offset, {
+    required bool closing,
+  }) {
+    final boundaryMarks = <MarkSpan>[
+      for (final mark in marks)
+        if ((closing ? mark.end : mark.start) == offset) mark,
+    ]..sort((a, b) {
+        final order = _markdownMarkOrder(a.kind)
+            .compareTo(_markdownMarkOrder(b.kind));
+        return closing ? -order : order;
+      });
+    for (final mark in boundaryMarks) {
+      final marker = closing
+          ? _closingMarkdownMarker(mark)
+          : _openingMarkdownMarker(mark);
+      if (marker.isNotEmpty) {
+        out.add(TextRun(marker, isMarkdownMarker: true));
+      }
+    }
+  }
+
+  static String _openingMarkdownMarker(MarkSpan mark) => switch (mark.kind) {
+        MarkKind.strong => '**',
+        MarkKind.em => '*',
+        MarkKind.inlineCode => '`',
+        MarkKind.underline => '[u]',
+        MarkKind.lineThrough => '~~',
+        MarkKind.spoilerInline => '[spoiler]',
+        MarkKind.link => '[',
+      };
+
+  static String _closingMarkdownMarker(MarkSpan mark) => switch (mark.kind) {
+        MarkKind.strong => '**',
+        MarkKind.em => '*',
+        MarkKind.inlineCode => '`',
+        MarkKind.underline => '[/u]',
+        MarkKind.lineThrough => '~~',
+        MarkKind.spoilerInline => '[/spoiler]',
+        MarkKind.link => '](${mark.attr ?? ''})',
+      };
 
   static InlineNode _wrapAtom(
     InlineNode atom,

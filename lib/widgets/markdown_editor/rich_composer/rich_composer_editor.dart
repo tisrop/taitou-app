@@ -102,6 +102,7 @@ class RichComposerEditor extends StatefulWidget {
     this.header,
     this.metaBar,
     this.toolbarAtTop = false,
+    this.instantRendering = false,
     this.editorDecoration,
     this.editorMargin = EdgeInsets.zero,
     this.footer,
@@ -127,6 +128,10 @@ class RichComposerEditor extends StatefulWidget {
   /// 分类/标签/字数等元数据常驻可见可改,不随滚动离场。null 时无。
   final Widget? metaBar;
   final bool toolbarAtTop;
+
+  /// 聚焦段落显示 Markdown 标记，其他段落保持所见即所得。
+  final bool instantRendering;
+
   final Decoration? editorDecoration;
   final EdgeInsetsGeometry editorMargin;
   final Widget? footer;
@@ -2447,6 +2452,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
                                   child: FluxdoEditor(
                                     state: editor,
                                     autofocus: true,
+                                    instantRendering: widget.instantRendering,
                                     focusNode: _editorFocus,
                                     nodeFactory: _nodeFactory ??=
                                         buildComposerNodeFactory(context),

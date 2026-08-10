@@ -773,6 +773,9 @@ class _CreateTopicPageState extends ConsumerState<CreateTopicPage> {
                                                 ),
                                                 controller: _contentController,
                                                 focusNode: _contentFocusNode,
+                                                instantRendering: ref
+                                                    .watch(preferencesProvider)
+                                                    .instantRendering,
                                                 hintText: context
                                                     .l10n
                                                     .createTopic_contentHint,

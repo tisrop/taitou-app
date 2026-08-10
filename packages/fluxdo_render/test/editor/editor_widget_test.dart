@@ -84,6 +84,76 @@ void main() {
     return (_Harness(tester, state), state);
   }
 
+  testWidgets('即时渲染仅在当前焦点块显示块级与行内 Markdown 标记', (tester) async {
+    final state = EditorState(
+      blocks: [
+        TextBlock(
+          id: 'e_0',
+          kind: TextBlockKind.heading,
+          headingLevel: 2,
+          content: EditableTextContent(
+            text: 'title',
+            marks: const [MarkSpan(start: 0, end: 5, kind: MarkKind.strong)],
+          ),
+        ),
+        TextBlock(
+          id: 'e_1',
+          kind: TextBlockKind.listItem,
+          content: EditableTextContent(
+            text: 'item',
+            marks: const [MarkSpan(start: 0, end: 4, kind: MarkKind.em)],
+          ),
+        ),
+      ],
+    );
+    addTearDown(state.dispose);
+    state.updateSelection(
+      const EditorSelection.collapsed(
+        EditorPosition(blockId: 'e_0', offset: 2),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: FluxdoEditor(
+            state: state,
+            autofocus: true,
+            instantRendering: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    String paragraphText(String blockId) {
+      final texts = tester.widgetList<Text>(
+        find.descendant(
+          of: find.byKey(ValueKey(blockId)),
+          matching: find.byType(Text),
+        ),
+      );
+      return texts
+          .firstWhere((widget) => widget.textSpan != null)
+          .textSpan!
+          .toPlainText();
+    }
+
+    expect(paragraphText('e_0'), '## **title**');
+    expect(paragraphText('e_1'), 'item');
+
+    state.updateSelection(
+      const EditorSelection.collapsed(
+        EditorPosition(blockId: 'e_1', offset: 2),
+      ),
+    );
+    await tester.pump();
+
+    expect(paragraphText('e_0'), 'title');
+    expect(paragraphText('e_1'), '- *item*');
+    await tester.pump(const Duration(seconds: 1));
+  });
+
   testWidgets('连续输入 60 字符(跨软换行)不丢字不乱序,光标随行', (tester) async {
     final (h, state) = await pumpEditor(tester, paragraphs: ['第一段', '']);
 

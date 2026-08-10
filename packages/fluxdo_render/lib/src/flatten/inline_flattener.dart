@@ -280,9 +280,17 @@ class InlineFlattener {
     GestureRecognizer? inheritedRecognizer,
   }) {
     return switch (node) {
-      TextRun(:final text) => TextSpan(
-          text: insertSoftBreaks(text),
-          recognizer: inheritedRecognizer,
+      TextRun(:final text, :final isMarkdownMarker) => TextSpan(
+          text: isMarkdownMarker ? text : insertSoftBreaks(text),
+          style: isMarkdownMarker
+              ? TextStyle(
+                  fontFamily: 'FiraCode',
+                  fontFamilyFallback: const ['monospace', 'Menlo', 'Courier'],
+                  fontSize: p.emojiBaseSize * 0.9,
+                  fontWeight: FontWeight.w400,
+                )
+              : null,
+          recognizer: isMarkdownMarker ? null : inheritedRecognizer,
         ),
       EmRun(:final children) => TextSpan(
           style: const TextStyle(fontStyle: FontStyle.italic),

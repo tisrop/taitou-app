@@ -82,6 +82,71 @@ void main() {
     });
   });
 
+  group('即时渲染 Markdown 标记', () {
+    test('编辑态为所有可编辑 mark 注入稳定分隔符，默认保持不变', () {
+      final content = EditableTextContent(
+        text: 'abcdefg',
+        marks: const [
+          MarkSpan(start: 0, end: 1, kind: MarkKind.strong),
+          MarkSpan(start: 1, end: 2, kind: MarkKind.em),
+          MarkSpan(start: 2, end: 3, kind: MarkKind.inlineCode),
+          MarkSpan(start: 3, end: 4, kind: MarkKind.underline),
+          MarkSpan(start: 4, end: 5, kind: MarkKind.lineThrough),
+          MarkSpan(start: 5, end: 6, kind: MarkKind.spoilerInline),
+          MarkSpan(
+            start: 6,
+            end: 7,
+            kind: MarkKind.link,
+            attr: 'https://example.com',
+          ),
+        ],
+      );
+
+      final normal = content.toInlines(forEditing: true);
+      expect(
+        normal.whereType<TextRun>().where((run) => run.isMarkdownMarker),
+        isEmpty,
+      );
+
+      final revealed = content.toInlines(
+        forEditing: true,
+        showMarkdownSyntax: true,
+      );
+      expect(
+        revealed
+            .whereType<TextRun>()
+            .where((run) => run.isMarkdownMarker)
+            .map((run) => run.text),
+        [
+          '**',
+          '**',
+          '*',
+          '*',
+          '`',
+          '`',
+          '[u]',
+          '[/u]',
+          '~~',
+          '~~',
+          '[spoiler]',
+          '[/spoiler]',
+          '[',
+          '](https://example.com)',
+        ],
+      );
+    });
+
+    test('辅助标记不会污染 fromInlines 的实际文本', () {
+      final content = EditableTextContent.fromInlines(const [
+        TextRun('**', isMarkdownMarker: true),
+        TextRun('body'),
+        TextRun('**', isMarkdownMarker: true),
+      ]);
+      expect(content.text, 'body');
+      expect(content.marks, isEmpty);
+    });
+  });
+
   group('原子编辑原语', () {
     const emoji = EmojiRun(name: 'heart', url: 'u');
     // "ab￼cd",原子在 2

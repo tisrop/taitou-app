@@ -41,6 +41,18 @@ RenderTextProjection buildInlineProjection(List<InlineNode> inlines) {
     cursor += text.length;
   }
 
+  // 即时渲染 Markdown 标记:渲染可见，但不进入复制/编辑内容坐标。
+  void addMarkdownMarker(String text) {
+    if (text.isEmpty) return;
+    entries.add(ProjectionEntry(
+      renderStart: cursor,
+      renderLen: text.length,
+      logicalText: '',
+      kind: ProjectionKind.markdownMarker,
+    ));
+    cursor += text.length;
+  }
+
   // 占位符:渲染层占 1 个 ￼,逻辑投影为 [logical](可空)。
   void addPlaceholder(String logical, ProjectionKind kind) {
     entries.add(ProjectionEntry(
@@ -59,8 +71,12 @@ RenderTextProjection buildInlineProjection(List<InlineNode> inlines) {
   void walk(List<InlineNode> nodes) {
     for (final node in nodes) {
       switch (node) {
-        case TextRun(:final text):
-          addText(insertSoftBreaks(text), ProjectionKind.text);
+        case TextRun(:final text, :final isMarkdownMarker):
+          if (isMarkdownMarker) {
+            addMarkdownMarker(text);
+          } else {
+            addText(insertSoftBreaks(text), ProjectionKind.text);
+          }
         case LineBreakRun():
           addText('\n', ProjectionKind.lineBreak);
         case InlineCodeRun(:final text):

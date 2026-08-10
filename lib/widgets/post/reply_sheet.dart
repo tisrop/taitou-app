@@ -1086,6 +1086,9 @@ class _ReplySheetState extends ConsumerState<ReplySheet> {
                                         key: _richKey,
                                         controller: _contentController,
                                         focusNode: _contentFocusNode,
+                                        instantRendering: ref
+                                            .watch(preferencesProvider)
+                                            .instantRendering,
                                         hintText: context.l10n.editor_hintText,
                                         toolbarAtTop: true,
                                         editorMargin: const EdgeInsets.fromLTRB(

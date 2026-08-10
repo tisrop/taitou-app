@@ -199,6 +199,7 @@ class FluxdoEditor extends StatefulWidget {
     required this.state,
     this.baseTextStyle,
     this.autofocus = false,
+    this.instantRendering = false,
     this.focusNode,
     this.nodeFactory,
     this.markdownImporter,
@@ -224,6 +225,9 @@ class FluxdoEditor extends StatefulWidget {
   final TextStyle? baseTextStyle;
 
   final bool autofocus;
+
+  /// 即时渲染模式：聚焦块显示 Markdown 标记，其余块保持所见即所得。
+  final bool instantRendering;
 
   /// 外部焦点节点(宿主监听焦点态做键盘/面板联动;null 内部自建)。
   final FocusNode? focusNode;
@@ -2140,6 +2144,10 @@ class _FluxdoEditorState extends State<FluxdoEditor>
                 ? state.composing
                 : TextRange.empty,
             listMarkerOrdinal: ordinals[i],
+            showMarkdownSyntax:
+                widget.instantRendering &&
+                _focusNode.hasPrimaryFocus &&
+                state.selection?.extent.blockId == tb.id,
             // 行内图片原子走岛同一图片管线(upload 解析/解码上限);
             // hover=click(可点选)。注意:builder 产物进 flatten 缓存
             // (content 不变不重跑),不能在闭包里读选中态等易变状态
