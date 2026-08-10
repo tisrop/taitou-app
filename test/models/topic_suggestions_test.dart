@@ -21,12 +21,14 @@ Map<String, dynamic> _topicJson({
 Map<String, dynamic> _detailJson({
   List<Map<String, dynamic>> suggested = const [],
   List<Map<String, dynamic>> related = const [],
+  int highestPostNumber = 0,
 }) {
   return {
     'id': 1,
     'title': 'Topic',
     'slug': 'topic',
     'posts_count': 0,
+    'highest_post_number': highestPostNumber,
     'category_id': 1,
     'post_stream': {'posts': <dynamic>[], 'stream': <dynamic>[]},
     'suggested_topics': suggested,
@@ -119,6 +121,22 @@ void main() {
       );
       expect(replaced.suggestedTopics.single.id, 401);
       expect(replaced.relatedTopics, isEmpty);
+    });
+  });
+
+  group('TopicDetail tracking fields', () {
+    test('fromJson 解析最高楼层号，copyWith 默认保留并可替换', () {
+      final detail = TopicDetail.fromJson(_detailJson(highestPostNumber: 8));
+
+      expect(detail.highestPostNumber, 8);
+      expect(detail.copyWith(title: 'Updated').highestPostNumber, 8);
+      expect(detail.copyWith(highestPostNumber: 10).highestPostNumber, 10);
+    });
+
+    test('响应缺少最高楼层号时回退为零', () {
+      final json = _detailJson()..remove('highest_post_number');
+
+      expect(TopicDetail.fromJson(json).highestPostNumber, 0);
     });
   });
 }

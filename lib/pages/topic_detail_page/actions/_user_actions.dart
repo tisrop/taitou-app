@@ -603,14 +603,17 @@ extension _UserActions on _TopicDetailPageState {
 
     if (!mounted) return;
 
+    // Discourse 的 destroy_last_for 以最高楼层号为回退基准；该值包含
+    // small action 等不计入 posts_count 的楼层，因此优先使用详情字段。
+    final highestPostNumber = detail.highestPostNumber > 0
+        ? detail.highestPostNumber
+        : detail.postsCount;
     final container = ProviderScope.containerOf(context, listen: false);
     container
         .read(topicTrackingStateProvider.notifier)
         .markTopicUnread(
           widget.topicId,
-          // TopicDetail 不包含 highest_post_number；posts_count 作为回退值，
-          // notifier 会优先保留 tracking state 中更大的服务端游标。
-          highestPostNumber: detail.postsCount,
+          highestPostNumber: highestPostNumber,
           categoryId: detail.categoryId,
           notificationLevel: detail.notificationLevel.value,
           all: all,

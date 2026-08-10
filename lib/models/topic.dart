@@ -1611,6 +1611,7 @@ class TopicDetail {
   final DateTime? createdAt;
   final bool visible;
   final int? lastReadPostNumber; // 最后阅读的帖子编号（从 API 获取）
+  final int highestPostNumber; // 最高帖子编号（包含小动作楼层）
 
   // 投票相关字段
   final bool canVote; // 是否可以投票
@@ -1699,6 +1700,7 @@ class TopicDetail {
     this.createdAt,
     this.visible = true,
     this.lastReadPostNumber,
+    this.highestPostNumber = 0,
     this.canVote = false,
     this.voteCount = 0,
     this.userVoted = false,
@@ -1871,6 +1873,7 @@ class TopicDetail {
       createdAt: TimeUtils.parseUtcTime(json['created_at'] as String?),
       visible: json['visible'] as bool? ?? true,
       lastReadPostNumber: json['last_read_post_number'] as int?,
+      highestPostNumber: json['highest_post_number'] as int? ?? 0,
       canVote: json['can_vote'] as bool? ?? false,
       voteCount: json['vote_count'] as int? ?? 0,
       userVoted: json['user_voted'] as bool? ?? false,
@@ -1994,6 +1997,7 @@ class TopicDetail {
     DateTime? createdAt,
     bool? visible,
     int? lastReadPostNumber,
+    int? highestPostNumber,
     bool? canVote,
     int? voteCount,
     bool? userVoted,
@@ -2036,6 +2040,7 @@ class TopicDetail {
       createdAt: createdAt ?? this.createdAt,
       visible: visible ?? this.visible,
       lastReadPostNumber: lastReadPostNumber ?? this.lastReadPostNumber,
+      highestPostNumber: highestPostNumber ?? this.highestPostNumber,
       canVote: canVote ?? this.canVote,
       voteCount: voteCount ?? this.voteCount,
       userVoted: userVoted ?? this.userVoted,
