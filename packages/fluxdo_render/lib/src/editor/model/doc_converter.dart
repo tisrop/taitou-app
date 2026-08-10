@@ -27,8 +27,8 @@ import 'editor_block.dart';
 ///
 /// M5 扩容:行内 SpoilerRun / **普通** LinkRun 进入白名单(mark 化,
 /// 内容可编辑)。特种链接除外 —— attachment(`[name|attachment](短链)`)、
-/// hashtag(`#ref`)、inline-onebox(裸 URL)的序列化语义都不是
-/// `[text](href)`,mark 化会毁写法,保持岛化。
+/// inline-onebox(裸 URL)的序列化语义不是 `[text](href)`；hashtag
+/// (`#ref`)则作为行内原子进入白名单，避免把整段岛化成只读。
 bool isEditableInline(InlineNode n) => switch (n) {
       TextRun() || LineBreakRun() || EmojiRun() || MentionRun() => true,
       // local date chip:行内原子(emoji/mention 同机制),编辑态显示
@@ -51,13 +51,13 @@ bool isEditableInline(InlineNode n) => switch (n) {
         :final isOneboxLink,
       ) =>
         !isAttachment &&
-            hashtagRef == null &&
-            // onebox 系链接(裸 URL 的 linkify 产物)可编辑:flatten 时
-            // 文本替换为 href(官方 linkify 语义 —— 编辑器里显示 URL
-            // 本身),序列化 text==href 走裸 URL 规则,往返无损
-            (isOneboxLink
-                ? href.isNotEmpty
-                : children.every(isEditableInline)),
+            (hashtagRef != null ||
+                // onebox 系链接(裸 URL 的 linkify 产物)可编辑:flatten 时
+                // 文本替换为 href(官方 linkify 语义 —— 编辑器里显示 URL
+                // 本身),序列化 text==href 走裸 URL 规则,往返无损
+                (isOneboxLink
+                    ? href.isNotEmpty
+                    : children.every(isEditableInline))),
       StyledRun(:final kind, :final children) => switch (kind) {
           InlineStyleKind.underline ||
           InlineStyleKind.lineThrough =>

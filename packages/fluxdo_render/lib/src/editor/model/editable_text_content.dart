@@ -206,6 +206,11 @@ class EditableTextContent {
         case SpoilerRun(:final children):
           _flattenInto(children, buf, marks, atoms,
               [...activeKinds, (MarkKind.spoilerInline, null)]);
+        // hashtag 保持一个行内原子，不能走普通链接 mark 化，否则序列化
+        // 会把 `#ref` 改写成普通链接语法。
+        case LinkRun(:final hashtagRef) when hashtagRef != null:
+          atoms[buf.length] = node;
+          _appendText(buf, marks, activeKinds, kAtomChar);
         case LinkRun(:final href, :final children, :final isOneboxLink):
           if (isOneboxLink) {
             // 裸 URL 的 linkify 链接:编辑器显示 URL 本身(锚文本可能

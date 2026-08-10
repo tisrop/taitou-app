@@ -66,6 +66,7 @@ import 'constants.dart';
 import 'providers/connectivity_provider.dart';
 import 'utils/dialog_utils.dart';
 import 'utils/frame_jank_monitor.dart';
+import 'utils/hashtag_handlers.dart';
 import 'utils/image_decode_gate.dart';
 import 'widgets/post/post_item/render_parse_cache.dart';
 import 'utils/scroll_busy_signal.dart';
@@ -329,6 +330,8 @@ Future<void> main() async {
   // 折叠块(details/callout)展开动画帧武装滚动锚定哨兵:center 双向
   // 列表的 reverse 半场里子项向上生长,否则展开会把标题顶出视口。
   FoldShiftHook.onFrame = AnchorGuardSliver.arm;
+
+  installHashtagHandlers();
 
   // 注入 AI 模型管理包的消息提示实现
   AiToastDelegate.configure((message, {type = AiToastType.info}) {

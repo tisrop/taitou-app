@@ -352,6 +352,7 @@ String _inlineToMarkdown(EditableTextContent content) {
       buf.write(switch (atom) {
         EmojiRun(:final name) => name.isEmpty ? '' : ':$name:',
         MentionRun(:final username) => '@$username',
+        LinkRun(:final hashtagRef) when hashtagRef != null => '#$hashtagRef',
         final LocalDateRun d => _serializeLocalDate(d),
         // 行内图片原子(裸图):标准图片语法
         final ImageRun img => _serializeImageRun(img),

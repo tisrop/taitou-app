@@ -2297,6 +2297,7 @@ class ParagraphParser {
             href: href,
             children: List.unmodifiable(children),
             hashtagRef: (ref == null || ref.isEmpty) ? null : ref,
+            hashtagIcon: _hashtagIconName(el),
           ));
         } else {
           out.add(LinkRun(
@@ -2705,6 +2706,25 @@ class ParagraphParser {
     if (classes.contains('meta')) return true;
     if (classes.contains('lb-spacer')) return true;
     return false;
+  }
+
+  /// 提取 hashtag 锚点里的 Discourse 图标名。
+  String? _hashtagIconName(dom.Element el) {
+    for (final use in el.querySelectorAll('use')) {
+      final raw =
+          (use.attributes['href'] ?? use.attributes['xlink:href'] ?? '').trim();
+      if (raw.startsWith('#') && raw.length > 1) {
+        return raw.substring(1);
+      }
+    }
+    for (final svg in el.querySelectorAll('svg')) {
+      for (final className in svg.classes) {
+        if (className.startsWith('d-icon-') && className.length > 7) {
+          return className.substring(7);
+        }
+      }
+    }
+    return null;
   }
 
   /// 把元素子树的所有 text 节点拼成一段(用于 InlineCodeRun)。

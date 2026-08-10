@@ -18,6 +18,13 @@ class UserLinkInfo {
   const UserLinkInfo({required this.username});
 }
 
+/// 分类链接解析结果。
+class CategoryLinkInfo {
+  const CategoryLinkInfo({required this.categoryId});
+
+  final int categoryId;
+}
+
 class DiscourseUrlParser {
   DiscourseUrlParser._();
 
@@ -43,6 +50,16 @@ class DiscourseUrlParser {
   /// 用户链接格式：/u/username
   static final _userRegex = RegExp(
     r'/u/([^/?#]+)',
+    caseSensitive: false,
+  );
+
+  static final _categoryRegex = RegExp(
+    r'/c/(?:[^/?#]+/)*(\d+)(?:[/?#]|$)',
+    caseSensitive: false,
+  );
+
+  static final _tagRegex = RegExp(
+    r'/tags?/([^/?#]+)',
     caseSensitive: false,
   );
 
@@ -93,6 +110,25 @@ class DiscourseUrlParser {
       return UserLinkInfo(username: match.group(1)!);
     }
     return null;
+  }
+
+  /// 解析 `/c/<slug>/<id>`，也支持多级子分类 slug。
+  static CategoryLinkInfo? parseCategory(String url) {
+    final match = _categoryRegex.firstMatch(url);
+    final id = int.tryParse(match?.group(1) ?? '');
+    return id == null ? null : CategoryLinkInfo(categoryId: id);
+  }
+
+  /// 解析 `/tag/<name>` 或 `/tags/<name>`，返回解码后的标签名。
+  static String? parseTag(String url) {
+    final encoded = _tagRegex.firstMatch(url)?.group(1);
+    if (encoded == null) return null;
+    if (!encoded.contains('%')) return encoded;
+    try {
+      return Uri.decodeComponent(encoded);
+    } on ArgumentError {
+      return encoded;
+    }
   }
 
   /// 是否是用户链接（用于快速判断）

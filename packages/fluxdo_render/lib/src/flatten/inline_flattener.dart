@@ -33,6 +33,7 @@ import '../node/inline_node.dart';
 import 'soft_break.dart';
 import '../render/emoji_handler.dart';
 import '../render/footnote_handler.dart';
+import '../render/hashtag_icons.dart';
 import '../render/image_handler.dart';
 import '../render/link_handler.dart';
 import '../render/local_date_handler.dart';
@@ -310,14 +311,29 @@ class InlineFlattener {
           text: '\n',
           recognizer: inheritedRecognizer,
         ),
-      LinkRun(:final href, :final children, :final isAttachment, :final filename) =>
-          _buildLinkSpan(
-            href,
-            children,
-            p,
-            isAttachment: isAttachment,
-            filename: filename,
-          ),
+      LinkRun(
+        :final href,
+        :final children,
+        :final isAttachment,
+        :final filename,
+        :final hashtagRef,
+        :final hashtagIcon,
+      ) =>
+        hashtagRef == null
+            ? _buildLinkSpan(
+                href,
+                children,
+                p,
+                isAttachment: isAttachment,
+                filename: filename,
+              )
+            : _buildHashtagSpan(
+                href,
+                children,
+                p,
+                iconName: hashtagIcon,
+                ref: hashtagRef,
+              ),
       InlineCodeRun(:final text) => _buildInlineCodeSpan(
           text,
           p.context,
@@ -346,6 +362,119 @@ class InlineFlattener {
       ClickCountRun() => _buildClickCountSpan(node),
       MathInlineRun() => _buildMathInlineSpan(node, p.mathInlineBuilder),
     };
+  }
+
+  /// 把 Discourse hashtag 渲染为图标与名称组成的行内药丸。
+  WidgetSpan _buildHashtagSpan(
+    String href,
+    List<InlineNode> children,
+    _FlattenPass p, {
+    String? iconName,
+    String? ref,
+  }) {
+    final label = _hashtagLabel(children, ref);
+    final isTag = RegExp(r'/tags?/', caseSensitive: false).hasMatch(href);
+    final resolver = hashtagIconResolver;
+    final linkHandler = p.handler;
+    final fontSize = p.emojiBaseSize * 0.82;
+    final lineHeight = p.emojiBaseSize * 1.5;
+    final interactive = p.context != null;
+
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: Builder(
+        builder: (context) {
+          final scheme = Theme.of(context).colorScheme;
+          final icon = resolver?.call(context, iconName, href);
+          final pill = Container(
+            height: lineHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(
+                  icon ??
+                      (isTag ? Icons.sell_outlined : Icons.folder_outlined),
+                  size: fontSize * 1.05,
+                  color: scheme.primary,
+                ),
+                const SizedBox(width: 3),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: scheme.primary,
+                    fontSize: fontSize,
+                    height: 1,
+                  ),
+                ),
+              ],
+            ),
+          );
+          if (!interactive) return pill;
+          return Semantics(
+            link: true,
+            label: label,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  final bareLabel = label.startsWith('#')
+                      ? label.substring(1)
+                      : label;
+                  if (hashtagTapHandler?.call(
+                        context,
+                        href,
+                        ref,
+                        bareLabel,
+                      ) ==
+                      true) {
+                    return;
+                  }
+                  linkHandler(context, href);
+                },
+                child: pill,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _hashtagLabel(List<InlineNode> children, String? ref) {
+    final buffer = StringBuffer();
+
+    void walk(List<InlineNode> nodes) {
+      for (final node in nodes) {
+        switch (node) {
+          case TextRun(:final text) || InlineCodeRun(:final text):
+            buffer.write(text);
+          case EmRun(:final children) ||
+                StrongRun(:final children) ||
+                StyledRun(:final children) ||
+                ColoredRun(:final children) ||
+                LinkRun(:final children):
+            walk(children);
+          default:
+            break;
+        }
+      }
+    }
+
+    walk(children);
+    var text = buffer.toString().trim();
+    if (text.isEmpty) {
+      text = ref ?? '';
+      final typeSuffix = text.lastIndexOf('::');
+      if (typeSuffix > 0) text = text.substring(0, typeSuffix);
+    }
+    return text.startsWith('#') ? text : '#$text';
   }
 
   TextSpan _buildLinkSpan(

@@ -84,8 +84,16 @@ RenderTextProjection buildInlineProjection(List<InlineNode> inlines) {
             default:
               walk(children);
           }
-        case LinkRun(:final children):
-          walk(children);
+        case LinkRun(:final children, :final hashtagRef):
+          if (hashtagRef != null) {
+            final label = concatLogical(children).trim();
+            addPlaceholder(
+              label.startsWith('#') ? label : '#$label',
+              ProjectionKind.hashtag,
+            );
+          } else {
+            walk(children);
+          }
         case ColoredRun(:final children):
           // 纯 TextSpan 着色,偏移连续 → 递归(同 Em/Strong)。
           walk(children);

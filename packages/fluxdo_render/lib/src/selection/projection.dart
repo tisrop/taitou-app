@@ -37,6 +37,9 @@ enum ProjectionKind {
   /// mentionText 两侧的 NBSP 粘性内边距,语义同 [codePad]。
   mentionPad,
   image,
+
+  /// hashtag 药丸：渲染层是一个 WidgetSpan，编辑层是一个 FFFC 原子。
+  hashtag,
   spoiler,
   footnote,
   localDate,
@@ -181,7 +184,8 @@ class RenderTextProjection {
         ProjectionKind.emoji ||
         ProjectionKind.mention ||
         ProjectionKind.localDate ||
-        ProjectionKind.image =>
+        ProjectionKind.image ||
+        ProjectionKind.hashtag =>
           1,
         _ when e.isAtomic => e.logicalText.length,
         _ => _contentLenOf(e.logicalText),

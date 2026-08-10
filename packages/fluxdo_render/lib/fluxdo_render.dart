@@ -21,6 +21,7 @@ export 'src/parser/paragraph_parser.dart';
 export 'src/render/code_block_handler.dart';
 export 'src/render/emoji_handler.dart';
 export 'src/render/footnote_handler.dart';
+export 'src/render/hashtag_icons.dart';
 export 'src/render/iframe_handler.dart';
 export 'src/render/audio_handler.dart';
 export 'src/render/cached_paragraph_text.dart'
