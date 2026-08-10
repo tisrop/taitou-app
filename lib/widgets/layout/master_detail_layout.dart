@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import '../../l10n/s.dart';
+import '../../utils/nav_chrome_metrics.dart';
 import '../../utils/responsive.dart';
 import '../../utils/layout_lock.dart';
 import 'draggable_divider.dart';
@@ -55,9 +56,11 @@ class MasterDetailLayout extends StatefulWidget {
     double minDetailWidth = defaultMinDetailWidth,
   }) {
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final computed =
-        screenWidth >= masterWidth + minDetailWidth &&
-        !Responsive.isMobile(context);
+    final isMobile = Responsive.isMobile(context);
+    final contentWidth =
+        screenWidth -
+        NavChromeMetrics.reservedWidth(showRailByBreakpoint: !isMobile);
+    final computed = contentWidth >= masterWidth + minDetailWidth && !isMobile;
     return LayoutLock.resolveCanShowBoth(computed: computed);
   }
 

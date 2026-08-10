@@ -5,6 +5,7 @@ import '../../pages/topics_page.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/preferences_provider.dart';
 import '../../providers/topic_list/tab_state_provider.dart';
+import '../../utils/nav_chrome_metrics.dart';
 import '../../utils/responsive.dart';
 import '../../l10n/s.dart';
 import '../notification/notification_quick_panel.dart';
@@ -55,6 +56,8 @@ class AdaptiveScaffold extends ConsumerWidget {
         : selectedIndex;
 
     final railWidth = extendedRail ? 180.0 : 72.0;
+    // 双栏判定使用整窗 MediaQuery，需要同步扣除 Rail 的实际形态宽度。
+    NavChromeMetrics.railWidth = railWidth;
     final overlayLeftInset = showRail
         ? MediaQuery.paddingOf(context).left + railWidth + 1.0
         : 0.0;
@@ -117,10 +120,7 @@ class AdaptiveScaffold extends ConsumerWidget {
                 ),
                 const VerticalDivider(thickness: 1, width: 1),
               ],
-              Expanded(
-                key: const ValueKey('adaptive-body'),
-                child: body,
-              ),
+              Expanded(key: const ValueKey('adaptive-body'), child: body),
             ],
           ),
           floatingActionButton: floatingActionButton,

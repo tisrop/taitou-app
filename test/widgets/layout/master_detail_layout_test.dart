@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fluxdo/utils/nav_chrome_metrics.dart';
 import 'package:fluxdo/widgets/layout/draggable_divider.dart';
 import 'package:fluxdo/widgets/layout/master_detail_layout.dart';
 
 void main() {
+  setUp(() => NavChromeMetrics.railWidth = 72);
+
   Future<void> pumpLayout(WidgetTester tester, {required double width}) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = Size(width, 800);
@@ -71,15 +74,23 @@ void main() {
     expect(find.byKey(const ValueKey('detail-content')), findsNothing);
   });
 
-  testWidgets('user resize sticks across window width changes', (
+  testWidgets('rail reservation prevents false double-pane near breakpoint', (
     tester,
   ) async {
+    await pumpLayout(tester, width: 820);
+
+    final masterSize = tester.getSize(
+      find.byKey(const ValueKey('master-pane')),
+    );
+    expect(masterSize.width, closeTo(820, 0.1));
+    expect(find.byKey(const ValueKey('detail-content')), findsNothing);
+  });
+
+  testWidgets('user resize sticks across window width changes', (tester) async {
     await pumpLayout(tester, width: 1600);
 
     // 初始：1600 * 0.28 = 448
-    var masterSize = tester.getSize(
-      find.byKey(const ValueKey('master-pane')),
-    );
+    var masterSize = tester.getSize(find.byKey(const ValueKey('master-pane')));
     expect(masterSize.width, closeTo(448, 0.1));
 
     // 用户向右拖动 52 像素，master 调整到约 500
