@@ -10,6 +10,7 @@ import '../../../../models/topic.dart';
 import '../../../../services/discourse_cache_manager.dart';
 import '../../../../services/discourse/discourse_service.dart';
 import '../../../../services/emoji_handler.dart';
+import '../../../../services/preloaded_data_service.dart';
 import '../../../../utils/platform_utils.dart';
 import 'post_reaction_picker.dart';
 
@@ -42,6 +43,14 @@ class PostActionBar extends StatefulWidget {
   final bool canBoost;
   final bool hasBoosts;
 
+  /// 操作栏左侧插槽(post-voting 问答话题的赞成/反对控件)
+  final Widget? leadingSlot;
+
+  /// post-voting(问答)话题:官方语义——答案帖无回复按钮(评论代替
+  /// 追问),答案帖默认无点赞(post_voting_enable_likes_on_answers);
+  /// 问题帖回复按钮语义变「回答」。
+  final bool isPostVotingTopic;
+
   const PostActionBar({
     super.key,
     required this.post,
@@ -65,6 +74,8 @@ class PostActionBar extends StatefulWidget {
     this.onAddBoost,
     this.canBoost = false,
     this.hasBoosts = false,
+    this.leadingSlot,
+    this.isPostVotingTopic = false,
   });
 
   @override
@@ -92,9 +103,9 @@ class _PostActionBarState extends State<PostActionBar>
 
   late final ReactionPickerController _pickerController =
       ReactionPickerController(
-    vsync: this,
-    onReactionSelected: (id) => widget.onReactionSelected(id),
-  );
+        vsync: this,
+        onReactionSelected: (id) => widget.onReactionSelected(id),
+      );
 
   @override
   void dispose() {
@@ -108,8 +119,8 @@ class _PostActionBarState extends State<PostActionBar>
 
   /// 计算 like 按钮的全局 Rect（含上下 12px 间隙）
   Rect? _resolveButtonRect() {
-    final box = widget.likeButtonKey.currentContext?.findRenderObject()
-        as RenderBox?;
+    final box =
+        widget.likeButtonKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return null;
     final topLeft = box.localToGlobal(Offset.zero);
     return Rect.fromLTWH(
@@ -268,10 +279,11 @@ class _PostActionBarState extends State<PostActionBar>
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        if (leftButton != null) ...[
-          leftButton,
-          const SizedBox(width: 12),
+        if (widget.leadingSlot != null) ...[
+          widget.leadingSlot!,
+          const SizedBox(width: 8),
         ],
+        if (leftButton != null) ...[leftButton, const SizedBox(width: 12)],
         Expanded(
           child: Wrap(
             alignment: WrapAlignment.end,
@@ -299,8 +311,12 @@ class _PostActionBarState extends State<PostActionBar>
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   color: showReplies
-                      ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3)
-                      : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                      ? theme.colorScheme.primaryContainer.withValues(
+                          alpha: 0.3,
+                        )
+                      : theme.colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.3,
+                        ),
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(
                     color: showReplies
@@ -358,30 +374,49 @@ class _PostActionBarState extends State<PostActionBar>
 
   List<Widget> _buildRightActions(ThemeData theme) {
     final actions = <Widget>[];
+    // 问答话题官方语义:答案帖(非首帖)隐藏点赞与回复(评论代替追问);
+    // 问题帖保留点赞,回复语义变「回答」。likes 开关按站点设置
+    // post_voting_enable_likes_on_answers(缺省 false)。
+    final isPvAnswer = widget.isPostVotingTopic && widget.post.postNumber != 1;
+    final pvLikesOnAnswers =
+        PreloadedDataService()
+            .siteSettingsSync?['post_voting_enable_likes_on_answers'] ==
+        true;
     if (!widget.isGuest) {
-      if (!widget.isOwnPost || widget.reactions.isNotEmpty) {
+      final hideLike = isPvAnswer && !pvLikesOnAnswers;
+      if ((!widget.isOwnPost || widget.reactions.isNotEmpty) && !hideLike) {
         actions.add(_buildLikeReactionArea(theme));
       }
       if (!widget.isOwnPost && widget.canBoost && !widget.hasBoosts) {
-        actions.add(_iconCircle(
-          theme,
-          tooltip: 'Boost',
-          icon: Symbols.rocket_launch_rounded,
-          onTap: widget.onAddBoost,
-        ));
+        actions.add(
+          _iconCircle(
+            theme,
+            tooltip: 'Boost',
+            icon: Symbols.rocket_launch_rounded,
+            onTap: widget.onAddBoost,
+          ),
+        );
       }
-      actions.add(_iconCircle(
-        theme,
-        tooltip: context.l10n.common_reply,
-        icon: Symbols.reply_rounded,
-        onTap: widget.onReply,
-      ));
+      if (!isPvAnswer) {
+        actions.add(
+          _iconCircle(
+            theme,
+            tooltip: widget.isPostVotingTopic
+                ? S.current.postVoting_answer
+                : context.l10n.common_reply,
+            icon: Symbols.reply_rounded,
+            onTap: widget.onReply,
+          ),
+        );
+      }
     }
-    actions.add(_iconCircle(
-      theme,
-      icon: Symbols.more_horiz_rounded,
-      onTap: widget.onShowMoreMenu,
-    ));
+    actions.add(
+      _iconCircle(
+        theme,
+        icon: Symbols.more_horiz_rounded,
+        onTap: widget.onShowMoreMenu,
+      ),
+    );
     return actions;
   }
 
@@ -397,15 +432,12 @@ class _PostActionBarState extends State<PostActionBar>
         height: 36,
         width: 36,
         decoration: BoxDecoration(
-          color:
-              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.3,
+          ),
           shape: BoxShape.circle,
         ),
-        child: Icon(
-          icon,
-          size: 18,
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
+        child: Icon(icon, size: 18, color: theme.colorScheme.onSurfaceVariant),
       ),
     );
     // Tooltip(OverlayPortal + 手势 + MouseRegion)单个构建 ~0.8ms,
@@ -439,8 +471,9 @@ class _PostActionBarState extends State<PostActionBar>
                 image: emojiImageProvider(_getEmojiUrl(shown[i].id)),
                 // 描边的作用是「咬掉」压在下面的表情一圈，
                 // 最下层没有压着任何表情，无需描边
-                outlineColor:
-                    i == shown.length - 1 ? null : theme.colorScheme.surface,
+                outlineColor: i == shown.length - 1
+                    ? null
+                    : theme.colorScheme.surface,
                 size: size,
               ),
             ),
@@ -502,28 +535,31 @@ class _PostActionBarState extends State<PostActionBar>
           gestures: <Type, GestureRecognizerFactory>{
             TapGestureRecognizer:
                 GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
-              () => TapGestureRecognizer(),
-              (instance) {
-                instance.onTapDown = _handleTapDown;
-                instance.onTap = _handleReactionStackTap;
-                instance.onTapCancel = _handleTapCancel;
-              },
-            ),
+                  () => TapGestureRecognizer(),
+                  (instance) {
+                    instance.onTapDown = _handleTapDown;
+                    instance.onTap = _handleReactionStackTap;
+                    instance.onTapCancel = _handleTapCancel;
+                  },
+                ),
             // 桌面端通过 hover 触发 picker,不再注册长按避免与 hover 路径打架
             if (!PlatformUtils.isDesktop)
-              LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<
-                  LongPressGestureRecognizer>(
-                () => LongPressGestureRecognizer(
-                  duration: kReactionPickerLongPressDuration,
-                ),
-                (instance) {
-                  instance.onLongPressDown = _handleLongPressDown;
-                  instance.onLongPressStart = _handleLongPressStart;
-                  instance.onLongPressMoveUpdate = _handleLongPressMoveUpdate;
-                  instance.onLongPressEnd = _handleLongPressEnd;
-                  instance.onLongPressCancel = _handleLongPressCancel;
-                },
-              ),
+              LongPressGestureRecognizer:
+                  GestureRecognizerFactoryWithHandlers<
+                    LongPressGestureRecognizer
+                  >(
+                    () => LongPressGestureRecognizer(
+                      duration: kReactionPickerLongPressDuration,
+                    ),
+                    (instance) {
+                      instance.onLongPressDown = _handleLongPressDown;
+                      instance.onLongPressStart = _handleLongPressStart;
+                      instance.onLongPressMoveUpdate =
+                          _handleLongPressMoveUpdate;
+                      instance.onLongPressEnd = _handleLongPressEnd;
+                      instance.onLongPressCancel = _handleLongPressCancel;
+                    },
+                  ),
           },
           child: reactionStackContent,
         );
@@ -572,28 +608,30 @@ class _PostActionBarState extends State<PostActionBar>
         gestures: <Type, GestureRecognizerFactory>{
           TapGestureRecognizer:
               GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
-            () => TapGestureRecognizer(),
-            (instance) {
-              instance.onTapDown = _handleTapDown;
-              instance.onTap = _handleTap;
-              instance.onTapCancel = _handleTapCancel;
-            },
-          ),
+                () => TapGestureRecognizer(),
+                (instance) {
+                  instance.onTapDown = _handleTapDown;
+                  instance.onTap = _handleTap;
+                  instance.onTapCancel = _handleTapCancel;
+                },
+              ),
           // 桌面端通过 hover 触发 picker,不再注册长按避免与 hover 路径打架
           if (widget.reactionsEnabled && !PlatformUtils.isDesktop)
             LongPressGestureRecognizer:
-                GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-              () => LongPressGestureRecognizer(
-                duration: kReactionPickerLongPressDuration,
-              ),
-              (instance) {
-                instance.onLongPressDown = _handleLongPressDown;
-                instance.onLongPressStart = _handleLongPressStart;
-                instance.onLongPressMoveUpdate = _handleLongPressMoveUpdate;
-                instance.onLongPressEnd = _handleLongPressEnd;
-                instance.onLongPressCancel = _handleLongPressCancel;
-              },
-            ),
+                GestureRecognizerFactoryWithHandlers<
+                  LongPressGestureRecognizer
+                >(
+                  () => LongPressGestureRecognizer(
+                    duration: kReactionPickerLongPressDuration,
+                  ),
+                  (instance) {
+                    instance.onLongPressDown = _handleLongPressDown;
+                    instance.onLongPressStart = _handleLongPressStart;
+                    instance.onLongPressMoveUpdate = _handleLongPressMoveUpdate;
+                    instance.onLongPressEnd = _handleLongPressEnd;
+                    instance.onLongPressCancel = _handleLongPressCancel;
+                  },
+                ),
         },
         child: likeIcon,
       );
@@ -615,10 +653,7 @@ class _PostActionBarState extends State<PostActionBar>
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          ?reactionStack,
-          likeButton,
-        ],
+        children: [?reactionStack, likeButton],
       ),
     );
 

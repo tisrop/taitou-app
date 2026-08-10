@@ -114,6 +114,28 @@ extension _FilterActions on _TopicDetailPageState {
     }
   }
 
+  /// 问答话题:切到按活动排序(默认视图为按票,activity 走时间流)
+  Future<void> _handleShowByActivity() async {
+    final params = _params;
+    final notifier = ref.read(topicDetailProvider(params).notifier);
+
+    setState(() {
+      _isSwitchingMode = true;
+      _isNestedView = false;
+    });
+
+    _controller.prepareJumpToPost(1);
+    _controller.skipNextJumpHighlight = true;
+    _controller.resetVisibility();
+
+    await notifier.showByActivity();
+
+    if (mounted) {
+      setState(() => _isSwitchingMode = false);
+      _scheduleCheckTitleVisibility();
+    }
+  }
+
   Future<void> _handleCancelFilter() async {
     // 嵌套模式：直接退出，不需要重新加载
     if (_isNestedView) {
@@ -196,6 +218,7 @@ extension _FilterActions on _TopicDetailPageState {
     final detail = ref.read(topicDetailProvider(params)).value;
     final hasActiveFilter =
         notifier.isSummaryMode ||
+        notifier.isActivityMode ||
         notifier.isAuthorOnlyMode ||
         notifier.isTopLevelMode ||
         _isNestedView;
@@ -208,6 +231,26 @@ extension _FilterActions on _TopicDetailPageState {
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // 问答话题:默认按票排序,可切按活动(时间流)
+            if (detail?.isPostVoting ?? false)
+              ListTile(
+                leading: const Icon(Symbols.history_rounded),
+                title: Text(context.l10n.topicDetail_sortByActivity),
+                trailing: notifier.isActivityMode
+                    ? Icon(
+                        Symbols.check_rounded,
+                        color: theme.colorScheme.primary,
+                      )
+                    : null,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  if (notifier.isActivityMode) {
+                    _handleCancelFilter();
+                  } else {
+                    _handleShowByActivity();
+                  }
+                },
+              ),
             if (detail?.hasSummary ?? false)
               ListTile(
                 leading: Icon(
@@ -217,7 +260,10 @@ extension _FilterActions on _TopicDetailPageState {
                 ),
                 title: Text(context.l10n.topicDetail_hotOnly),
                 trailing: notifier.isSummaryMode
-                    ? Icon(Symbols.check_rounded, color: theme.colorScheme.primary)
+                    ? Icon(
+                        Symbols.check_rounded,
+                        color: theme.colorScheme.primary,
+                      )
                     : null,
                 onTap: () {
                   Navigator.pop(ctx);
@@ -235,7 +281,10 @@ extension _FilterActions on _TopicDetailPageState {
               ),
               title: Text(context.l10n.topicDetail_authorOnly),
               trailing: notifier.isAuthorOnlyMode
-                  ? Icon(Symbols.check_rounded, color: theme.colorScheme.primary)
+                  ? Icon(
+                      Symbols.check_rounded,
+                      color: theme.colorScheme.primary,
+                    )
                   : null,
               onTap: () {
                 Navigator.pop(ctx);
@@ -254,7 +303,10 @@ extension _FilterActions on _TopicDetailPageState {
               ),
               title: Text(context.l10n.topicDetail_topLevelOnly),
               trailing: notifier.isTopLevelMode
-                  ? Icon(Symbols.check_rounded, color: theme.colorScheme.primary)
+                  ? Icon(
+                      Symbols.check_rounded,
+                      color: theme.colorScheme.primary,
+                    )
                   : null,
               onTap: () {
                 Navigator.pop(ctx);
@@ -270,7 +322,10 @@ extension _FilterActions on _TopicDetailPageState {
               leading: Icon(Symbols.forum_rounded, fill: _isNestedView ? 1 : 0),
               title: Text(context.l10n.nested_title),
               trailing: _isNestedView
-                  ? Icon(Symbols.check_rounded, color: theme.colorScheme.primary)
+                  ? Icon(
+                      Symbols.check_rounded,
+                      color: theme.colorScheme.primary,
+                    )
                   : null,
               onTap: () {
                 Navigator.pop(ctx);

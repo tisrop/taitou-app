@@ -1222,11 +1222,15 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
     final isInReadLater = ref
         .read(readLaterProvider.notifier)
         .contains(widget.topicId);
+    // 指定入口双闸:assign_enabled 是插件总开关(未装插件时该键不存在),
+    // can_assign 是当前用户权限——只看后者的话,没权限的人点了直接吃
+    // 服务端 403;只看前者的话,普通用户会看到自己用不了的入口。
     final canAssignTopic =
         PreloadedDataService().assignEnabled &&
         (ref.read(currentUserProvider).value?.canAssign ?? false);
     final hasFilter =
         notifier.isSummaryMode ||
+        notifier.isActivityMode ||
         notifier.isAuthorOnlyMode ||
         notifier.isTopLevelMode ||
         _isNestedView;
@@ -1328,6 +1332,20 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
             label: context.l10n.topicDetail_filter,
             iconColor: hasFilter ? Theme.of(context).colorScheme.primary : null,
             children: [
+              // 问答话题:默认按票排序,可切按活动(时间流)
+              if (detail.isPostVoting)
+                MenuQuickActionSubmenuChild(
+                  icon: Symbols.history_rounded,
+                  label: context.l10n.topicDetail_sortByActivity,
+                  selected: notifier.isActivityMode,
+                  onTap: () {
+                    if (notifier.isActivityMode) {
+                      _handleCancelFilter();
+                    } else {
+                      _handleShowByActivity();
+                    }
+                  },
+                ),
               if (detail.hasSummary)
                 MenuQuickActionSubmenuChild(
                   icon: notifier.isSummaryMode
@@ -1628,8 +1646,10 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
       isLoggedIn: isLoggedIn,
       totalCount: detail.postStream.stream.length,
       hasSummary: detail.hasSummary,
+      isPostVoting: detail.isPostVoting,
       isPrivateMessage: detail.isPrivateMessage,
       isSummaryMode: notifier.isSummaryMode,
+      isActivityMode: notifier.isActivityMode,
       isAuthorOnlyMode: notifier.isAuthorOnlyMode,
       isTopLevelMode: notifier.isTopLevelMode,
       isNestedMode: _isNestedView,
@@ -1654,11 +1674,13 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
       onProgressTap: _showTimelineSheetForCurrent,
       onProgressGesture: _handleProgressGestureForCurrent,
       isSummaryMode: notifier.isSummaryMode,
+      isActivityMode: notifier.isActivityMode,
       isAuthorOnlyMode: notifier.isAuthorOnlyMode,
       isTopLevelMode: notifier.isTopLevelMode,
       isNestedMode: _isNestedView,
       isLoading: _isSwitchingMode,
       onShowTopReplies: _handleShowTopReplies,
+      onShowByActivity: _handleShowByActivity,
       onShowAuthorOnly: _handleShowAuthorOnly,
       onShowTopLevelReplies: _handleShowTopLevelReplies,
       onCancelFilter: _handleCancelFilter,
@@ -2526,6 +2548,9 @@ class _TopicDetailPageState extends ConsumerState<TopicDetailPage>
               highlightPostNumber: highlightPostNumber,
               highlightBoostUsername: widget.highlightBoostUsername,
               isLoggedIn: isLoggedIn,
+              isActivitySort: notifier.isActivityMode,
+              onAnswerSortChanged: (byActivity) =>
+                  byActivity ? _handleShowByActivity() : _handleCancelFilter(),
               hasMoreBefore: notifier.hasMoreBefore,
               hasMoreAfter: notifier.hasMoreAfter,
               loadingPreviousListenable: notifier.loadingPreviousListenable,

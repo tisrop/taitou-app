@@ -28,8 +28,8 @@ class VoteResponse {
       alert: json['alert'] as bool? ?? false,
       whoVoted: json['who_voted'] != null
           ? (json['who_voted'] as List<dynamic>)
-              .map((e) => VotedUser.fromJson(e as Map<String, dynamic>))
-              .toList()
+                .map((e) => VotedUser.fromJson(e as Map<String, dynamic>))
+                .toList()
           : null,
     );
   }
@@ -55,6 +55,38 @@ class VotedUser {
       username: json['username'] as String? ?? '',
       name: json['name'] as String?,
       avatarTemplate: json['avatar_template'] as String? ?? '',
+    );
+  }
+
+  String getAvatarUrl({int size = 40}) {
+    final url = avatarTemplate.replaceAll('{size}', '$size');
+    return UrlHelper.resolveUrlWithCdn(url);
+  }
+}
+
+/// post-voting(问答)帖子投票人(GET /post_voting/voters,最多 20 条)
+class PostVotingVoter {
+  final int id;
+  final String username;
+  final String? name;
+  final String avatarTemplate;
+  final String direction; // 'up' | 'down'
+
+  PostVotingVoter({
+    required this.id,
+    required this.username,
+    this.name,
+    required this.avatarTemplate,
+    required this.direction,
+  });
+
+  factory PostVotingVoter.fromJson(Map<String, dynamic> json) {
+    return PostVotingVoter(
+      id: json['id'] as int? ?? 0,
+      username: json['username'] as String? ?? '',
+      name: json['name'] as String?,
+      avatarTemplate: json['avatar_template'] as String? ?? '',
+      direction: json['direction'] as String? ?? 'up',
     );
   }
 
