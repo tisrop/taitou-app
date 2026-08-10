@@ -10,6 +10,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 
+import '../../models/emoji.dart';
+import '../../providers/emoji_provider.dart';
 import '../../providers/preferences_provider.dart';
 import '../../services/discourse_cook_service.dart';
 import '../../services/emoji_handler.dart';
@@ -17,6 +19,7 @@ import '../../utils/emoji_shortcodes.dart';
 import '../../utils/platform_utils.dart';
 import '../mention/mention_autocomplete.dart';
 import 'composer_shortcuts.dart';
+import 'emoji_autocomplete.dart';
 import 'emoji_popover.dart';
 import 'emoji_sticker_panel.dart';
 import 'markdown_renderer.dart';
@@ -660,7 +663,29 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     );
   }
 
-  /// 构建文本编辑器（可选包含 @提及自动补全）
+  Future<List<Emoji>> _searchEmojiShortcodes(String term) async {
+    Map<String, List<Emoji>>? groups = ref
+        .read(emojiGroupsProvider)
+        .asData
+        ?.value;
+    if (groups == null) {
+      try {
+        groups = await ref.read(emojiGroupsProvider.future);
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    final loadedGroups = groups;
+    if (loadedGroups == null) return const [];
+
+    return filterEmojiAutocompleteResults(
+      loadedGroups.values.expand((group) => group),
+      term,
+    );
+  }
+
+  /// 构建文本编辑器（包含 emoji shortcode 与可选的 @提及补全）。
   Widget _buildTextEditor() {
     final textField = TextField(
       key: _bodyFieldKey,
@@ -722,17 +747,23 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
           : textField,
     );
 
-    // 如果提供了 mentionDataSource，则包裹 MentionAutocomplete
+    Widget editor = wrappedField;
+
     if (widget.mentionDataSource != null) {
-      return MentionAutocomplete(
+      editor = MentionAutocomplete(
         controller: widget.controller,
         focusNode: _focusNode,
         dataSource: widget.mentionDataSource!,
-        child: wrappedField,
+        child: editor,
       );
     }
 
-    return wrappedField;
+    return EmojiAutocomplete(
+      controller: widget.controller,
+      focusNode: _focusNode,
+      dataSource: _searchEmojiShortcodes,
+      child: editor,
+    );
   }
 
   /// 自定义面板高度：键盘高度已知时直接使用（与 _KeyboardPlaceholder 等高），
