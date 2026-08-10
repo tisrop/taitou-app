@@ -142,8 +142,7 @@ extension _UserActions on _TopicDetailPageState {
                     : () async {
                         setState(() => isDeleting = true);
                         try {
-                          await DiscourseService()
-                              .deleteReviewable(pending.id);
+                          await DiscourseService().deleteReviewable(pending.id);
                           if (dialogContext.mounted) {
                             Navigator.pop(dialogContext, true);
                           }
@@ -605,15 +604,17 @@ extension _UserActions on _TopicDetailPageState {
     if (!mounted) return;
 
     final container = ProviderScope.containerOf(context, listen: false);
-    container.read(topicTrackingStateProvider.notifier).markTopicUnread(
-      widget.topicId,
-      // TopicDetail 不包含 highest_post_number；posts_count 作为回退值，
-      // notifier 会优先保留 tracking state 中更大的服务端游标。
-      highestPostNumber: detail.postsCount,
-      categoryId: detail.categoryId,
-      notificationLevel: detail.notificationLevel.value,
-      all: all,
-    );
+    container
+        .read(topicTrackingStateProvider.notifier)
+        .markTopicUnread(
+          widget.topicId,
+          // TopicDetail 不包含 highest_post_number；posts_count 作为回退值，
+          // notifier 会优先保留 tracking state 中更大的服务端游标。
+          highestPostNumber: detail.postsCount,
+          categoryId: detail.categoryId,
+          notificationLevel: detail.notificationLevel.value,
+          all: all,
+        );
 
     // 只改已经挂载的列表，避免为一次本地状态写入触发未打开分类的请求。
     final pinnedIds = container.read(pinnedCategoriesProvider);
@@ -1204,18 +1205,23 @@ extension _UserActions on _TopicDetailPageState {
     }
   }
 
+  /// 当前活跃的嵌套视图 family 参数(context 定位模式带目标楼层)
+  NestedTopicParams get _activeNestedParams => NestedTopicParams(
+    topicId: widget.topicId,
+    targetPostNumber: _nestedTargetPostNumber,
+  );
+
   /// 回复成功后更新嵌套视图
   void _updateNestedViewAfterReply(Post newPost) {
     if (!_isNestedView) return;
-    final nestedParams = NestedTopicParams(topicId: widget.topicId);
     ref
-        .read(nestedTopicProvider(nestedParams).notifier)
+        .read(nestedTopicProvider(_activeNestedParams).notifier)
         .addNewPost(newPost, isOwnPost: true);
   }
 
   /// MessageBus created 事件：获取完整帖子数据并更新嵌套视图
   Future<void> _handleNestedCreated(int postId, int? userId) async {
-    final nestedParams = NestedTopicParams(topicId: widget.topicId);
+    final nestedParams = _activeNestedParams;
     final nestedNotifier = ref.read(nestedTopicProvider(nestedParams).notifier);
 
     // 去重：如果已存在（自己回复时 _updateNestedViewAfterReply 可能已处理）
@@ -1277,7 +1283,7 @@ extension _UserActions on _TopicDetailPageState {
       FrameJankMonitor.logEvent(
         'MSGBUS',
         '积压批量 ${updates.length} 条(${networkPostIds.length} 帖需刷新),'
-        '坍缩为一次整流刷新',
+            '坍缩为一次整流刷新',
       );
       // 旧积压全部作废:整流刷新拉回的就是最终态
       _deferredPostUpdates.clear();
@@ -1417,7 +1423,11 @@ extension _UserActions on _TopicDetailPageState {
   /// 切换嵌套视图
   void _toggleNestedView() {
     if (_isNestedView) {
-      setState(() => _isNestedView = false);
+      setState(() {
+        _isNestedView = false;
+        _nestedAutoEnabled = false;
+        _nestedTargetPostNumber = null;
+      });
       _scheduleCheckTitleVisibility();
       return;
     }
@@ -1428,7 +1438,11 @@ extension _UserActions on _TopicDetailPageState {
         notifier.isSummaryMode ||
         notifier.isAuthorOnlyMode ||
         notifier.isTopLevelMode;
-    setState(() => _isNestedView = true);
+    setState(() {
+      _isNestedView = true;
+      // 手动开启:失败时显示错误页可重试,不做静默回落
+      _nestedAutoEnabled = false;
+    });
     if (hadFilter) {
       unawaited(notifier.cancelFilter());
     }
