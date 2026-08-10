@@ -152,8 +152,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                 final notification = visibleNotifications[index];
                 return NotificationItem(
                   notification: notification,
-                  onTap: () =>
-                      handleNotificationTap(context, ref, notification),
+                  onTap: () => handleNotificationTap(
+                    context,
+                    ref,
+                    notification,
+                    siblings: visibleNotifications,
+                  ),
                 );
               },
             );

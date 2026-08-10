@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../l10n/s.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
+import '../utils/notification_navigation.dart';
 
 /// 全局 NavigatorKey，用于通知点击时导航
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -57,13 +58,17 @@ class LocalNotificationService {
 
       if (topicId != null) {
         debugPrint('[LocalNotification] 跳转到话题: $topicId, 帖子: $postNumber');
+        final page = TopicDetailPage(
+          topicId: topicId,
+          scrollToPostNumber: postNumber,
+        );
+        final context = navigatorKey.currentContext;
+        if (context != null && context.mounted) {
+          openNotificationPage(context, page);
+          return;
+        }
         navigatorKey.currentState?.push(
-          MaterialPageRoute(
-            builder: (_) => TopicDetailPage(
-              topicId: topicId,
-              scrollToPostNumber: postNumber,
-            ),
-          ),
+          MaterialPageRoute(builder: (_) => page),
         );
       }
     }

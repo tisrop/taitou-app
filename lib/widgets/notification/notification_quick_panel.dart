@@ -509,7 +509,12 @@ class _NotificationBodyState extends ConsumerState<_NotificationBody> {
               return NotificationItem(
                 notification: notification,
                 onTap: () {
-                  handleNotificationTap(context, ref, notification);
+                  handleNotificationTap(
+                    context,
+                    ref,
+                    notification,
+                    siblings: visibleNotifications,
+                  );
                 },
               );
             },
