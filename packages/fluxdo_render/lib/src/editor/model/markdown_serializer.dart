@@ -12,7 +12,10 @@ library;
 import 'dart:math' as math;
 import 'dart:ui' show Color;
 
+import 'package:html/parser.dart' as html_parser;
+
 import '../../node/node.dart';
+import '../../parser/paragraph_parser.dart';
 import 'doc_converter.dart';
 import 'editable_text_content.dart';
 import 'editor_block.dart';
@@ -446,13 +449,14 @@ String _escapeLineStarts(String text) {
 
 /// 岛节点是否可无损序列化回 markdown。
 ///
-/// false 的类型(poll 选项散在 cooked 结构里无法重建 / chat 客户端 cook
-/// 不支持 / policy 属性名不定):序列化输出空串。**这不是静默丢内容**——
+/// false 的类型(chat 客户端 cook 不支持 / policy 属性名不定):序列化输出
+/// 空串。**这不是静默丢内容**——
 /// 编辑已有帖子的导入门禁(二次 cook 等价校验,见主项目 composer_doc_codec)
 /// 会因 cooked 不等而拦下整帖,降级源码模式;编辑器内新建内容不会产生
 /// 这些岛。
 bool islandSerializable(BlockNode node) => switch (node) {
-  PollNode() || ChatTranscriptNode() || PolicyNode() => false,
+  PollNode(:final rawHtml) => rawHtml.isNotEmpty,
+  ChatTranscriptNode() || PolicyNode() => false,
   _ => true,
 };
 
@@ -573,12 +577,89 @@ String serializeIslandNode(BlockNode node) {
       return svgSource;
     case DefinitionListNode(:final items):
       return _serializeDefinitionList(items);
-    case PollNode() || ChatTranscriptNode() || PolicyNode():
-      // 已知不可序列化(islandSerializable=false):选项/属性散在 cooked
-      // 结构里无法无损重建 raw。空串 —— 导入门禁负责拦整帖(编辑器内
+    case PollNode():
+      return _serializePoll(node);
+    case ChatTranscriptNode() || PolicyNode():
+      // 已知不可序列化(islandSerializable=false):chat 客户端 cook 不
+      // 支持 / policy 属性名不定。空串 —— 导入门禁负责拦整帖(编辑器内
       // 也不可能新建这些岛)。
       return '';
   }
+}
+
+/// `[poll ...]` BBCode 从 [PollNode.rawHtml](cooked div.poll)重建。
+///
+/// cooked 属性保留在 rawHtml 中,选项和标题从 DOM 重新投影回 BBCode,
+/// 这样编辑已有投票时不会因为孤岛序列化输出空串而丢失整帖内容。
+String _serializePoll(PollNode node) {
+  if (node.rawHtml.isEmpty) return '';
+  final root = html_parser.parseFragment(node.rawHtml).querySelector('div.poll');
+  if (root == null) return '';
+  final attrs = root.attributes;
+  String? attr(String key) {
+    final value = attrs[key]?.trim();
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  final type = attr('data-poll-type');
+  final isNumber = type == 'number';
+  String formatAttribute(String key, String value) =>
+      value.contains(' ') ? ' $key="$value"' : ' $key=$value';
+
+  final result = StringBuffer('[poll');
+  final name = attr('data-poll-name');
+  if (name != null && name != 'poll') {
+    result.write(formatAttribute('name', name));
+  }
+  if (type != null) result.write(formatAttribute('type', type));
+  for (final entry in const [
+    ('data-poll-results', 'results'),
+    ('data-poll-min', 'min'),
+    ('data-poll-max', 'max'),
+    ('data-poll-step', 'step'),
+    ('data-poll-public', 'public'),
+    ('data-poll-charttype', 'chartType'),
+    ('data-poll-groups', 'groups'),
+    ('data-poll-close', 'close'),
+  ]) {
+    final value = attr(entry.$1);
+    if (value != null) result.write(formatAttribute(entry.$2, value));
+  }
+  final status = attr('data-poll-status');
+  if (status != null && status != 'open') {
+    result.write(formatAttribute('status', status));
+  }
+  result.write(']');
+
+  final title = root.querySelector('.poll-title');
+  if (title != null) {
+    final markdown = _pollInnerMarkdown(title.innerHtml);
+    if (markdown.isNotEmpty) result.write('\n# $markdown');
+  }
+
+  if (!isNumber) {
+    for (final option in root.querySelectorAll('li[data-poll-option-id]')) {
+      final markdown = _pollInnerMarkdown(option.innerHtml);
+      if (markdown.isNotEmpty) {
+        result.write('\n* ${markdown.replaceAll('\n', '\n  ')}');
+      }
+    }
+  }
+
+  result.write('\n[/poll]');
+  return result.toString();
+}
+
+/// poll 标题/选项的 inner HTML → 行内 markdown。
+String _pollInnerMarkdown(String innerHtml) {
+  final nodes = ParagraphParser().parse('<p>$innerHtml</p>');
+  final result = StringBuffer();
+  for (final node in nodes) {
+    if (node case ParagraphNode(:final inlines)) {
+      result.write(_serializeIslandInlines(inlines));
+    }
+  }
+  return result.toString().replaceAll('  \n', '\n').trim();
 }
 
 /// `[quote="user, post:N, topic:M, username:real, full:true"]` 重建。
