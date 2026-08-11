@@ -24,7 +24,7 @@ import '../../render/image_handler.dart' show ImageContentBuilder;
 import '../../render/list_item_layout.dart';
 import '../../render/selectable_text_box.dart';
 import '../../selection/projection.dart';
-import '../model/editable_text_content.dart' show MarkKind;
+import '../model/editable_text_content.dart' show EditableTextContent, MarkKind;
 import '../model/editor_state.dart';
 
 class EditableParagraph extends StatefulWidget {
@@ -93,16 +93,18 @@ class _EditableParagraphState extends State<EditableParagraph> {
       imageContentBuilder: widget.imageContentBuilder == null
           ? null
           : (ctx, img, total) => AbsorbPointer(
-                child: widget.imageContentBuilder!(ctx, img, total),
-              ),
+              child: widget.imageContentBuilder!(ctx, img, total),
+            ),
       // emoji 原子走宿主管线(CDN 重写 + 缓存池):此前编辑段落没接,
       // 子包默认 builder 对相对 URL(编辑已有帖的 :name: cook 形态)
       // 加载失败 → 满屏 :face_savoring_food: 占位胶囊。
       emojiImageBuilder: widget.emojiImageBuilder,
     );
     if (sw != null && sw.elapsedMilliseconds > 4) {
-      debugPrint('[EditorPerf] flatten ${sw.elapsedMilliseconds}ms '
-          '(${widget.block.content.length} chars)');
+      debugPrint(
+        '[EditorPerf] flatten ${sw.elapsedMilliseconds}ms '
+        '(${widget.block.content.length} chars)',
+      );
     }
     return r;
   }
@@ -206,8 +208,12 @@ class _EditableParagraphState extends State<EditableParagraph> {
     // (行高由图撑,输入文字不改行高,caret 走 editingCaretRectIn 的
     // 行盒校正);无图段落维持强制(M1 光标稳定性:空段=满段=恒定行高,
     // emoji/mention/date 原子都不超行高,不受影响)。
-    final hasImageAtom =
-        block.content.atoms.values.any((a) => a is ImageRun);
+    final hasImageAtom = block.content.atoms.values.any((a) => a is ImageRun);
+    final hasSizedText = block.content.marks.any((mark) {
+      if (mark.kind != MarkKind.size) return false;
+      final scale = EditableTextContent.parsePct(mark.attr);
+      return scale != null && scale != 1.0;
+    });
 
     Widget text = KeyedSubtree(
       key: _textKey,
@@ -219,7 +225,7 @@ class _EditableParagraphState extends State<EditableParagraph> {
         result.span,
         strutStyle: StrutStyle.fromTextStyle(
           style,
-          forceStrutHeight: !hasImageAtom,
+          forceStrutHeight: !hasImageAtom && !hasSizedText,
         ),
       ),
     );
@@ -240,7 +246,8 @@ class _EditableParagraphState extends State<EditableParagraph> {
     // "看得出是剧透"而非"遮住"——对齐官方 blurred decoration 意图)。
     final spoilerSpans = [
       for (final m in block.content.marks)
-        if (m.kind == MarkKind.spoilerInline) TextRange(start: m.start, end: m.end),
+        if (m.kind == MarkKind.spoilerInline)
+          TextRange(start: m.start, end: m.end),
     ];
     if (spoilerSpans.isNotEmpty) {
       final scheme = Theme.of(context).colorScheme;

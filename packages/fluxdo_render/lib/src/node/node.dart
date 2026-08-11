@@ -41,7 +41,11 @@ sealed class BlockNode {
 /// 对应 HTML 中的 `<p>...</p>`。
 @immutable
 class ParagraphNode extends BlockNode {
-  const ParagraphNode({required super.id, required this.inlines, this.textAlign});
+  const ParagraphNode({
+    required super.id,
+    required this.inlines,
+    this.textAlign,
+  });
 
   /// 段落内的行内节点序列。
   final List<InlineNode> inlines;
@@ -52,10 +56,10 @@ class ParagraphNode extends BlockNode {
 
   /// 编辑器(src/editor)替换行内内容用;id/textAlign 保持。
   ParagraphNode copyWith({List<InlineNode>? inlines}) => ParagraphNode(
-        id: id,
-        inlines: inlines ?? this.inlines,
-        textAlign: textAlign,
-      );
+    id: id,
+    inlines: inlines ?? this.inlines,
+    textAlign: textAlign,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -69,7 +73,8 @@ class ParagraphNode extends BlockNode {
   int get hashCode => Object.hash(textAlign, Object.hashAll(inlines));
 
   @override
-  String toString() => 'ParagraphNode($id, ${inlines.length} inlines'
+  String toString() =>
+      'ParagraphNode($id, ${inlines.length} inlines'
       '${textAlign == null ? "" : ", $textAlign"})';
 }
 
@@ -107,7 +112,8 @@ class HeadingNode extends BlockNode {
   int get hashCode => Object.hash(level, textAlign, Object.hashAll(inlines));
 
   @override
-  String toString() => 'HeadingNode($id, h$level, ${inlines.length} inlines'
+  String toString() =>
+      'HeadingNode($id, h$level, ${inlines.length} inlines'
       '${textAlign == null ? "" : ", $textAlign"})';
 }
 
@@ -123,11 +129,7 @@ class HeadingNode extends BlockNode {
 ///   (含嵌套 list),渲染为 marker + Column;[inlines]/[children] 不用。
 @immutable
 class ListItem {
-  const ListItem({
-    this.inlines = const [],
-    this.children,
-    this.blocks,
-  });
+  const ListItem({this.inlines = const [], this.children, this.blocks});
 
   /// 列表项的 inline 内容(li 直属 text/em/link/...)。块级形态下为空。
   final List<InlineNode> inlines;
@@ -149,16 +151,16 @@ class ListItem {
 
   @override
   int get hashCode => Object.hash(
-        Object.hashAll(inlines),
-        children == null ? 0 : Object.hashAll(children!),
-        blocks == null ? 0 : Object.hashAll(blocks!),
-      );
+    Object.hashAll(inlines),
+    children == null ? 0 : Object.hashAll(children!),
+    blocks == null ? 0 : Object.hashAll(blocks!),
+  );
 
   @override
   String toString() => blocks != null
       ? 'ListItem(${blocks!.length} blocks)'
       : 'ListItem(${inlines.length} inlines'
-          '${children == null ? "" : ", ${children!.length} sub-lists"})';
+            '${children == null ? "" : ", ${children!.length} sub-lists"})';
 }
 
 /// 列表 — `<ul>` 或 `<ol>`,可嵌套。
@@ -322,11 +324,7 @@ class BlankLineNode extends BlockNode {
 /// (`'dart'` / `'python'` / `'mermaid'` 等);无则 null。
 @immutable
 class CodeBlockNode extends BlockNode {
-  const CodeBlockNode({
-    required super.id,
-    required this.code,
-    this.language,
-  });
+  const CodeBlockNode({required super.id, required this.code, this.language});
 
   /// 代码原始字面值(parser 已解码 HTML 实体,末尾换行已去掉)。
   final String code;
@@ -473,22 +471,22 @@ class QuoteCardNode extends BlockNode {
 
   @override
   int get hashCode => Object.hash(
-        username,
-        avatarUrl,
-        titleText,
-        Object.hashAll(titleInlines),
-        titleHref,
-        topicId,
-        postNumber,
-        categoryName,
-        categoryColor,
-        categoryTextColor,
-        categoryHref,
-        full,
-        displayName,
-        oneboxUrl,
-        Object.hashAll(children),
-      );
+    username,
+    avatarUrl,
+    titleText,
+    Object.hashAll(titleInlines),
+    titleHref,
+    topicId,
+    postNumber,
+    categoryName,
+    categoryColor,
+    categoryTextColor,
+    categoryHref,
+    full,
+    displayName,
+    oneboxUrl,
+    Object.hashAll(children),
+  );
 
   @override
   String toString() =>
@@ -523,8 +521,7 @@ class SpoilerBlockNode extends BlockNode {
   int get hashCode => Object.hashAll(children);
 
   @override
-  String toString() =>
-      'SpoilerBlockNode($id, ${children.length} children)';
+  String toString() => 'SpoilerBlockNode($id, ${children.length} children)';
 }
 
 /// Onebox 类型 —— 跟 legacy `OneboxType` enum 一致(`docs/node_priority.md`
@@ -632,19 +629,18 @@ class OneboxNode extends BlockNode {
 
   @override
   int get hashCode => Object.hash(
-        kind,
-        url,
-        title,
-        description,
-        faviconUrl,
-        thumbnailUrl,
-        sourceName,
-        rawHtml,
-      );
+    kind,
+    url,
+    title,
+    description,
+    faviconUrl,
+    thumbnailUrl,
+    sourceName,
+    rawHtml,
+  );
 
   @override
-  String toString() =>
-      'OneboxNode($id, $kind${url == null ? "" : ", $url"})';
+  String toString() => 'OneboxNode($id, $kind${url == null ? "" : ", $url"})';
 }
 
 /// Obsidian Callout 类型 — 对齐 legacy `callout_config.dart::getCalloutConfig`
@@ -804,14 +800,14 @@ class CalloutNode extends BlockNode {
 
   @override
   int get hashCode => Object.hash(
-        kind,
-        typeRaw,
-        title,
-        titleInlines == null ? 0 : Object.hashAll(titleInlines!),
-        foldable,
-        chunkPos,
-        Object.hashAll(children),
-      );
+    kind,
+    typeRaw,
+    title,
+    titleInlines == null ? 0 : Object.hashAll(titleInlines!),
+    foldable,
+    chunkPos,
+    Object.hashAll(children),
+  );
 
   @override
   String toString() =>
@@ -863,11 +859,8 @@ class DetailsNode extends BlockNode {
           listEquals(children, other.children);
 
   @override
-  int get hashCode => Object.hash(
-        summary,
-        initiallyOpen,
-        Object.hashAll(children),
-      );
+  int get hashCode =>
+      Object.hash(summary, initiallyOpen, Object.hashAll(children));
 
   @override
   String toString() =>
@@ -1008,10 +1001,7 @@ bool _listEq(List<Object?> a, List<Object?> b) {
 /// [entries] 为空时本节点渲染 `SizedBox.shrink()`(退化为隐藏,行为同 legacy)。
 @immutable
 class FootnotesSectionNode extends BlockNode {
-  const FootnotesSectionNode({
-    required super.id,
-    this.entries = const [],
-  });
+  const FootnotesSectionNode({required super.id, this.entries = const []});
 
   /// 有序脚注条目(按 `<li>` 出现序)。
   final List<FootnoteEntry> entries;
@@ -1049,11 +1039,11 @@ enum LazyVideoProvider {
   other;
 
   static LazyVideoProvider fromName(String name) => switch (name) {
-        'youtube' => LazyVideoProvider.youtube,
-        'vimeo' => LazyVideoProvider.vimeo,
-        'tiktok' => LazyVideoProvider.tiktok,
-        _ => LazyVideoProvider.other,
-      };
+    'youtube' => LazyVideoProvider.youtube,
+    'vimeo' => LazyVideoProvider.vimeo,
+    'tiktok' => LazyVideoProvider.tiktok,
+    _ => LazyVideoProvider.other,
+  };
 }
 
 /// 懒加载视频 — `<div class="lazy-video-container">`。
@@ -1124,14 +1114,8 @@ class LazyVideoNode extends BlockNode {
           url == other.url;
 
   @override
-  int get hashCode => Object.hash(
-        provider,
-        videoId,
-        title,
-        thumbnailUrl,
-        startTime,
-        url,
-      );
+  int get hashCode =>
+      Object.hash(provider, videoId, title, thumbnailUrl, startTime, url);
 
   @override
   String toString() =>
@@ -1230,17 +1214,17 @@ class IframeNode extends BlockNode {
 
   @override
   int get hashCode => Object.hash(
-        src,
-        width,
-        height,
-        title,
-        allowFullscreen,
-        referrerPolicy,
-        lazyLoad,
-        Object.hashAll(sandboxFlags),
-        Object.hashAll(allowFlags),
-        Object.hashAll(cssClasses),
-      );
+    src,
+    width,
+    height,
+    title,
+    allowFullscreen,
+    referrerPolicy,
+    lazyLoad,
+    Object.hashAll(sandboxFlags),
+    Object.hashAll(allowFlags),
+    Object.hashAll(cssClasses),
+  );
 
   @override
   String toString() => 'IframeNode($id, $src)';
@@ -1412,10 +1396,7 @@ class AudioNode extends BlockNode {
 /// 不是 BlockNode,只是 TableNode 内部数据结构(类似 ListItem)。
 @immutable
 class TableCellData {
-  const TableCellData({
-    required this.children,
-    this.isHeader = false,
-  });
+  const TableCellData({required this.children, this.isHeader = false});
 
   /// cell 内的块级子节点(递归 parse)。
   final List<BlockNode> children;
@@ -1495,15 +1476,17 @@ class TableNode extends BlockNode {
           runtimeType == other.runtimeType &&
           columnCount == other.columnCount &&
           hasHeader == other.hasHeader &&
-          listEquals(rows.map(List.unmodifiable).toList(),
-              other.rows.map(List.unmodifiable).toList());
+          listEquals(
+            rows.map(List.unmodifiable).toList(),
+            other.rows.map(List.unmodifiable).toList(),
+          );
 
   @override
   int get hashCode => Object.hash(
-        columnCount,
-        hasHeader,
-        Object.hashAll(rows.map(Object.hashAll)),
-      );
+    columnCount,
+    hasHeader,
+    Object.hashAll(rows.map(Object.hashAll)),
+  );
 
   @override
   String toString() =>
@@ -1605,17 +1588,17 @@ class PolicyNode extends BlockNode {
 
   @override
   int get hashCode => Object.hash(
-        version,
-        groups,
-        acceptLabel,
-        revokeLabel,
-        renewalDays,
-        renewalStart,
-        reminder,
-        isPrivate,
-        rawHtml,
-        Object.hashAll(children),
-      );
+    version,
+    groups,
+    acceptLabel,
+    revokeLabel,
+    renewalDays,
+    renewalStart,
+    reminder,
+    isPrivate,
+    rawHtml,
+    Object.hashAll(children),
+  );
 
   @override
   String toString() =>
@@ -1638,10 +1621,7 @@ class PolicyNode extends BlockNode {
 ///   Padding v8 + Center + 水平 SingleChildScrollView(超长公式可滑)
 @immutable
 class MathBlockNode extends BlockNode {
-  const MathBlockNode({
-    required super.id,
-    required this.latex,
-  });
+  const MathBlockNode({required super.id, required this.latex});
 
   /// LaTeX 源码(已 trim)。空 = 无效公式,渲染时显示空 SizedBox。
   final String latex;
@@ -1822,14 +1802,14 @@ class ChatTranscriptNode extends BlockNode {
 
   @override
   int get hashCode => Object.hash(
-        username,
-        avatarUrl,
-        datetime,
-        channelName,
-        isChained,
-        messagesHtml,
-        rawHtml,
-      );
+    username,
+    avatarUrl,
+    datetime,
+    channelName,
+    isChained,
+    messagesHtml,
+    rawHtml,
+  );
 
   @override
   String toString() =>
@@ -1847,10 +1827,7 @@ class ChatTranscriptNode extends BlockNode {
 /// term 为空)与「孤儿 dt」(无后续 dd,definitions 为空)。
 @immutable
 class DefinitionItem {
-  const DefinitionItem({
-    this.term = const [],
-    this.definitions = const [],
-  });
+  const DefinitionItem({this.term = const [], this.definitions = const []});
 
   /// `<dt>` 的行内内容(术语)。孤儿 dd 形态下为空。
   final List<InlineNode> term;
@@ -1872,9 +1849,9 @@ class DefinitionItem {
 
   @override
   int get hashCode => Object.hash(
-        Object.hashAll(term),
-        Object.hashAll(definitions.map(Object.hashAll)),
-      );
+    Object.hashAll(term),
+    Object.hashAll(definitions.map(Object.hashAll)),
+  );
 
   @override
   String toString() =>
@@ -1889,10 +1866,7 @@ class DefinitionItem {
 /// 新引擎:外层上下 8(与 ListNode 同档);dt 常规字重;dd 左缩进 1.25em。
 @immutable
 class DefinitionListNode extends BlockNode {
-  const DefinitionListNode({
-    required super.id,
-    required this.items,
-  });
+  const DefinitionListNode({required super.id, required this.items});
 
   /// dt/dd 配对条目序列。
   final List<DefinitionItem> items;
@@ -1937,6 +1911,7 @@ List<ImageRun> collectImageRuns(List<BlockNode> nodes) {
         case StyledRun(:final children):
           scanInlines(children);
         case ColoredRun(:final children):
+        case SizedRun(:final children):
           scanInlines(children);
         case LinkRun(:final children):
           scanInlines(children);
@@ -2066,7 +2041,7 @@ List<ImageRun> collectImageRuns(List<BlockNode> nodes) {
 /// Web 版 `lightbox(elem)` 的数据源来自 DOM 里的 `a.lightbox`,不是所有
 /// `<img>`。因此裸图仍可单图打开,但不参与同帖左右切换。
 List<ImageRun> collectLightboxImageRuns(List<BlockNode> nodes) {
-  return collectImageRuns(nodes)
-      .where((image) => image.lightboxUrl != null)
-      .toList(growable: false);
+  return collectImageRuns(
+    nodes,
+  ).where((image) => image.lightboxUrl != null).toList(growable: false);
 }

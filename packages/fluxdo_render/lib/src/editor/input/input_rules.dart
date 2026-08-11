@@ -55,10 +55,19 @@ InputRuleOutcome tryApplyInputRules(
   if (typedChar == ' ') {
     return _tryBlockRules(state, block, sel.extent.offset);
   }
-  if (typedChar == '*' || typedChar == '`' || typedChar == '~' || typedChar == '_') {
+  if (typedChar == '*' ||
+      typedChar == '`' ||
+      typedChar == '~' ||
+      typedChar == '_') {
     return _tryInlineRules(state, block, sel.extent.offset);
   }
-  return InputRuleOutcome.none;
+  if (typedChar == ']') {
+    final completed = _tryBbcodeAttrRules(state, block, sel.extent.offset);
+    if (completed != InputRuleOutcome.none) return completed;
+    final opened = _tryBbcodeOpenRules(state, block, sel.extent.offset);
+    if (opened != InputRuleOutcome.none) return opened;
+  }
+  return _tryBbcodeInsidePairRules(state, block, sel.extent.offset);
 }
 
 // ---------------------------------------------------------------------
@@ -71,11 +80,7 @@ final _orderedRe = RegExp(r'^(\d{1,9})[.)] $');
 final _quoteRe = RegExp(r'^> $');
 final _hrRe = RegExp(r'^(---|\*\*\*|___) $');
 
-InputRuleOutcome _tryBlockRules(
-  EditorState state,
-  TextBlock block,
-  int caret,
-) {
+InputRuleOutcome _tryBlockRules(EditorState state, TextBlock block, int caret) {
   // 块级标记必须在**行首起敲**:光标前的全部文本就是标记本身。
   // (含 '\n' 软换行的段落里,只认真正的块首 —— 对齐官方
   // textblockTypeInputRule 的 ^ 锚定。)
@@ -183,8 +188,8 @@ InputRuleOutcome _tryInlineRules(
     final m = re.firstMatch(before);
     if (m == null) continue;
     final contentText = m.group(1)!;
-    final matchStart = m.start + (m.group(0)!.length -
-        (contentText.length + delimLen * 2));
+    final matchStart =
+        m.start + (m.group(0)!.length - (contentText.length + delimLen * 2));
     // 区间内含原子:FFFC 参与正则会当普通字符 —— 允许(emoji 可加粗),
     // 但含 '\n' 不允许(跨软换行不成对)。
     if (contentText.contains('\n')) continue;
@@ -196,6 +201,155 @@ InputRuleOutcome _tryInlineRules(
       delimLength: delimLen,
       contentLength: contentText.length,
       kind: kind,
+    );
+    return InputRuleOutcome.applied;
+  }
+  return InputRuleOutcome.none;
+}
+
+// ---------------------------------------------------------------------
+// BBCode 属性标记(color/bgcolor/size)
+// ---------------------------------------------------------------------
+
+final List<(RegExp, MarkKind, String)> _bbcodeAttrRules = [
+  (
+    RegExp(r'\[size=(\d{1,4})\]([^\[\s](?:[^\[]*[^\[\s])?)\[/size\]$'),
+    MarkKind.size,
+    '[/size]',
+  ),
+  (
+    RegExp(r'\[color=([^\]\s]{1,64})\]([^\[\s](?:[^\[]*[^\[\s])?)\[/color\]$'),
+    MarkKind.textColor,
+    '[/color]',
+  ),
+  (
+    RegExp(
+      r'\[bgcolor=([^\]\s]{1,64})\]([^\[\s](?:[^\[]*[^\[\s])?)\[/bgcolor\]$',
+    ),
+    MarkKind.bgColor,
+    '[/bgcolor]',
+  ),
+];
+
+final List<(RegExp, MarkKind, String)> _bbcodeOpenRules = [
+  (RegExp(r'\[size=(\d{1,4})\]$'), MarkKind.size, '[/size]'),
+  (RegExp(r'\[color=([^\]\s]{1,64})\]$'), MarkKind.textColor, '[/color]'),
+  (RegExp(r'\[bgcolor=([^\]\s]{1,64})\]$'), MarkKind.bgColor, '[/bgcolor]'),
+];
+
+final List<(RegExp, MarkKind, String)> _bbcodeOpenPatterns = [
+  (RegExp(r'\[size=(\d{1,4})\]'), MarkKind.size, '[/size]'),
+  (RegExp(r'\[color=([^\]\s]{1,64})\]'), MarkKind.textColor, '[/color]'),
+  (RegExp(r'\[bgcolor=([^\]\s]{1,64})\]'), MarkKind.bgColor, '[/bgcolor]'),
+];
+
+InputRuleOutcome _tryBbcodeAttrRules(
+  EditorState state,
+  TextBlock block,
+  int caret,
+) {
+  final before = block.content.text.substring(0, caret);
+  if (block.content.marksAt(caret).contains(MarkKind.inlineCode)) {
+    return InputRuleOutcome.none;
+  }
+  for (final (pattern, kind, closeTag) in _bbcodeAttrRules) {
+    final match = pattern.firstMatch(before);
+    if (match == null) continue;
+    final attr = match.group(1)!;
+    final contentText = match.group(2)!;
+    if (contentText.contains('\n')) continue;
+    final openLength =
+        match.group(0)!.length - contentText.length - closeTag.length;
+    state.sealHistory();
+    state.applyInlineInputRule(
+      block.id,
+      matchStart: match.start,
+      delimLength: closeTag.length,
+      openLength: openLength,
+      contentLength: contentText.length,
+      kind: kind,
+      attr: attr,
+    );
+    return InputRuleOutcome.applied;
+  }
+  return InputRuleOutcome.none;
+}
+
+InputRuleOutcome _tryBbcodeOpenRules(
+  EditorState state,
+  TextBlock block,
+  int caret,
+) {
+  final text = block.content.text;
+  if (caret <= 0 || caret >= text.length) return InputRuleOutcome.none;
+  if (block.content.marksAt(caret).contains(MarkKind.inlineCode)) {
+    return InputRuleOutcome.none;
+  }
+  final before = text.substring(0, caret);
+  for (final (pattern, kind, closeTag) in _bbcodeOpenRules) {
+    final match = pattern.firstMatch(before);
+    if (match == null) continue;
+    final rest = text.substring(caret);
+    final line = rest.split('\n').first;
+    final closeAt = line.indexOf(closeTag);
+    if (closeAt <= 0) continue;
+    final contentText = line.substring(0, closeAt);
+    if (contentText.contains('[') ||
+        contentText.startsWith(' ') ||
+        contentText.endsWith(' ')) {
+      continue;
+    }
+    state.sealHistory();
+    state.applyInlineInputRule(
+      block.id,
+      matchStart: match.start,
+      delimLength: closeTag.length,
+      openLength: match.group(0)!.length,
+      contentLength: contentText.length,
+      kind: kind,
+      attr: match.group(1),
+      caretAtEnd: false,
+    );
+    return InputRuleOutcome.applied;
+  }
+  return InputRuleOutcome.none;
+}
+
+InputRuleOutcome _tryBbcodeInsidePairRules(
+  EditorState state,
+  TextBlock block,
+  int caret,
+) {
+  final text = block.content.text;
+  if (caret <= 0 || caret >= text.length) return InputRuleOutcome.none;
+  if (block.content.marksAt(caret).contains(MarkKind.inlineCode)) {
+    return InputRuleOutcome.none;
+  }
+  final before = text.substring(0, caret);
+  for (final (pattern, kind, closeTag) in _bbcodeOpenPatterns) {
+    if (!text.startsWith(closeTag, caret)) continue;
+    RegExpMatch? lastOpen;
+    for (final match in pattern.allMatches(before)) {
+      lastOpen = match;
+    }
+    if (lastOpen == null) continue;
+    final contentText = before.substring(lastOpen.end);
+    if (contentText.isEmpty ||
+        contentText.contains('\n') ||
+        contentText.contains('[') ||
+        contentText.startsWith(' ') ||
+        contentText.endsWith(' ')) {
+      continue;
+    }
+    state.sealHistory();
+    state.applyInlineInputRule(
+      block.id,
+      matchStart: lastOpen.start,
+      delimLength: closeTag.length,
+      openLength: lastOpen.group(0)!.length,
+      contentLength: contentText.length,
+      kind: kind,
+      attr: lastOpen.group(1),
     );
     return InputRuleOutcome.applied;
   }

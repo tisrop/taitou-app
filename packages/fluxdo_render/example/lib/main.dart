@@ -464,6 +464,11 @@ void _writeInline(StringBuffer buf, InlineNode node, int indent) {
       for (final c in children) {
         _writeInline(buf, c, indent + 1);
       }
+    case SizedRun(:final scale, :final pctRaw, :final children):
+      buf.writeln('${pad}SizedRun(scale: $scale, pct: $pctRaw)');
+      for (final c in children) {
+        _writeInline(buf, c, indent + 1);
+      }
     case LineBreakRun():
       buf.writeln('${pad}LineBreakRun');
     case LinkRun(:final href, :final children):

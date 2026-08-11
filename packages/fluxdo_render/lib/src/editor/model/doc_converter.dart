@@ -30,42 +30,43 @@ import 'editor_block.dart';
 /// inline-onebox(裸 URL)的序列化语义不是 `[text](href)`；hashtag
 /// (`#ref`)则作为行内原子进入白名单，避免把整段岛化成只读。
 bool isEditableInline(InlineNode n) => switch (n) {
-      TextRun() || LineBreakRun() || EmojiRun() || MentionRun() => true,
-      // local date chip:行内原子(emoji/mention 同机制),编辑态显示
-      // 服务端预渲染文本,序列化写回 [date=…] BBCode
-      LocalDateRun() => true,
-      // 图片 = 行内原子,无条件(官方 ProseMirror image 就是 inline:true,
-      // 无图片块级概念)。upload 可缩放图/lightbox 大图也原子化 —— 选中
-      // 后的工具条(缩放/删除/alt/加网格)由宿主浮层承载,查看器在
-      // 「已选中再点」时打开。
-      ImageRun() => true,
-      EmRun(:final children) => children.every(isEditableInline),
-      StrongRun(:final children) => children.every(isEditableInline),
-      InlineCodeRun() => true,
-      SpoilerRun(:final children) => children.every(isEditableInline),
-      LinkRun(
-        :final href,
-        :final children,
-        :final isAttachment,
-        :final hashtagRef,
-        :final isOneboxLink,
-      ) =>
-        !isAttachment &&
-            (hashtagRef != null ||
-                // onebox 系链接(裸 URL 的 linkify 产物)可编辑:flatten 时
-                // 文本替换为 href(官方 linkify 语义 —— 编辑器里显示 URL
-                // 本身),序列化 text==href 走裸 URL 规则,往返无损
-                (isOneboxLink
-                    ? href.isNotEmpty
-                    : children.every(isEditableInline))),
-      StyledRun(:final kind, :final children) => switch (kind) {
-          InlineStyleKind.underline ||
-          InlineStyleKind.lineThrough =>
-            children.every(isEditableInline),
-          _ => false,
-        },
-      _ => false,
-    };
+  TextRun() || LineBreakRun() || EmojiRun() || MentionRun() => true,
+  // local date chip:行内原子(emoji/mention 同机制),编辑态显示
+  // 服务端预渲染文本,序列化写回 [date=…] BBCode
+  LocalDateRun() => true,
+  // 图片 = 行内原子,无条件(官方 ProseMirror image 就是 inline:true,
+  // 无图片块级概念)。upload 可缩放图/lightbox 大图也原子化 —— 选中
+  // 后的工具条(缩放/删除/alt/加网格)由宿主浮层承载,查看器在
+  // 「已选中再点」时打开。
+  ImageRun() => true,
+  EmRun(:final children) => children.every(isEditableInline),
+  StrongRun(:final children) => children.every(isEditableInline),
+  ColoredRun(:final children) => children.every(isEditableInline),
+  SizedRun(:final children) => children.every(isEditableInline),
+  InlineCodeRun() => true,
+  SpoilerRun(:final children) => children.every(isEditableInline),
+  LinkRun(
+    :final href,
+    :final children,
+    :final isAttachment,
+    :final hashtagRef,
+    :final isOneboxLink,
+  ) =>
+    !isAttachment &&
+        (hashtagRef != null ||
+            // onebox 系链接(裸 URL 的 linkify 产物)可编辑:flatten 时
+            // 文本替换为 href(官方 linkify 语义 —— 编辑器里显示 URL
+            // 本身),序列化 text==href 走裸 URL 规则,往返无损
+            (isOneboxLink
+                ? href.isNotEmpty
+                : children.every(isEditableInline))),
+  StyledRun(:final kind, :final children) => switch (kind) {
+    InlineStyleKind.underline ||
+    InlineStyleKind.lineThrough => children.every(isEditableInline),
+    _ => false,
+  },
+  _ => false,
+};
 
 bool _allEditable(List<InlineNode> inlines) => inlines.every(isEditableInline);
 
@@ -78,7 +79,8 @@ List<EditorBlock> blockNodesToDoc(
 ) {
   final out = <EditorBlock>[];
 
-  void addIsland(BlockNode node) => out.add(IslandBlock(id: nextId(), node: node));
+  void addIsland(BlockNode node) =>
+      out.add(IslandBlock(id: nextId(), node: node));
 
   void addText(
     EditableTextContent content, {
@@ -89,16 +91,18 @@ List<EditorBlock> blockNodesToDoc(
     int listStart = 1,
     List<ContainerFrame> containers = const [],
   }) {
-    out.add(TextBlock(
-      id: nextId(),
-      content: content,
-      kind: kind,
-      headingLevel: headingLevel,
-      ordered: ordered,
-      depth: depth,
-      listStart: listStart,
-      containers: containers,
-    ));
+    out.add(
+      TextBlock(
+        id: nextId(),
+        content: content,
+        kind: kind,
+        headingLevel: headingLevel,
+        ordered: ordered,
+        depth: depth,
+        listStart: listStart,
+        containers: containers,
+      ),
+    );
   }
 
   /// 列表整树可编辑性:所有(递归)item 无块级子节点且 inlines 全过白名单。
@@ -156,8 +160,10 @@ List<EditorBlock> blockNodesToDoc(
     switch (node) {
       case ParagraphNode(:final inlines):
         if (_allEditable(inlines)) {
-          addText(EditableTextContent.fromInlines(inlines),
-              containers: containers);
+          addText(
+            EditableTextContent.fromInlines(inlines),
+            containers: containers,
+          );
         } else {
           addIsland(node);
         }
@@ -345,9 +351,7 @@ List<BlockNode> _buildLevel(
       final run = <TextBlock>[];
       while (i < doc.length) {
         final b = doc[i];
-        if (b is TextBlock &&
-            b.isListItem &&
-            b.containers.length <= level) {
+        if (b is TextBlock && b.isListItem && b.containers.length <= level) {
           run.add(b);
           i++;
         } else {
@@ -369,42 +373,41 @@ BlockNode _wrapInFrame(
   ContainerFrame frame,
   List<BlockNode> children,
   String Function() nextId,
-) =>
-    switch (frame) {
-      QuoteFrame() => BlockquoteNode(id: nextId(), children: children),
-      QuoteCardFrame(
-        :final username,
-        :final displayName,
-        :final postNumber,
-        :final topicId,
-        :final full,
-      ) =>
-        QuoteCardNode(
-          id: nextId(),
-          username: username,
-          displayName: displayName,
-          postNumber: postNumber,
-          topicId: topicId,
-          full: full,
-          children: children,
-        ),
-      SpoilerFrame() => SpoilerBlockNode(id: nextId(), children: children),
-      DetailsFrame(:final summary, :final open) => DetailsNode(
-          id: nextId(),
-          summary: summary,
-          children: children,
-          initiallyOpen: open,
-        ),
-      CalloutFrame(:final kind, :final typeRaw, :final title, :final foldable) =>
-        CalloutNode(
-          id: nextId(),
-          kind: kind,
-          typeRaw: typeRaw,
-          title: title,
-          foldable: foldable,
-          children: children,
-        ),
-    };
+) => switch (frame) {
+  QuoteFrame() => BlockquoteNode(id: nextId(), children: children),
+  QuoteCardFrame(
+    :final username,
+    :final displayName,
+    :final postNumber,
+    :final topicId,
+    :final full,
+  ) =>
+    QuoteCardNode(
+      id: nextId(),
+      username: username,
+      displayName: displayName,
+      postNumber: postNumber,
+      topicId: topicId,
+      full: full,
+      children: children,
+    ),
+  SpoilerFrame() => SpoilerBlockNode(id: nextId(), children: children),
+  DetailsFrame(:final summary, :final open) => DetailsNode(
+    id: nextId(),
+    summary: summary,
+    children: children,
+    initiallyOpen: open,
+  ),
+  CalloutFrame(:final kind, :final typeRaw, :final title, :final foldable) =>
+    CalloutNode(
+      id: nextId(),
+      kind: kind,
+      typeRaw: typeRaw,
+      title: title,
+      foldable: foldable,
+      children: children,
+    ),
+};
 
 /// 单个非列表文本块 → 节点。
 BlockNode _textBlockToNode(TextBlock block, String Function() nextId) {
@@ -462,12 +465,14 @@ List<ListNode> _buildLists(
           deeper.add(run[i]);
           i++;
         }
-        items.add(ListItem(
-          inlines: b.content.toInlines(),
-          children: deeper.isEmpty
-              ? null
-              : _buildLists(deeper, baseDepth + 1, nextId),
-        ));
+        items.add(
+          ListItem(
+            inlines: b.content.toInlines(),
+            children: deeper.isEmpty
+                ? null
+                : _buildLists(deeper, baseDepth + 1, nextId),
+          ),
+        );
       } else {
         // run 以更深层开头(缩进悬空):按提升到本层处理
         final deeper = <TextBlock>[];
@@ -480,13 +485,15 @@ List<ListNode> _buildLists(
       }
     }
 
-    out.add(ListNode(
-      id: nextId(),
-      ordered: ordered,
-      items: items,
-      depth: baseDepth,
-      start: start,
-    ));
+    out.add(
+      ListNode(
+        id: nextId(),
+        ordered: ordered,
+        items: items,
+        depth: baseDepth,
+        start: start,
+      ),
+    );
   }
   return out;
 }

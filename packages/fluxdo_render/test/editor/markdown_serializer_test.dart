@@ -484,7 +484,7 @@ void main() {
       );
     });
 
-    test('行内 styled/colored HTML 形态', () {
+    test('行内 styled HTML / colored BBCode 形态', () {
       expect(
         serializeIslandNode(const ParagraphNode(id: 'b', inlines: [
           StyledRun(kind: InlineStyleKind.superscript, children: [TextRun('2')]),
@@ -497,7 +497,7 @@ void main() {
         serializeIslandNode(const ParagraphNode(id: 'b', inlines: [
           ColoredRun(color: Color(0xFFE03E2D), children: [TextRun('红')]),
         ])),
-        '<span style="color:#e03e2d">红</span>',
+        '[color=#e03e2d]红[/color]',
       );
     });
 

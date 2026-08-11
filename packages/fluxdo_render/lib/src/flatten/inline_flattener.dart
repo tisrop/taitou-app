@@ -281,44 +281,42 @@ class InlineFlattener {
   }) {
     return switch (node) {
       TextRun(:final text, :final isMarkdownMarker) => TextSpan(
-          text: isMarkdownMarker ? text : insertSoftBreaks(text),
-          style: isMarkdownMarker
-              ? TextStyle(
-                  fontFamily: 'FiraCode',
-                  fontFamilyFallback: const ['monospace', 'Menlo', 'Courier'],
-                  fontSize: p.emojiBaseSize * 0.9,
-                  fontWeight: FontWeight.w400,
-                )
-              : null,
-          recognizer: isMarkdownMarker ? null : inheritedRecognizer,
-        ),
+        text: isMarkdownMarker ? text : insertSoftBreaks(text),
+        style: isMarkdownMarker
+            ? TextStyle(
+                fontFamily: 'FiraCode',
+                fontFamilyFallback: const ['monospace', 'Menlo', 'Courier'],
+                fontSize: p.emojiBaseSize * 0.9,
+                fontWeight: FontWeight.w400,
+              )
+            : null,
+        recognizer: isMarkdownMarker ? null : inheritedRecognizer,
+      ),
       EmRun(:final children) => TextSpan(
-          style: const TextStyle(fontStyle: FontStyle.italic),
-          children:
-              _build(children, p, inheritedRecognizer: inheritedRecognizer),
-        ),
+        style: const TextStyle(fontStyle: FontStyle.italic),
+        children: _build(children, p, inheritedRecognizer: inheritedRecognizer),
+      ),
       StrongRun(:final children) => TextSpan(
-          style: const TextStyle(fontWeight: FontWeight.bold),
-          children:
-              _build(children, p, inheritedRecognizer: inheritedRecognizer),
-        ),
+        style: const TextStyle(fontWeight: FontWeight.bold),
+        children: _build(children, p, inheritedRecognizer: inheritedRecognizer),
+      ),
       StyledRun(:final kind, :final children) => _buildStyledSpan(
-          kind,
-          children,
-          p,
-          inheritedRecognizer: inheritedRecognizer,
-        ),
+        kind,
+        children,
+        p,
+        inheritedRecognizer: inheritedRecognizer,
+      ),
       // 行内 CSS 着色:字色/背景色应用到 TextSpan(随文换行、可选区);color
       // 为 null 时不覆盖父级色(继承),background 为 null 时无底色。
       ColoredRun(:final color, :final background, :final children) => TextSpan(
-          style: TextStyle(color: color, backgroundColor: background),
-          children:
-              _build(children, p, inheritedRecognizer: inheritedRecognizer),
-        ),
-      LineBreakRun() => TextSpan(
-          text: '\n',
-          recognizer: inheritedRecognizer,
-        ),
+        style: TextStyle(color: color, backgroundColor: background),
+        children: _build(children, p, inheritedRecognizer: inheritedRecognizer),
+      ),
+      SizedRun(:final scale, :final children) => TextSpan(
+        style: TextStyle(fontSize: p.emojiBaseSize * scale),
+        children: _build(children, p, inheritedRecognizer: inheritedRecognizer),
+      ),
+      LineBreakRun() => TextSpan(text: '\n', recognizer: inheritedRecognizer),
       LinkRun(
         :final href,
         :final children,
@@ -343,30 +341,27 @@ class InlineFlattener {
                 ref: hashtagRef,
               ),
       InlineCodeRun(:final text) => _buildInlineCodeSpan(
-          text,
-          p.context,
-          inheritedRecognizer: inheritedRecognizer,
-        ),
-      EmojiRun() => _buildEmojiSpan(node, p,
-          inheritedRecognizer: inheritedRecognizer),
-      MentionRun() => node.statusEmoji == null
-          ? _buildMentionTextSpan(node, p)
-          : _buildMentionSpan(node, p),
-      ImageRun() => _buildImageSpan(
-          node,
-          p.imageBuilder,
-          p.totalImagesInPost,
-        ),
+        text,
+        p.context,
+        inheritedRecognizer: inheritedRecognizer,
+      ),
+      EmojiRun() => _buildEmojiSpan(
+        node,
+        p,
+        inheritedRecognizer: inheritedRecognizer,
+      ),
+      MentionRun() =>
+        node.statusEmoji == null
+            ? _buildMentionTextSpan(node, p)
+            : _buildMentionSpan(node, p),
+      ImageRun() => _buildImageSpan(node, p.imageBuilder, p.totalImagesInPost),
       SpoilerRun(:final children) => _buildSpoilerSpan(children, p),
       FootnoteRefRun() => _buildFootnoteRefSpan(
-          node,
-          p.footnoteHandler,
-          p.context,
-        ),
-      LocalDateRun() => _buildLocalDateSpan(
-          node,
-          p.localDateBuilder,
-        ),
+        node,
+        p.footnoteHandler,
+        p.context,
+      ),
+      LocalDateRun() => _buildLocalDateSpan(node, p.localDateBuilder),
       ClickCountRun() => _buildClickCountSpan(node),
       MathInlineRun() => _buildMathInlineSpan(node, p.mathInlineBuilder),
     };
@@ -406,8 +401,7 @@ class InlineFlattener {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Icon(
-                  icon ??
-                      (isTag ? Icons.sell_outlined : Icons.folder_outlined),
+                  icon ?? (isTag ? Icons.sell_outlined : Icons.folder_outlined),
                   size: fontSize * 1.05,
                   color: scheme.primary,
                 ),
@@ -435,12 +429,7 @@ class InlineFlattener {
                   final bareLabel = label.startsWith('#')
                       ? label.substring(1)
                       : label;
-                  if (hashtagTapHandler?.call(
-                        context,
-                        href,
-                        ref,
-                        bareLabel,
-                      ) ==
+                  if (hashtagTapHandler?.call(context, href, ref, bareLabel) ==
                       true) {
                     return;
                   }
@@ -464,10 +453,10 @@ class InlineFlattener {
           case TextRun(:final text) || InlineCodeRun(:final text):
             buffer.write(text);
           case EmRun(:final children) ||
-                StrongRun(:final children) ||
-                StyledRun(:final children) ||
-                ColoredRun(:final children) ||
-                LinkRun(:final children):
+              StrongRun(:final children) ||
+              StyledRun(:final children) ||
+              ColoredRun(:final children) ||
+              LinkRun(:final children):
             walk(children);
           default:
             break;
@@ -505,15 +494,15 @@ class InlineFlattener {
     final recognizer = ctx == null
         ? null
         : (TapGestureRecognizer()
-          ..onTap = () {
-            final live = mount.context;
-            if (live == null) return;
-            if (isAttachment && onDownloadAttachment != null) {
-              onDownloadAttachment(live, href, filename);
-            } else {
-              handler(live, href);
-            }
-          });
+            ..onTap = () {
+              final live = mount.context;
+              if (live == null) return;
+              if (isAttachment && onDownloadAttachment != null) {
+                onDownloadAttachment(live, href, filename);
+              } else {
+                handler(live, href);
+              }
+            });
     if (recognizer != null) p.recognizers.add(recognizer);
 
     // 样式对齐 legacy(DiscourseHtmlContentWidget customStylesBuilder):
@@ -538,7 +527,8 @@ class InlineFlattener {
         child: Builder(
           builder: (iconCtx) {
             final color = Theme.of(iconCtx).colorScheme.primary;
-            final size = (DefaultTextStyle.of(iconCtx).style.fontSize ??
+            final size =
+                (DefaultTextStyle.of(iconCtx).style.fontSize ??
                     p.emojiBaseSize) *
                 0.95;
             final icon = Padding(
@@ -601,40 +591,42 @@ class InlineFlattener {
         alignment: PlaceholderAlignment.middle,
         child: Transform.translate(
           offset: Offset(0, dy),
-          child: Text.rich(TextSpan(
-            style: TextStyle(fontSize: emojiBaseSize * 0.833),
-            children: buildChildren(),
-          )),
+          child: Text.rich(
+            TextSpan(
+              style: TextStyle(fontSize: emojiBaseSize * 0.833),
+              children: buildChildren(),
+            ),
+          ),
         ),
       );
     }
 
     // TextSpan 类:按 kind 出样式。
     final style = switch (kind) {
-      InlineStyleKind.underline =>
-        const TextStyle(decoration: TextDecoration.underline),
-      InlineStyleKind.lineThrough =>
-        const TextStyle(decoration: TextDecoration.lineThrough),
+      InlineStyleKind.underline => const TextStyle(
+        decoration: TextDecoration.underline,
+      ),
+      InlineStyleKind.lineThrough => const TextStyle(
+        decoration: TextDecoration.lineThrough,
+      ),
       InlineStyleKind.small => TextStyle(fontSize: emojiBaseSize * 0.833),
       InlineStyleKind.big => TextStyle(fontSize: emojiBaseSize * 1.2),
       // mark:对齐 fwfh 默认 #ff0 底 / #000 字。
       InlineStyleKind.mark => TextStyle(
-          color: const Color(0xFF000000),
-          background: Paint()..color = const Color(0xFFFFFF00),
-        ),
+        color: const Color(0xFF000000),
+        background: Paint()..color = const Color(0xFFFFFF00),
+      ),
       // kbd/samp/tt:fwfh 默认仅等宽字体(无边框/底色)。
       InlineStyleKind.monospace => const TextStyle(
-          fontFamily: 'FiraCode',
-          fontFamilyFallback: ['monospace', 'Menlo', 'Courier'],
-        ),
+        fontFamily: 'FiraCode',
+        fontFamilyFallback: ['monospace', 'Menlo', 'Courier'],
+      ),
       // sup/sub 已在上面处理,这里不会到。
       InlineStyleKind.superscript ||
-      InlineStyleKind.subscript =>
-        const TextStyle(),
+      InlineStyleKind.subscript => const TextStyle(),
     };
     return TextSpan(style: style, children: buildChildren());
   }
-
 
   /// 行内代码渲染:NBSP 粘性内边距 + monospace 小字 TextSpan。
   ///
@@ -784,11 +776,11 @@ class InlineFlattener {
     final recognizer = ctx == null
         ? null
         : (TapGestureRecognizer()
-          ..onTap = () {
-            final live = mount.context;
-            if (live == null) return;
-            mentionHandler(live, mention.username, mention.href);
-          });
+            ..onTap = () {
+              final live = mount.context;
+              if (live == null) return;
+              mentionHandler(live, mention.username, mention.href);
+            });
     if (recognizer != null) p.recognizers.add(recognizer);
     return TextSpan(
       // recognizer 不从父 span 传播,pad 与文本叶子都得挂(整个药丸可点)
@@ -824,11 +816,7 @@ class InlineFlattener {
           // 填满整行、不矮浮也不撑高;小一号文字在内部垂直居中。
           final lineHeight = emojiBaseSize * 1.5;
           return GestureDetector(
-            onTap: () => mentionHandler(
-              ctx,
-              mention.username,
-              mention.href,
-            ),
+            onTap: () => mentionHandler(ctx, mention.username, mention.href),
             child: Container(
               height: lineHeight,
               padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -850,11 +838,7 @@ class InlineFlattener {
                   ),
                   if (mention.statusEmoji != null) ...[
                     const SizedBox(width: 2),
-                    emojiBuilder(
-                      ctx,
-                      mention.statusEmoji!,
-                      statusEmojiSize,
-                    ),
+                    emojiBuilder(ctx, mention.statusEmoji!, statusEmojiSize),
                   ],
                 ],
               ),
@@ -934,10 +918,7 @@ class InlineFlattener {
   ) {
     return WidgetSpan(
       alignment: PlaceholderAlignment.middle,
-      child: _FootnoteRefWidget(
-        node: node,
-        handler: footnoteHandler,
-      ),
+      child: _FootnoteRefWidget(node: node, handler: footnoteHandler),
     );
   }
 }
@@ -1155,20 +1136,17 @@ class _ClickCountWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor =
-        isDark ? const Color(0xFF3A3D47) : const Color(0xFFE8EBEF);
-    final textColor =
-        isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280);
+    final bgColor = isDark ? const Color(0xFF3A3D47) : const Color(0xFFE8EBEF);
+    final textColor = isDark
+        ? const Color(0xFF9CA3AF)
+        : const Color(0xFF6B7280);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Text(
-        count,
-        style: TextStyle(color: textColor, fontSize: 10),
-      ),
+      child: Text(count, style: TextStyle(color: textColor, fontSize: 10)),
     );
   }
 }
