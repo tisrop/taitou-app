@@ -207,6 +207,22 @@ class EditorImeClient with TextInputClient {
     );
   }
 
+  /// CJK 上屏后补判 input rules（typedChar 取光标前一字符）。
+  void _tryRulesAfterCommit(String blockId) {
+    final block = state.textBlockById(blockId);
+    final caret = state.selection?.extent.offset ?? 0;
+    if (block == null || caret <= 0 || caret > block.content.length) return;
+
+    final outcome = tryApplyInputRules(
+      state,
+      blockId,
+      typedChar: block.content.text[caret - 1],
+    );
+    if (outcome == InputRuleOutcome.hrRequest) {
+      onHorizontalRuleRequest?.call(blockId);
+    }
+  }
+
   /// 剥 pad。返回 null 表示 pad 已被 IME 删掉(= 段首退格信号)。
   static TextEditingValue? _unformat(TextEditingValue v) {
     if (!v.text.startsWith(_padChar)) return null;
@@ -328,7 +344,8 @@ class EditorImeClient with TextInputClient {
         syncFromState(show: false);
         return;
       }
-      sanitizedText = sanitizedText.substring(0, rawDiff.start) +
+      sanitizedText =
+          sanitizedText.substring(0, rawDiff.start) +
           withoutBreaks +
           sanitizedText.substring(rawDiff.start + rawDiff.inserted.length);
       for (var i = 0; i < rawDiff.inserted.length; i++) {
@@ -361,9 +378,11 @@ class EditorImeClient with TextInputClient {
           composing: composing,
         );
       } else if (state.hasComposing) {
-        // composing 刚结束的收尾通知(无文本变化):清标记 + 封历史口。
+        // composing 刚结束的收尾通知（无文本变化）：清标记并封历史口。
         state.updateComposing(TextRange.empty);
         state.sealHistory();
+        // 本通知没有文本 diff，常规 input rules 路径不会执行。
+        _tryRulesAfterCommit(blockId);
       } else if (!isEcho && value.selection.isValid) {
         // 只认**全选形状**(0..len):菜单 Edit 唯一主动发的选区就是
         // Select All;其余非回显纯选区通知维持忽略(回显可能带轻微
@@ -422,6 +441,9 @@ class EditorImeClient with TextInputClient {
       if (outcome == InputRuleOutcome.hrRequest) {
         onHorizontalRuleRequest?.call(blockId);
       }
+    } else if (!composingActive && wasComposing) {
+      // 部分 IME 会把最后一次文本变化与上屏合并发送。
+      _tryRulesAfterCommit(blockId);
     }
 
     // reconcile 要与平台窗口原文比较。若插入段的换行被剥掉，文档会

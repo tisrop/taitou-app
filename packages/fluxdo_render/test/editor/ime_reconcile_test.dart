@@ -19,6 +19,7 @@ final pad = EditorImeClient.padCharForTesting;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  _cjkCommitRuleTests();
   _softBreakTests();
 
   (EditorState, EditorImeClient) makeAttached({
@@ -474,7 +475,10 @@ void _softBreakTests() {
       final offset = caret ?? text.length;
       final state = EditorState(
         blocks: [
-          TextBlock(id: 'b0', content: EditableTextContent(text: text)),
+          TextBlock(
+            id: 'b0',
+            content: EditableTextContent(text: text),
+          ),
         ],
       );
       state.updateSelection(
@@ -565,6 +569,104 @@ void _softBreakTests() {
       );
       expect(textOf(state), 'aXYZc');
       expect(state.selection!.extent.offset, 4);
+    });
+  });
+}
+
+/// CJK 上屏收尾补判 input rules（真机日志固化）。
+void _cjkCommitRuleTests() {
+  group('CJK 上屏后补判 input rules', () {
+    (EditorState, EditorImeClient) attach(String text, int caret) {
+      final state = EditorState(
+        blocks: [
+          TextBlock(
+            id: 'b0',
+            content: EditableTextContent(text: text),
+          ),
+        ],
+      );
+      state.updateSelection(
+        EditorSelection.collapsed(EditorPosition(blockId: 'b0', offset: caret)),
+      );
+      final ime = EditorImeClient(state: state);
+      ime.debugAttachToBlock(
+        'b0',
+        EditorImeClient.debugFormat(
+          TextEditingValue(
+            text: text,
+            selection: TextSelection.collapsed(offset: caret),
+          ),
+        ),
+      );
+      return (state, ime);
+    }
+
+    TextBlock blockOf(EditorState state) => state.blocks.first as TextBlock;
+
+    test('**拼音** 上屏后应用加粗', () {
+      const typing = "新版fluxdo**bian'ji'qi**";
+      final (state, ime) = attach(typing, typing.length);
+
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad新版fluxdo**编辑器**',
+          selection: const TextSelection.collapsed(offset: 15),
+          composing: const TextRange(start: 15, end: 18),
+        ),
+      );
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad新版fluxdo**编辑器**',
+          selection: const TextSelection.collapsed(offset: 18),
+        ),
+      );
+
+      expect(blockOf(state).content.text, '新版fluxdo编辑器');
+      expect(blockOf(state).content.marks.single.kind, MarkKind.strong);
+    });
+
+    test('~~拼音~~ 上屏后应用删除线', () {
+      const typing = "~~huan'wo~~";
+      final (state, ime) = attach(typing, typing.length);
+
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad~~换我~~',
+          selection: const TextSelection.collapsed(offset: 5),
+          composing: const TextRange(start: 3, end: 5),
+        ),
+      );
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad~~换我~~',
+          selection: const TextSelection.collapsed(offset: 7),
+        ),
+      );
+
+      expect(blockOf(state).content.text, '换我');
+      expect(blockOf(state).content.marks.single.kind, MarkKind.lineThrough);
+    });
+
+    test('上屏后定界符不成对时不误触发', () {
+      const typing = "**bian'ji";
+      final (state, ime) = attach(typing, typing.length);
+
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad**编辑',
+          selection: const TextSelection.collapsed(offset: 3),
+          composing: const TextRange(start: 3, end: 5),
+        ),
+      );
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad**编辑',
+          selection: const TextSelection.collapsed(offset: 5),
+        ),
+      );
+
+      expect(blockOf(state).content.text, '**编辑');
+      expect(blockOf(state).content.marks, isEmpty);
     });
   });
 }
