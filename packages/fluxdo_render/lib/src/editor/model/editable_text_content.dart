@@ -135,12 +135,49 @@ class EditableTextContent {
   /// (EmojiRun/MentionRun;M2 白名单,其他类型由 doc_converter 拦在岛外)。
   final Map<int, InlineNode> atoms;
 
+  /// 每一行独立判定大表情：忽略空白后只有 1～3 个 emoji 的行放大。
+  late final Set<int> _onlyEmojiOffsets = _collectOnlyEmojiOffsets();
+
+  /// 本段是否至少包含一行大表情，供编辑渲染放开固定行高钳制。
+  bool get hasOnlyEmojiLine => _onlyEmojiOffsets.isNotEmpty;
+
   int get length => text.length;
 
   /// 剥除文本里的裸 FFFC(用户/IME 输入不允许自带哨兵 —— 只能经
   /// [insertAtom]/fromInlines 建立原子)。
   static String sanitizeText(String input) =>
       input.contains(kAtomChar) ? input.replaceAll(kAtomChar, '') : input;
+
+  Set<int> _collectOnlyEmojiOffsets() {
+    const maxOnlyEmoji = 3;
+    final result = <int>{};
+
+    void judgeLine(int start, int end) {
+      final emojiOffsets = <int>[];
+      for (var i = start; i < end; i++) {
+        if (text[i] == kAtomChar) {
+          if (atoms[i] case EmojiRun()) {
+            emojiOffsets.add(i);
+            continue;
+          }
+          return;
+        }
+        if (text.substring(i, i + 1).trim().isNotEmpty) return;
+      }
+      if (emojiOffsets.isNotEmpty && emojiOffsets.length <= maxOnlyEmoji) {
+        result.addAll(emojiOffsets);
+      }
+    }
+
+    var lineStart = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (text[i] != '\n') continue;
+      judgeLine(lineStart, i);
+      lineStart = i + 1;
+    }
+    judgeLine(lineStart, text.length);
+    return Set.unmodifiable(result);
+  }
 
   static String _hex(Color color) =>
       '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
@@ -437,10 +474,14 @@ class EditableTextContent {
       if (piece == kAtomChar) {
         final atom = atoms[s];
         if (atom != null) {
+          final renderAtom = _withOnlyEmojiFlag(
+            atom,
+            _onlyEmojiOffsets.contains(s),
+          );
           // 原子保留 spoiler/link 包装(基础样式对原子不生效)
           out.add(
             _wrapAtom(
-              atom,
+              renderAtom,
               kinds,
               href,
               foregroundRaw,
@@ -470,6 +511,15 @@ class EditableTextContent {
       _appendMarkdownMarkers(out, marks, text.length, closing: true);
     }
     return out;
+  }
+
+  static InlineNode _withOnlyEmojiFlag(InlineNode atom, bool isOnlyEmoji) {
+    if (atom is! EmojiRun || atom.isOnlyEmoji == isOnlyEmoji) return atom;
+    return EmojiRun(
+      name: atom.name,
+      url: atom.url,
+      isOnlyEmoji: isOnlyEmoji,
+    );
   }
 
   /// Markdown 分隔符的稳定嵌套顺序（外 → 内）。关闭时反向。

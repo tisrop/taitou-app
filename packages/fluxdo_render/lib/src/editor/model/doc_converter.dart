@@ -510,18 +510,8 @@ BlockNode _textBlockToNode(TextBlock block, String Function() nextId) {
   return ParagraphNode(id: nextId(), inlines: _exportInlines(block));
 }
 
-/// toInlines + only-emoji 还原:整块恰一个 emoji 原子(无其他内容)时
-/// 标记 isOnlyEmoji(Discourse 大表情语义)。
-List<InlineNode> _exportInlines(TextBlock block) {
-  final inlines = block.content.toInlines();
-  if (inlines.length == 1 && inlines.first is EmojiRun) {
-    final e = inlines.first as EmojiRun;
-    if (!e.isOnlyEmoji) {
-      return [EmojiRun(name: e.name, url: e.url, isOnlyEmoji: true)];
-    }
-  }
-  return inlines;
-}
+/// 大表情判定由 EditableTextContent.toInlines 统一完成，编辑与导出同源。
+List<InlineNode> _exportInlines(TextBlock block) => block.content.toInlines();
 
 /// 连续 listItem run(同容器层)→ ListNode 树(深度栈重建)。
 ///

@@ -209,6 +209,7 @@ class _EditableParagraphState extends State<EditableParagraph> {
     // 行盒校正);无图段落维持强制(M1 光标稳定性:空段=满段=恒定行高,
     // emoji/mention/date 原子都不超行高,不受影响)。
     final hasImageAtom = block.content.atoms.values.any((a) => a is ImageRun);
+    final hasOnlyEmojiLine = block.content.hasOnlyEmojiLine;
     final hasSizedText = block.content.marks.any((mark) {
       if (mark.kind != MarkKind.size) return false;
       final scale = EditableTextContent.parsePct(mark.attr);
@@ -225,7 +226,8 @@ class _EditableParagraphState extends State<EditableParagraph> {
         result.span,
         strutStyle: StrutStyle.fromTextStyle(
           style,
-          forceStrutHeight: !hasImageAtom && !hasSizedText,
+          forceStrutHeight:
+              !hasImageAtom && !hasSizedText && !hasOnlyEmojiLine,
         ),
       ),
     );
