@@ -244,7 +244,12 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       widget.onFallbackToPlain?.call();
       return;
     }
-    final editor = EditorState(blocks: doc);
+    // 逃生口:导入的文档若以非空引用/岛结尾、或有相邻困住块,补顶层空段,
+    // 让光标有落点跳出(引用回复正文才不会被吸进引用块里)。只在导入这
+    // 处补,不动 EditorState 命令契约;序列化时未填的空段自动回收。
+    var gapN = 0;
+    final gapped = insertEscapeGaps(doc, () => 'e_gap_${gapN++}');
+    final editor = EditorState(blocks: gapped);
     editor.addListener(_onDocChanged);
     setState(() {
       _editor = editor;

@@ -13,6 +13,7 @@ import 'dart:math' as math;
 import 'dart:ui' show Color;
 
 import '../../node/node.dart';
+import 'doc_converter.dart';
 import 'editable_text_content.dart';
 import 'editor_block.dart';
 
@@ -21,7 +22,10 @@ import 'editor_block.dart';
 /// M5-B:按 [TextBlock.containers] 栈递归分组 —— 相邻块同容器帧 = 同一
 /// 容器实例,内层序列化完包上容器语法(`> ` 前缀 / `[quote]` / `[spoiler]`
 /// / `[details]` / callout 标记行)。
-String docToMarkdown(List<EditorBlock> doc) => _serializeLevel(doc, 0);
+/// 序列化前先回收未填的逃生口空段(编辑态为让光标有落点而补的顶层
+/// 空段),避免发送/草稿里留多余空行。
+String docToMarkdown(List<EditorBlock> doc) =>
+    _serializeLevel(stripUnusedEscapeGaps(doc), 0);
 
 String _serializeLevel(List<EditorBlock> doc, int level) {
   final chunks = <String>[];
