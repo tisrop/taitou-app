@@ -65,6 +65,7 @@ import '../template_insert_dialog.dart';
 import '../composer_shortcuts.dart' show composerShortcutHint;
 import '../markdown_toolbar.dart' show MarkdownToolbarState;
 import 'callout_edit_dialog.dart';
+import 'block_completion_rules.dart';
 import 'composer_doc_codec.dart';
 import 'html_to_markdown.dart';
 import 'local_date_edit_dialog.dart';
@@ -375,6 +376,19 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         event.logicalKey == LogicalKeyboardKey.keyK &&
         HardwareKeyboard.instance.isControlPressed) {
       _insertLink();
+      return true;
+    }
+    final isEnterKey = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    final keyboard = HardwareKeyboard.instance;
+    if (_slashOverlay == null &&
+        _mentionOverlay == null &&
+        isEnterKey &&
+        !keyboard.isControlPressed &&
+        !keyboard.isMetaPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isShiftPressed &&
+        _tryBlockCompletion()) {
       return true;
     }
     if (_slashOverlay == null) return false;
@@ -986,6 +1000,96 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     if (editor == null) return;
     final url = EmojiHandler().getEmojiUrl(name);
     editor.insertAtom(EmojiRun(name: name, url: url));
+  }
+
+  // -----------------------------------------------------------------
+  // 块完成规则(回车触发 → cook → 岛)
+  // -----------------------------------------------------------------
+
+  /// 回车时判定当前位置能否收尾成一个可渲染结构;命中则替换。
+  ///
+  /// 判定逻辑在 [detectBlockCompletion](纯函数,单测覆盖);这里只负责
+  /// 前置条件与真正的替换。返回 true = 已接管这次回车。
+  bool _tryBlockCompletion() {
+    final editor = _editor;
+    if (editor == null || editor.hasComposing) return false;
+    final sel = editor.selection;
+    if (sel == null || !sel.isCollapsed) return false;
+    final blocks = editor.blocks;
+    final i = blocks.indexWhere((b) => b.id == sel.extent.blockId);
+    if (i < 0 || blocks[i] is! TextBlock) return false;
+
+    // 软换行让一个 TextBlock 可以包含多行;块完成按逻辑行判定，
+    // 否则正文后的 ``` / $$ / 表头无法匹配行首行尾规则。
+    final lines = <String?>[];
+    final anchors = <_LineAnchor?>[];
+    for (var blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+      final block = blocks[blockIndex];
+      if (block is! TextBlock) {
+        lines.add(null);
+        anchors.add(null);
+        continue;
+      }
+      final text = block.content.text;
+      var start = 0;
+      while (true) {
+        final newline = text.indexOf('\n', start);
+        final end = newline < 0 ? text.length : newline;
+        lines.add(text.substring(start, end));
+        anchors.add(
+          _LineAnchor(blockIndex: blockIndex, start: start, end: end),
+        );
+        if (newline < 0) break;
+        start = newline + 1;
+      }
+    }
+
+    // 只在当前逻辑行末尾收尾;行中回车仍由内核正常分段。
+    final caret = sel.extent.offset;
+    final lineIndex = anchors.indexWhere(
+      (anchor) =>
+          anchor != null && anchor.blockIndex == i && anchor.end == caret,
+    );
+    if (lineIndex < 0) return false;
+
+    final completion = detectBlockCompletion(lines, lineIndex);
+    if (completion == null) return false;
+    final from = anchors[completion.from]!;
+    final to = anchors[completion.to]!;
+    _replaceRangeWithSnippet(
+      blocks[from.blockIndex].id,
+      from.start,
+      blocks[to.blockIndex].id,
+      to.end,
+      completion.markdown,
+      splitAfter: completion.splitAfter,
+    );
+    return true;
+  }
+
+  /// 删除指定文本范围，再把 [markdown] 经 cook 插入为富内容。
+  void _replaceRangeWithSnippet(
+    String fromBlockId,
+    int fromOffset,
+    String toBlockId,
+    int toOffset,
+    String markdown, {
+    bool splitAfter = false,
+  }) {
+    final editor = _editor;
+    if (editor == null) return;
+    editor.updateSelection(
+      EditorSelection(
+        base: EditorPosition(blockId: fromBlockId, offset: fromOffset),
+        extent: EditorPosition(blockId: toBlockId, offset: toOffset),
+      ),
+    );
+    editor.deleteSelection();
+    unawaited(() async {
+      await insertMarkdownSnippet(markdown);
+      if (!mounted || !identical(_editor, editor)) return;
+      if (splitAfter) editor.splitBlock();
+    }());
   }
 
   /// 万能插入原语:markdown 片段 → cook 链路 → 富内容块,粘贴语义并入
@@ -3271,6 +3375,19 @@ class _FloatingPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 逻辑行在编辑文档中的位置映射。
+class _LineAnchor {
+  const _LineAnchor({
+    required this.blockIndex,
+    required this.start,
+    required this.end,
+  });
+
+  final int blockIndex;
+  final int start;
+  final int end;
 }
 
 /// 斜杠菜单行:图标底板 + 紧凑行高 + 圆角选中态(Notion 风)。
