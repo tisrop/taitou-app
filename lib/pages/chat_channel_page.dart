@@ -62,10 +62,13 @@ class ChatChannelPage extends ConsumerStatefulWidget {
   ConsumerState<ChatChannelPage> createState() => _ChatChannelPageState();
 }
 
-class _ChatChannelPageState extends ConsumerState<ChatChannelPage> {
+class _ChatChannelPageState extends ConsumerState<ChatChannelPage>
+    with WidgetsBindingObserver {
   final AutoScrollController _scrollController = AutoScrollController();
   static const _channelSearchDebounceDuration = Duration(milliseconds: 350);
   static const _channelSearchPageSize = 40;
+  static const _readReceiptDebounceDuration = Duration(milliseconds: 250);
+  static const _nearLatestThreshold = 96.0;
 
   final TextEditingController _inputController = TextEditingController();
   final FocusNode _inputFocusNode = FocusNode();
@@ -74,6 +77,8 @@ class _ChatChannelPageState extends ConsumerState<ChatChannelPage> {
   final FocusNode _channelSearchFocusNode = FocusNode();
   TextSelection _lastInputSelection = const TextSelection.collapsed(offset: 0);
   Timer? _channelSearchDebounce;
+  Timer? _readReceiptDebounce;
+  bool _appIsActive = true;
   bool _channelSearchVisible = false;
   bool _channelSearchLoading = false;
   bool _channelSearchNavigating = false;
@@ -114,6 +119,11 @@ class _ChatChannelPageState extends ConsumerState<ChatChannelPage> {
   void initState() {
     super.initState();
     _channel = widget.channel;
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _appIsActive =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
+    WidgetsBinding.instance.addObserver(this);
+    _scrollController.addListener(_handleChatScroll);
     _inputController.addListener(_rememberInputSelection);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_loadChannel());
@@ -121,6 +131,48 @@ class _ChatChannelPageState extends ConsumerState<ChatChannelPage> {
         unawaited(_loadInitialMessage());
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (ModalRoute.of(context)?.isCurrent == true) {
+      _scheduleLatestVisibleRead();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appIsActive = state == AppLifecycleState.resumed;
+    if (_appIsActive) _scheduleLatestVisibleRead();
+  }
+
+  void _handleChatScroll() {
+    if (_isNearLatest) _scheduleLatestVisibleRead();
+  }
+
+  bool get _isNearLatest {
+    if (!_scrollController.hasClients) return false;
+    final position = _scrollController.position;
+    return position.pixels <= position.minScrollExtent + _nearLatestThreshold;
+  }
+
+  void _scheduleLatestVisibleRead() {
+    _readReceiptDebounce?.cancel();
+    _readReceiptDebounce = Timer(
+      _readReceiptDebounceDuration,
+      _reportLatestVisibleRead,
+    );
+  }
+
+  void _reportLatestVisibleRead() {
+    if (!mounted || !_appIsActive || !_isNearLatest) return;
+    if (ModalRoute.of(context)?.isCurrent != true) return;
+
+    final provider = chatListProvider(widget.channelId);
+    final messages = ref.read(provider).messages;
+    if (messages.isEmpty) return;
+    unawaited(ref.read(provider.notifier).markReadThrough(messages.last.id));
   }
 
   Future<void> _loadChannel() async {
@@ -491,7 +543,10 @@ class _ChatChannelPageState extends ConsumerState<ChatChannelPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _channelSearchDebounce?.cancel();
+    _readReceiptDebounce?.cancel();
+    _scrollController.removeListener(_handleChatScroll);
     _scrollController.dispose();
     _inputController.removeListener(_rememberInputSelection);
     _inputController.dispose();
@@ -922,7 +977,7 @@ class _ChatChannelPageState extends ConsumerState<ChatChannelPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          _scrollController.position.minScrollExtent,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
         );
@@ -1004,7 +1059,16 @@ class _ChatChannelPageState extends ConsumerState<ChatChannelPage> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(chatListProvider(widget.channelId));
+    final provider = chatListProvider(widget.channelId);
+    ref.listen<int?>(
+      provider.select(
+        (state) => state.messages.isEmpty ? null : state.messages.last.id,
+      ),
+      (_, messageId) {
+        if (messageId != null) _scheduleLatestVisibleRead();
+      },
+    );
+    final state = ref.watch(provider);
     // 乐观消息被服务端 sent 事件替换后 isLocal 会变 false，得靠用户 id 认「自己」
     final currentUserId = ref.watch(currentUserProvider).value?.id;
 

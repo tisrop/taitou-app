@@ -14,10 +14,31 @@ import 'package:fluxdo/providers/chat/chat_list_provider.dart';
 import 'package:fluxdo/providers/core_providers.dart';
 
 class _TestChatListNotifier extends ChatListNotifier {
-  _TestChatListNotifier(super.channelId);
+  _TestChatListNotifier(
+    super.channelId, {
+    this.initialState = const ChatListState(isLoading: false),
+  });
+
+  final ChatListState initialState;
+  final List<int> markedReadMessageIds = [];
 
   @override
-  ChatListState build() => const ChatListState(isLoading: false);
+  ChatListState build() => initialState;
+
+  @override
+  Future<void> send(String text, {ChatMessage? inReplyTo}) async {
+    final nextId = state.messages.isEmpty ? 1 : state.messages.last.id + 1;
+    state = state.copyWith(messages: [...state.messages, _message(nextId)]);
+  }
+
+  @override
+  Future<void> markReadThrough(int messageId) async {
+    markedReadMessageIds.add(messageId);
+  }
+
+  void emitMessage(ChatMessage message) {
+    state = state.copyWith(messages: [...state.messages, message]);
+  }
 }
 
 class _LoadingChatListNotifier extends ChatListNotifier {
@@ -182,6 +203,105 @@ void main() {
     expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
+  testWidgets('发送消息后反向列表回到最新消息', (tester) async {
+    const channel = ChatChannel(id: 16, title: '长频道', chatableType: 'Category');
+    final notifier = _TestChatListNotifier(
+      channel.id,
+      initialState: ChatListState(
+        messages: List.generate(40, (index) => _message(index + 1)),
+        isLoading: false,
+      ),
+    );
+
+    await tester.pumpWidget(_testApp(channel, chatListNotifier: notifier));
+    await tester.pumpAndSettle();
+
+    final position = _messageListPosition(tester);
+    expect(position.maxScrollExtent, greaterThan(0));
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), '新消息');
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pumpAndSettle();
+
+    expect(position.pixels, closeTo(position.minScrollExtent, 1));
+  });
+
+  testWidgets('仅在频道前台且位于最新消息附近时上报实时消息已读', (tester) async {
+    const channel = ChatChannel(
+      id: 17,
+      title: '实时频道',
+      chatableType: 'Category',
+    );
+    final notifier = _TestChatListNotifier(
+      channel.id,
+      initialState: ChatListState(
+        messages: List.generate(40, (index) => _message(index + 1)),
+        isLoading: false,
+      ),
+    );
+
+    await tester.pumpWidget(_testApp(channel, chatListNotifier: notifier));
+    await tester.pumpAndSettle();
+    notifier.markedReadMessageIds.clear();
+
+    notifier.emitMessage(_message(41));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(notifier.markedReadMessageIds, contains(41));
+
+    final position = _messageListPosition(tester);
+    position.jumpTo(position.maxScrollExtent);
+    await tester.pump();
+    notifier.markedReadMessageIds.clear();
+
+    notifier.emitMessage(_message(42));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(notifier.markedReadMessageIds, isNot(contains(42)));
+
+    position.jumpTo(position.minScrollExtent);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(notifier.markedReadMessageIds, contains(42));
+
+    notifier.markedReadMessageIds.clear();
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    unawaited(
+      navigator.push<void>(
+        MaterialPageRoute<void>(builder: (_) => const Scaffold()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    notifier.emitMessage(_message(43));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(notifier.markedReadMessageIds, isNot(contains(43)));
+
+    navigator.pop();
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(notifier.markedReadMessageIds, contains(43));
+
+    notifier.markedReadMessageIds.clear();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    notifier.emitMessage(_message(44));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(notifier.markedReadMessageIds, isNot(contains(44)));
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(notifier.markedReadMessageIds, contains(44));
+  });
+
   testWidgets('空的公开频道继续展示通用空状态和输入提示', (tester) async {
     const channel = ChatChannel(
       id: 13,
@@ -207,6 +327,7 @@ void main() {
 Widget _testApp(
   ChatChannel channel, {
   bool loadingChatList = false,
+  _TestChatListNotifier? chatListNotifier,
   User? currentUser,
   List<NavigatorObserver> navigatorObservers = const [],
 }) {
@@ -218,9 +339,9 @@ Widget _testApp(
   return ProviderScope(
     overrides: [
       !loadingChatList
-          ? chatListProvider(
-              channel.id,
-            ).overrideWith(() => _TestChatListNotifier(channel.id))
+          ? chatListProvider(channel.id).overrideWith(
+              () => chatListNotifier ?? _TestChatListNotifier(channel.id),
+            )
           : chatListProvider(
               channel.id,
             ).overrideWith(() => _LoadingChatListNotifier(channel.id)),
@@ -249,4 +370,23 @@ Widget _testApp(
       ),
     ),
   );
+}
+
+ChatMessage _message(int id) {
+  return ChatMessage(
+    id: id,
+    message: '消息 $id',
+    createdAt: DateTime.utc(2026, 1, 1, 0, id),
+    chatChannelId: 1,
+    user: const ChatMessageUser(id: 2, username: 'other-user'),
+  );
+}
+
+ScrollPosition _messageListPosition(WidgetTester tester) {
+  final scrollable = find.descendant(
+    of: find.byType(ListView),
+    matching: find.byType(Scrollable),
+  );
+  expect(scrollable, findsOneWidget);
+  return tester.state<ScrollableState>(scrollable).position;
 }

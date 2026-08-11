@@ -85,6 +85,9 @@ class ChatListNotifier extends Notifier<ChatListState> {
   bool _disposed = false;
   bool _flushScheduled = false;
   int _loadGeneration = 0;
+  int _lastReadMessageId = 0;
+  int? _pendingReadMessageId;
+  Future<void>? _readReportInFlight;
 
   /// 待并入的新消息/编辑；value 为该消息对应的本地暂存 id（仅 sent 事件有）
   final List<_IncomingMessage> _pendingIncoming = [];
@@ -153,6 +156,7 @@ class ChatListNotifier extends Notifier<ChatListState> {
       _pendingIncoming.clear();
       _pendingProcessed.clear();
       _pendingDeleted.clear();
+      _pendingReadMessageId = null;
       if (_rootChannel != null && _rootCallback != null) {
         messageBus.unsubscribe(_rootChannel!, _rootCallback);
       }
@@ -186,10 +190,7 @@ class ChatListNotifier extends Notifier<ChatListState> {
       );
       // 上报已读
       if (sorted.isNotEmpty) {
-        final lastId = sorted.last.id;
-        unawaited(
-          service.markChatChannelRead(channelId, lastId).catchError((_) {}),
-        );
+        unawaited(markReadThrough(sorted.last.id));
       }
     } catch (e) {
       if (_disposed || generation != _loadGeneration) return;
@@ -202,6 +203,56 @@ class ChatListNotifier extends Notifier<ChatListState> {
     final service = ref.read(discourseServiceProvider);
     state = const ChatListState();
     await _loadInitial(service, generation: ++_loadGeneration);
+  }
+
+  /// 将频道已读游标推进到 [messageId]。
+  ///
+  /// 同一时刻只发送一个请求；并发到达的更新会合并为最大的消息 id，避免实时
+  /// 消息密集到达时逐条请求。失败的游标会保留，下一次可见性触发时重试。
+  Future<void> markReadThrough(int messageId) async {
+    if (_disposed || messageId <= _lastReadMessageId) return;
+
+    final pending = _pendingReadMessageId;
+    if (pending == null || messageId > pending) {
+      _pendingReadMessageId = messageId;
+    }
+
+    final inFlight = _readReportInFlight;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+
+    final report = _drainReadReports();
+    _readReportInFlight = report;
+    try {
+      await report;
+    } finally {
+      if (identical(_readReportInFlight, report)) {
+        _readReportInFlight = null;
+      }
+    }
+  }
+
+  Future<void> _drainReadReports() async {
+    final service = ref.read(discourseServiceProvider);
+    while (!_disposed) {
+      final messageId = _pendingReadMessageId;
+      if (messageId == null || messageId <= _lastReadMessageId) return;
+      _pendingReadMessageId = null;
+
+      try {
+        await service.markChatChannelRead(channelId, messageId);
+      } catch (_) {
+        if (!_disposed && messageId > (_pendingReadMessageId ?? 0)) {
+          _pendingReadMessageId = messageId;
+        }
+        return;
+      }
+
+      if (_disposed) return;
+      _lastReadMessageId = messageId;
+    }
   }
 
   /// 以指定消息为锚点加载其前后消息，供搜索结果跳转。

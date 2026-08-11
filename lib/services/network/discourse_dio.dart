@@ -24,15 +24,20 @@ class DiscourseDio {
   /// 只对幂等读请求做短暂网络故障重试。
   ///
   /// 业务层的“加载失败，点重试又好了”通常是首个请求撞上连接抖动、
-  /// 网关 5xx 或服务端 429。写请求不能在这里自动重放，避免重复发帖、
+  /// 网关 5xx。写请求不能在这里自动重放，避免重复发帖、
   /// 重复投票等副作用；CF challenge / 鉴权错误也交给对应拦截器处理。
-  static bool _shouldRetryReadRequest(DioException error, int attempt) {
+  @visibleForTesting
+  static bool shouldRetryReadRequest(DioException error, int attempt) {
     final method = error.requestOptions.method.toUpperCase();
     if (!_retryableReadMethods.contains(method)) return false;
 
     if (error.type == DioExceptionType.badResponse) {
       final status = error.response?.statusCode;
-      return status != null && defaultRetryableStatuses.contains(status);
+      // 429 的等待窗口由服务端 Retry-After / wait_seconds 决定，固定的短延迟
+      // 会在窗口内重复撞限流；交给 ErrorInterceptor 保留真实退避信息。
+      return status != null &&
+          status != status429TooManyRequests &&
+          defaultRetryableStatuses.contains(status);
     }
 
     // 不重试 cancel、CF challenge 等业务错误；只覆盖真实的传输层抖动。
@@ -124,7 +129,7 @@ class DiscourseDio {
             Duration(seconds: 2),
             Duration(seconds: 4),
           ],
-          retryEvaluator: _shouldRetryReadRequest,
+          retryEvaluator: shouldRetryReadRequest,
         ),
       );
     }
