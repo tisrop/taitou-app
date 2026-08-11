@@ -779,6 +779,9 @@ class InlineFlattener {
     final recognizer = ctx == null
         ? null
         : (TapGestureRecognizer()
+            ..onTapDown = (details) {
+              lastInlineTapGlobalPosition = details.globalPosition;
+            }
             ..onTap = () {
               final live = mount.context;
               if (live == null) return;
