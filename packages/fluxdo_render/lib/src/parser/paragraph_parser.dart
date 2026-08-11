@@ -345,10 +345,11 @@ class ParagraphParser {
                   out.add(BlankLineNode(id: nextId()));
                   break;
                 }
-                // <p> 内可能包裹「块级媒体」(video / audio / video-placeholder
-                // 容器):Discourse cooked 把上传视频/音频塞进 <p>,但语义是块级。
+                // <p> 内可能包裹「块级媒体」(video / audio / iframe /
+                // video-placeholder 容器):Discourse cooked 会把媒体塞进 <p>,
+                // 但语义仍是块级。
                 // 扫直属子节点:遇媒体块先 flush 已累积 inline 成 ParagraphNode,
-                // 再单独产 VideoNode/AudioNode(保留文档顺序);其余按 inline 收。
+                // 再单独产对应媒体节点(保留文档顺序);其余按 inline 收。
                 final pInlines = <InlineNode>[];
                 void flushPInlines() {
                   _normalizeWhitespace(pInlines);
@@ -2673,15 +2674,16 @@ class ParagraphParser {
 
   bool _isInlineTag(String tag) => _inlineTags.contains(tag);
 
-  /// 判断元素是否为「块级媒体」(video / audio / video-placeholder 容器),
+  /// 判断元素是否为「块级媒体」(video / audio / iframe / video-placeholder 容器),
   /// 这些在 cooked 里常被包进 `<p>`(Discourse 段落包裹),但语义是块级,
-  /// 需从段落里提出来单独成 VideoNode / AudioNode。
+  /// 需从段落里提出来单独成为对应媒体节点。
   ///
   /// 命中返回对应 BlockNode,否则返回 null(交回 inline 流处理)。
   BlockNode? _mediaBlockFromElement(dom.Element el, String Function() nextId) {
     final tag = el.localName?.toLowerCase() ?? '';
     if (tag == 'video') return _parseVideo(el, nextId);
     if (tag == 'audio') return _parseAudio(el, nextId);
+    if (tag == 'iframe') return _parseIframe(el, nextId);
     if (tag == 'div' &&
         (el.classes.contains('video-placeholder-container') ||
             el.classes.contains('video-container') ||
