@@ -91,6 +91,14 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
   final List<int> _pendingNewPostIds = [];
   bool _isLoadingNewPosts = false;
 
+  /// 新帖批量加载的连续失败次数。超过上限后停止自动重试并暴露失败态，
+  /// 避免话题被删/网络长期不可用/权限错误时每 3 秒无限重试。
+  int _newPostLoadFailures = 0;
+  static const int _maxNewPostLoadFailures = 3;
+
+  /// 新帖批量加载是否已因连续失败而停止自动重试（视图层展示重试入口）。
+  bool get newPostLoadFailed => _newPostLoadFailures >= _maxNewPostLoadFailures;
+
   bool get hasMoreAfter => _hasMoreAfter;
   bool get hasMoreBefore => _hasMoreBefore;
   bool get isLoadingPrevious => _isLoadingPrevious;

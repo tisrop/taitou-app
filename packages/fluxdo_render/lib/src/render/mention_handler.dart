@@ -25,12 +25,6 @@ typedef MentionTapHandler = void Function(
   String href,
 );
 
-/// 最近一次行内点击的全局坐标(mention recognizer 在 `onTapDown` 里写)。
-///
-/// Mention 是 TextSpan/WidgetSpan 而不是独立 widget,宿主拿不到被点击
-/// mention 自己的 RenderBox；可用此坐标把用户卡片锚在实际点击位置。
-Offset? lastInlineTapGlobalPosition;
-
 /// 默认 mention handler —— 仅打印 debug 信息,不跳转。
 ///
 /// 主项目调用方必须自行注入实际 handler;留这个 default 是为了

@@ -5,8 +5,6 @@ import 'package:fluxdo/widgets/layout/draggable_divider.dart';
 import 'package:fluxdo/widgets/layout/master_detail_layout.dart';
 
 void main() {
-  setUp(() => NavChromeMetrics.railWidth = 72);
-
   Future<void> pumpLayout(WidgetTester tester, {required double width}) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = Size(width, 800);
@@ -15,15 +13,18 @@ void main() {
 
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: MasterDetailLayout(
-            master: ColoredBox(
-              key: ValueKey('master-content'),
-              color: Colors.blue,
-            ),
-            detail: ColoredBox(
-              key: ValueKey('detail-content'),
-              color: Colors.green,
+        home: NavChromeScope(
+          railWidth: 72,
+          child: Scaffold(
+            body: MasterDetailLayout(
+              master: ColoredBox(
+                key: ValueKey('master-content'),
+                color: Colors.blue,
+              ),
+              detail: ColoredBox(
+                key: ValueKey('detail-content'),
+                color: Colors.green,
+              ),
             ),
           ),
         ),

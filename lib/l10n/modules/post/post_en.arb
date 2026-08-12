@@ -59,6 +59,22 @@
   "nested_lineStyleStraight": "Simple vertical lines",
   "poll_closed": "Closed",
   "poll_count": "Count",
+  "poll_maxSelection": "Select at most {count} options",
+  "@poll_maxSelection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "poll_minSelection": "Select at least {count} options",
+  "@poll_minSelection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "poll_percentage": "Percentage",
   "poll_undo": "Undo",
   "poll_viewResults": "View results",

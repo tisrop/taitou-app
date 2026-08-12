@@ -111,7 +111,6 @@ void main() {
     tester.view.physicalSize = const Size(900, 600);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    addTearDown(() => NavChromeMetrics.railWidth = 72);
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
 
@@ -154,7 +153,10 @@ void main() {
       ),
     );
 
-    expect(NavChromeMetrics.railWidth, 180);
+    final navChromeScope = tester.widget<NavChromeScope>(
+      find.byType(NavChromeScope),
+    );
+    expect(navChromeScope.railWidth, 180);
     expect(find.byKey(const ValueKey('detail-content')), findsNothing);
   });
 }

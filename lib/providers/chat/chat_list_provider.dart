@@ -297,6 +297,7 @@ class ChatListNotifier extends Notifier<ChatListState> {
     final messages = state.messages;
     if (messages.isEmpty) return;
     final oldestId = messages.first.id;
+    final generation = _loadGeneration;
     state = state.copyWith(isLoadingMore: true);
     try {
       final service = ref.read(discourseServiceProvider);
@@ -306,7 +307,10 @@ class ChatListNotifier extends Notifier<ChatListState> {
         direction: 'past',
         targetMessageId: oldestId,
       );
-      if (_disposed) return;
+      // loadAround/_loadInitial 会 ++_loadGeneration 并以锚点窗口整体替换
+      // state;本次历史页基于旧快照,必须校验 generation,否则会用过期
+      // 消息列表覆盖跳转后的锚点窗口。
+      if (_disposed || generation != _loadGeneration) return;
       final newMessages = page.messages.where((m) => m.id < oldestId).toList();
       state = state.copyWith(
         messages: [...newMessages, ...messages],
@@ -314,7 +318,7 @@ class ChatListNotifier extends Notifier<ChatListState> {
         isLoadingMore: false,
       );
     } catch (e) {
-      if (_disposed) return;
+      if (_disposed || generation != _loadGeneration) return;
       state = state.copyWith(isLoadingMore: false);
     }
   }

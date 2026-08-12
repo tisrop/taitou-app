@@ -6,8 +6,9 @@ part of '../topic_detail_provider.dart';
 ///
 /// 已加载到底部时，新 ID 不能先进入 stream：否则最后一帖会瞬间不再是
 /// stream 末尾，依赖 `hasMoreAfter == false` 的推荐区等底部 sliver 会先被
-/// 拆掉、待帖子内容返回后再装回，造成视口闪跳。此时只先更新计数，等内容
-/// 拉取成功后再让 ID 与帖子同帧落地。
+/// 拆掉、待帖子内容返回后再装回，造成视口闪跳。此时只把 ID 记入待加载
+/// 队列（计数也不提前改：由 [_loadPendingNewPosts] 落地后按实际拉回的
+/// 帖子数递增，避免与 `addPost` 的递增叠加成双重计数）。
 @visibleForTesting
 ({TopicDetail detail, bool shouldLoadImmediately}) resolveNewPostCreatedUpdate({
   required TopicDetail currentDetail,
@@ -16,7 +17,7 @@ part of '../topic_detail_provider.dart';
 }) {
   if (!hasMoreAfter) {
     return (
-      detail: currentDetail.copyWith(postsCount: currentDetail.postsCount + 1),
+      detail: currentDetail,
       shouldLoadImmediately: true,
     );
   }
@@ -239,6 +240,9 @@ extension LoadingMethods on TopicDetailNotifier {
   Future<void> _loadPendingNewPosts() async {
     if (_isLoadingNewPosts) return;
     if (_pendingNewPostIds.isEmpty) return;
+    if (_newPostLoadFailures >= TopicDetailNotifier._maxNewPostLoadFailures) {
+      return;
+    }
 
     _isLoadingNewPosts = true;
     final postIds = List<int>.from(_pendingNewPostIds);
@@ -292,7 +296,11 @@ extension LoadingMethods on TopicDetailNotifier {
       // 这属于锚点上方高度变化，需要同帧补偿。
       AnchorGuardSliver.arm();
 
+      // 底部分支在 resolveNewPostCreatedUpdate 不递增 postsCount（避免
+      // 与 addPost 的双重计数），这里按实际落地的全新帖数补上。
+      _newPostLoadFailures = 0;
       state = AsyncValue.data(currentDetail.copyWith(
+        postsCount: currentDetail.postsCount + newPosts.length,
         postStream: PostStream(
           posts: mergedPosts,
           stream: mergedStream,
@@ -301,9 +309,17 @@ extension LoadingMethods on TopicDetailNotifier {
       ));
     } catch (e) {
       // 失败时将 post IDs 放回队列，退避后再重试，避免断网时空转。
-      _pendingNewPostIds.insertAll(0, postIds);
-      debugPrint('[TopicDetail] 加载新回复失败: $e');
-      await Future.delayed(const Duration(seconds: 3));
+      // 若该帖已由 addPost 落地（userPost 或 MessageBus 回声），不再重试，
+      // 避免删除话题/权限错误等场景下无限重试。
+      final stillMissing = postIds
+          .where((id) => !(state.value?.postStream.posts.any((p) => p.id == id) ?? true))
+          .toList();
+      if (stillMissing.isNotEmpty) {
+        _pendingNewPostIds.insertAll(0, stillMissing);
+        _newPostLoadFailures++;
+        debugPrint('[TopicDetail] 加载新回复失败($_newPostLoadFailures/${TopicDetailNotifier._maxNewPostLoadFailures}): $e');
+        await Future.delayed(const Duration(seconds: 3));
+      }
     } finally {
       _isLoadingNewPosts = false;
       // 如果在加载期间又有新帖子进入队列，继续加载。
@@ -311,6 +327,13 @@ extension LoadingMethods on TopicDetailNotifier {
         _loadPendingNewPosts();
       }
     }
+  }
+
+  /// 手动重试加载新帖子（新帖加载连续失败后由视图层调用）。
+  void retryLoadPendingNewPosts() {
+    if (_pendingNewPostIds.isEmpty) return;
+    _newPostLoadFailures = 0;
+    _loadPendingNewPosts();
   }
 
   /// 使用新的起始帖子号重新加载数据

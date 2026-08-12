@@ -17,7 +17,7 @@ TopicDetail _detail() {
 
 void main() {
   group('实时新回复落地计划', () {
-    test('已加载到底部时不提前把新 ID 插入 stream', () {
+    test('已加载到底部时不提前把新 ID 插入 stream 或递增计数', () {
       final current = _detail();
 
       final update = resolveNewPostCreatedUpdate(
@@ -26,8 +26,10 @@ void main() {
         hasMoreAfter: false,
       );
 
+      // 计数与 stream 都留给 _loadPendingNewPosts 落地后统一更新，
+      // 避免与 addPost 的递增叠加成双重计数。
       expect(update.shouldLoadImmediately, isTrue);
-      expect(update.detail.postsCount, 3);
+      expect(update.detail.postsCount, 2);
       expect(update.detail.postStream.stream, [101, 102]);
       expect(update.detail.postStream.posts, same(current.postStream.posts));
     });

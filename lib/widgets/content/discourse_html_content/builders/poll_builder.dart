@@ -7,6 +7,7 @@ import '../../../../models/topic.dart';
 import 'package:dio/dio.dart';
 import '../../../../services/app_error_handler.dart';
 import '../../../../services/discourse/discourse_service.dart';
+import '../../../../services/toast_service.dart';
 import '../../../../utils/time_utils.dart';
 import '../../../../l10n/s.dart';
 
@@ -420,7 +421,27 @@ class _PollWidgetState extends State<_PollWidget> {
   }
 
   Future<void> _submitMultipleVote() async {
-    if (_userVotes.isEmpty || _isVoting) return;
+    if (_isVoting) return;
+
+    // 客户端校验可选数量区间：min/max 来自 poll 数据，防止服务端拒绝后
+    // 只回显无上下文的报错。
+    final votes = _userVotes;
+    final min = _poll.min;
+    final max = _poll.maxChoices;
+    if (votes.isEmpty) {
+      ToastService.showError(
+        S.current.poll_minSelection(min == 1 ? 1 : min),
+      );
+      return;
+    }
+    if (votes.length < min) {
+      ToastService.showError(S.current.poll_minSelection(min));
+      return;
+    }
+    if (max > 0 && votes.length > max) {
+      ToastService.showError(S.current.poll_maxSelection(max));
+      return;
+    }
 
     setState(() => _isVoting = true);
 
@@ -428,7 +449,7 @@ class _PollWidgetState extends State<_PollWidget> {
       final result = await DiscourseService().votePoll(
         postId: widget.post.id,
         pollName: _poll.name,
-        options: _userVotes,
+        options: votes,
       );
 
       if (result != null && mounted) {
@@ -436,7 +457,7 @@ class _PollWidgetState extends State<_PollWidget> {
           _poll = result;
           _showResults = _shouldShowResults();
         });
-        widget.onPollUpdated(result, _userVotes);
+        widget.onPollUpdated(result, votes);
       }
     } on DioException catch (_) {
       // 网络错误已由 ErrorInterceptor 处理

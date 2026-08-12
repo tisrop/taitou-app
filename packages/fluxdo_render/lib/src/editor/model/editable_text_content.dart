@@ -523,11 +523,13 @@ class EditableTextContent {
   }
 
   /// Markdown 分隔符的稳定嵌套顺序（外 → 内）。关闭时反向。
+  /// 与 markdown_serializer.dart 的 _markOrder 保持一致：
+  /// 背景色在外、文字色在内（[bgcolor][color]…[/color][/bgcolor]）。
   static int _markdownMarkOrder(MarkKind kind) => switch (kind) {
     MarkKind.spoilerInline => 0,
     MarkKind.link => 1,
-    MarkKind.textColor => 2,
-    MarkKind.bgColor => 3,
+    MarkKind.bgColor => 2,
+    MarkKind.textColor => 3,
     MarkKind.size => 4,
     MarkKind.strong => 5,
     MarkKind.em => 6,
@@ -962,19 +964,30 @@ class EditableTextContent {
   /// 对 `[start, end)` 精确设置 marks 集合(pending style 应用:
   /// 先清区间上全部 kind,再施加 [kinds])。
   ///
-  /// **link 不参与**:pending 机制不带 attr,applyMark(link) 会产
-  /// href=null 的坏链接;链接中间打字的延续由 [insert] 的区间拉伸
-  /// 天然保证,边界打字不延续(主流编辑器语义)。
+  /// **带 attr 的 kind 不参与**(link/textColor/bgColor/size):pending
+  /// 机制不带 attr,applyMark 会产 href=null 的坏链接、`[color=]` 等
+  /// 空值 BBCode;它们的中间打字延续由 [insert] 的区间拉伸天然保证,
+  /// 边界打字不延续(主流编辑器语义)。
   EditableTextContent applyExactMarks(int start, int end, Set<MarkKind> kinds) {
     var c = this;
     for (final kind in MarkKind.values) {
-      if (kind == MarkKind.link) continue;
+      if (!_pendingMarkKind(kind)) continue;
       c = kinds.contains(kind)
           ? c.applyMark(start, end, kind)
           : c.removeMark(start, end, kind);
     }
     return c;
   }
+
+  /// 参与 pending(折叠光标样式)的 kind:带 attr 的 mark 无法经无 attr
+  /// 的 pending 重建(见 [applyExactMarks]),一律排除。
+  static bool _pendingMarkKind(MarkKind kind) => switch (kind) {
+    MarkKind.link ||
+    MarkKind.textColor ||
+    MarkKind.bgColor ||
+    MarkKind.size => false,
+    _ => true,
+  };
 
   /// [offset] 光标处的"当前样式集"(pending 初值/工具栏高亮):
   /// 取光标**前一个字符**上的 marks(行首取后一个);原子字符视为无样式。
@@ -986,7 +999,7 @@ class EditableTextContent {
     if (isAtomAt(probe)) return const {};
     return {
       for (final m in marks)
-        if (m.kind != MarkKind.link && m.start <= probe && probe < m.end)
+        if (_pendingMarkKind(m.kind) && m.start <= probe && probe < m.end)
           m.kind,
     };
   }

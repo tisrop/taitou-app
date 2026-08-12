@@ -2,6 +2,22 @@
   "@@locale": "zh_HK",
   "poll_closed": "已關閉",
   "poll_count": "計數",
+  "poll_maxSelection": "最多選擇 {count} 個選項",
+  "@poll_maxSelection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "poll_minSelection": "請至少選擇 {count} 個選項",
+  "@poll_minSelection": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "poll_percentage": "百分比",
   "poll_undo": "撤銷",
   "poll_viewResults": "查看結果",

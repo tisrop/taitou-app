@@ -378,11 +378,35 @@ class EditorImeClient with TextInputClient {
           composing: composing,
         );
       } else if (state.hasComposing) {
-        // composing 刚结束的收尾通知（无文本变化）：清标记并封历史口。
-        state.updateComposing(TextRange.empty);
+        // composing 刚结束的收尾通知（无文本变化）：采纳输入法给出的
+        // 最终光标并清除 composing。部分 CJK 输入法会把文本上屏和最终
+        // 光标拆成两次通知；忽略后者会让输入规则在错误位置判定。
+        if (value.selection.isValid) {
+          state.imeReplace(
+            blockId,
+            0,
+            0,
+            '',
+            caretOffset: value.selection.extentOffset.clamp(
+              0,
+              sanitizedText.length,
+            ),
+          );
+        } else {
+          state.updateComposing(TextRange.empty);
+        }
         state.sealHistory();
-        // 本通知没有文本 diff，常规 input rules 路径不会执行。
+        // 本通知没有文本 diff，常规 input rules 路径不会执行。但
+        // tryApplyInputRules 的兜底 _tryBbcodeInsidePairRules 不看
+        // diff —— 收尾光标若恰好停在字面 `[/color]` 等闭合标签前，
+        // 仍可能改文档。命中后必须 reconcile 回喂,否则 _lastSent 停在
+        // 变换前原文且 _applyingPlatformUpdate 挡住 syncFromState,
+        // 平台窗口与文档失步(next diff 基准错位)。
         _tryRulesAfterCommit(blockId);
+        final now = state.textBlockById(blockId);
+        if (now != null && now.content.text != value.text) {
+          syncFromState(show: false, force: true);
+        }
       } else if (!isEcho && value.selection.isValid) {
         // 只认**全选形状**(0..len):菜单 Edit 唯一主动发的选区就是
         // Select All;其余非回显纯选区通知维持忽略(回显可能带轻微

@@ -267,7 +267,11 @@ extension PostUpdateMethods on TopicDetailNotifier {
       final newPosts = [...currentPosts, post];
       newPosts.sort((a, b) => a.postNumber.compareTo(b.postNumber));
 
-      // onNewPostCreated 可能已递增过 postsCount，避免双重递增
+      // 底部分支的 resolveNewPostCreatedUpdate 已不再递增 postsCount
+      //（统一由 _loadPendingNewPosts 落地后按净新帖数补），因此这里
+      // 只需按 stream 判定，避免双重递增；也不会与 pending 队列中
+      // 尚未落地的 ID 冲突（_loadPendingNewPosts 会把已在 posts 的帖
+      // 过滤掉，不重复计数）。
       final newPostsCount = alreadyInStream
           ? currentDetail.postsCount
           : currentDetail.postsCount + 1;

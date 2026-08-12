@@ -74,9 +74,13 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
         state = AsyncValue.data(preloadedUser);
       }
       final user = await fetchCurrentUser(service);
+      // 会话权限(can_assign 等)权威源：/session/current.json。
+      final sessionUser = await service.fetchSessionCurrentUser();
       final resolved = user == null
           ? preloadedUser
-          : (preloadedUser == null ? user : _mergeUser(user, preloadedUser));
+          : (preloadedUser == null
+                ? user
+                : _mergeUser(user, preloadedUser, sessionUser: sessionUser));
       if (resolved != null) {
         _saveCache(prefs, resolved);
         return resolved;
@@ -109,7 +113,9 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
     final user = await service.getCurrentUser();
     if (user == null) return preloadedUser;
     if (preloadedUser == null) return user;
-    return _mergeUser(user, preloadedUser);
+    // 会话权限(can_assign 等)权威源：/session/current.json。
+    final sessionUser = await service.fetchSessionCurrentUser();
+    return _mergeUser(user, preloadedUser, sessionUser: sessionUser);
   }
 
   /// 静默刷新，带冷却时间（默认 2 分钟内不重复请求）
@@ -146,7 +152,8 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
       try {
         final user = await service.getCurrentUser();
         if (user == null) return;
-        final merged = _mergeUser(user, preloadedUser);
+        final sessionUser = await service.fetchSessionCurrentUser();
+        final merged = _mergeUser(user, preloadedUser, sessionUser: sessionUser);
         final prefs = await SharedPreferences.getInstance();
         _saveCache(prefs, merged);
         state = AsyncValue.data(merged);
@@ -156,7 +163,7 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
     });
   }
 
-  User _mergeUser(User user, User preloadedUser) {
+  User _mergeUser(User user, User preloadedUser, {User? sessionUser}) {
     return user.copyWith(
       unreadNotifications: preloadedUser.unreadNotifications,
       unreadHighPriorityNotifications:
@@ -165,8 +172,12 @@ class CurrentUserNotifier extends AsyncNotifier<User?> {
       seenNotificationId: preloadedUser.seenNotificationId,
       notificationChannelPosition: preloadedUser.notificationChannelPosition,
       canChat: preloadedUser.canChat,
-      // /u/username.json 不带 can_assign，保留预加载权限位。
-      canAssign: user.canAssign || preloadedUser.canAssign,
+      // can_assign 是会话权限：/u/{username}.json（UserSerializer）不下发，
+      // 恒 false；preloaded（CurrentUserSerializer）在启动时下发，但那是
+      // 旧快照。刷新时以 /session/current.json 的 sessionUser 为准 ——
+      // 用户被降权后本地 can_assign 才能真正减下来。sessionUser 拉取
+      // 失败时退回 preloaded 快照。
+      canAssign: sessionUser?.canAssign ?? preloadedUser.canAssign,
     );
   }
 

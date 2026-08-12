@@ -57,9 +57,11 @@ class MasterDetailLayout extends StatefulWidget {
   }) {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isMobile = Responsive.isMobile(context);
+    // Rail 宽度只作用于 AdaptiveScaffold 子树内；独立 push 路由
+    //（无 Rail 的全屏页）读不到 scope，按不扣除处理。
     final contentWidth =
         screenWidth -
-        NavChromeMetrics.reservedWidth(showRailByBreakpoint: !isMobile);
+        navChromeReservedWidth(context, showRailByBreakpoint: !isMobile);
     final computed = contentWidth >= masterWidth + minDetailWidth && !isMobile;
     return LayoutLock.resolveCanShowBoth(computed: computed);
   }

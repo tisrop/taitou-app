@@ -494,9 +494,6 @@ class InlineFlattener {
     final recognizer = ctx == null
         ? null
         : (TapGestureRecognizer()
-            ..onTapDown = (details) {
-              lastInlineTapGlobalPosition = details.globalPosition;
-            }
             ..onTap = () {
               final live = mount.context;
               if (live == null) return;
@@ -779,9 +776,6 @@ class InlineFlattener {
     final recognizer = ctx == null
         ? null
         : (TapGestureRecognizer()
-            ..onTapDown = (details) {
-              lastInlineTapGlobalPosition = details.globalPosition;
-            }
             ..onTap = () {
               final live = mount.context;
               if (live == null) return;
@@ -822,9 +816,6 @@ class InlineFlattener {
           // 填满整行、不矮浮也不撑高;小一号文字在内部垂直居中。
           final lineHeight = emojiBaseSize * 1.5;
           return GestureDetector(
-            onTapDown: (details) {
-              lastInlineTapGlobalPosition = details.globalPosition;
-            },
             onTap: () => mentionHandler(ctx, mention.username, mention.href),
             child: Container(
               height: lineHeight,

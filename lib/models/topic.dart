@@ -119,6 +119,11 @@ class Poll {
   final String? chartType; // 'bar' | 'pie'(API 直接下发,饼图判定主源)
   final String? title;
 
+  /// 多选投票的可选数量区间(min/max)，来自 Discourse poll 数据。
+  /// 缺省时 min=1、max=选项总数（与官方默认一致）。
+  final int min;
+  final int max;
+
   Poll({
     required this.id,
     required this.name,
@@ -129,23 +134,32 @@ class Poll {
     required this.voters,
     this.chartType,
     this.title,
-  });
+    int? min,
+    int? max,
+  }) : min = min ?? 1,
+       max = max ?? -1;
+
+  /// 多选时允许选择的最大数量（max 缺省为选项总数）。
+  int get maxChoices => max > 0 ? max : options.length;
 
   factory Poll.fromJson(Map<String, dynamic> json) {
+    final options =
+        (json['options'] as List<dynamic>?)
+            ?.map((e) => PollOption.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [];
     return Poll(
       id: json['id'] as int? ?? 0,
       name: json['name'] as String? ?? '',
       type: json['type'] as String? ?? 'regular',
       status: json['status'] as String? ?? 'open',
       results: json['results'] as String? ?? 'always',
-      options:
-          (json['options'] as List<dynamic>?)
-              ?.map((e) => PollOption.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
+      options: options,
       voters: json['voters'] as int? ?? 0,
       chartType: json['chart_type'] as String?,
       title: json['title'] as String?,
+      min: json['min'] as int?,
+      max: json['max'] as int?,
     );
   }
 }

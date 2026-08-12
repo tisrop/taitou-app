@@ -93,6 +93,41 @@ mixin _UsersMixin on _DiscourseServiceBase {
     return user;
   }
 
+  /// 从 `/session/current.json` 获取当前用户（CurrentUserSerializer）。
+  ///
+  /// 与 [getCurrentUser] 的区别：`/u/{username}.json` 由 UserSerializer
+  /// 渲染，**不含** discourse-assign 的 `can_assign` 等会话权限字段；
+  /// 而 CurrentUserSerializer 会下发。权限位判断必须用它，否则用户被
+  /// 降权后本地 `can_assign` 只会增不会减。
+  ///
+  /// 返回 null 表示会话无效/响应异常，不抛异常（调用方按失败处理）。
+  Future<User?> fetchSessionCurrentUser() async {
+    try {
+      final response = await _dio.get(
+        '/session/current.json',
+        queryParameters: {'_': DateTime.now().millisecondsSinceEpoch},
+        options: Options(
+          extra: const {'skipAuthCheck': true, 'skipCsrf': true},
+        ),
+      );
+      final data = response.data;
+      if (data is! Map<String, dynamic>) return null;
+      final currentUser = data['current_user'];
+      if (currentUser is! Map<String, dynamic>) return null;
+      final user = User.fromJson(currentUser);
+      currentUserNotifier.value = user;
+      if (user.username.isNotEmpty) {
+        _username = user.username;
+      }
+      return user;
+    } on DioException {
+      return null;
+    } catch (e) {
+      debugPrint('[DiscourseService] fetchSessionCurrentUser 异常: $e');
+      return null;
+    }
+  }
+
   /// 获取用户统计数据（带缓存，按用户名区分）
   Future<UserSummary> getUserSummary(
     String username, {

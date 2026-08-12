@@ -437,8 +437,12 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
       color: theme.scaffoldBackgroundColor,
       child: Stack(
         children: [
+          // 底部安全区：独立 push 的宽版页面没有底栏槽位补偿，底部内容
+          // 会被系统手势区遮挡；顶部留白保留头图顶到屏幕边缘的效果。
           Positioned.fill(
-            child: SingleChildScrollView(
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -664,6 +668,7 @@ class _UserProfilePageState extends ConsumerState<UserProfilePage>
                 ],
               ),
             ),
+          ),
           ),
           // 悬浮顶栏:返回 + 操作按钮,渐变黑纱保证压图可读。
           Positioned(
