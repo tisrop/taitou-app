@@ -459,6 +459,17 @@ class _PmInboxNotifier extends PrivateMessagesNotifier {
       ref.read(discourseServiceProvider).getPrivateMessages(page: page);
 }
 
+class _GroupPmInboxNotifier extends PrivateMessagesNotifier {
+  _GroupPmInboxNotifier(this.groupName);
+
+  final String groupName;
+
+  @override
+  Future<TopicListResponse> fetch(int page) => ref
+      .read(discourseServiceProvider)
+      .getGroupPrivateMessages(groupName: groupName, page: page);
+}
+
 class _PmSentNotifier extends PrivateMessagesNotifier {
   @override
   Future<TopicListResponse> fetch(int page) =>
@@ -474,6 +485,10 @@ class _PmArchiveNotifier extends PrivateMessagesNotifier {
 final pmInboxProvider =
     AsyncNotifierProvider.autoDispose<_PmInboxNotifier, List<Topic>>(
       () => _PmInboxNotifier(),
+    );
+final groupPmInboxProvider = AsyncNotifierProvider.autoDispose
+    .family<_GroupPmInboxNotifier, List<Topic>, String>(
+      _GroupPmInboxNotifier.new,
     );
 final pmSentProvider =
     AsyncNotifierProvider.autoDispose<_PmSentNotifier, List<Topic>>(

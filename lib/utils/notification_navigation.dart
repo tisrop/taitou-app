@@ -6,6 +6,7 @@ import '../models/notification.dart';
 import '../providers/discourse_providers.dart';
 import '../pages/badge_page.dart';
 import '../pages/chat_channel_page.dart';
+import '../pages/private_messages_page.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../pages/user_profile_page/user_profile_page.dart';
 import '../services/local_notification_service.dart';
@@ -64,6 +65,11 @@ Widget? _notificationTargetPage(
 
     case NotificationType.membershipRequestAccepted:
       return null;
+
+    case NotificationType.groupMessageSummary:
+      // 群组私信摘要（例如“版主 收件箱有 1 条消息”）没有 topic_id，
+      // 不能走下面的话题默认落点；直接打开对应群组的共享收件箱。
+      return PrivateMessagesPage(groupName: notification.data.groupName);
 
     case NotificationType.boost:
       if (notification.topicId == null) return null;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../l10n/s.dart';
+import '../pages/private_messages_page.dart';
 import '../pages/topic_detail_page/topic_detail_page.dart';
 import '../utils/notification_navigation.dart';
 
@@ -51,6 +52,23 @@ class LocalNotificationService {
     if (payload == null || payload.isEmpty) return;
 
     // payload 格式: "topic:{topicId}" 或 "topic:{topicId}:{postNumber}"
+    if (payload == 'private_messages' ||
+        payload.startsWith('group_messages:')) {
+      final groupName = payload.startsWith('group_messages:')
+          ? Uri.decodeComponent(payload.substring('group_messages:'.length))
+          : null;
+      final page = PrivateMessagesPage(groupName: groupName);
+      final context = navigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        openNotificationPage(context, page);
+      } else {
+        navigatorKey.currentState?.push(
+          MaterialPageRoute(builder: (_) => page),
+        );
+      }
+      return;
+    }
+
     if (payload.startsWith('topic:')) {
       final parts = payload.substring(6).split(':');
       final topicId = int.tryParse(parts[0]);
@@ -93,6 +111,8 @@ class LocalNotificationService {
     int? id,
     int? topicId,
     int? postNumber,
+    bool openPrivateMessages = false,
+    String? privateMessageGroupName,
   }) async {
     if (!_initialized) {
       await initialize();
@@ -118,7 +138,12 @@ class LocalNotificationService {
 
     // 构建 payload 用于点击回调
     String? payload;
-    if (topicId != null) {
+    if (openPrivateMessages) {
+      payload =
+          privateMessageGroupName == null || privateMessageGroupName.isEmpty
+          ? 'private_messages'
+          : 'group_messages:${Uri.encodeComponent(privateMessageGroupName)}';
+    } else if (topicId != null) {
       payload = postNumber != null
           ? 'topic:$topicId:$postNumber'
           : 'topic:$topicId';

@@ -8,6 +8,7 @@ import 'package:fluxdo/l10n/slang/strings.g.dart';
 import 'package:fluxdo/models/notification.dart';
 import 'package:fluxdo/models/user.dart';
 import 'package:fluxdo/pages/chat_channel_page.dart';
+import 'package:fluxdo/pages/private_messages_page.dart';
 import 'package:fluxdo/providers/chat/chat_list_provider.dart';
 import 'package:fluxdo/providers/message_bus/topic_tracking_providers.dart';
 import 'package:fluxdo/providers/core_providers.dart';
@@ -39,6 +40,12 @@ class _TestCurrentUserNotifier extends CurrentUserNotifier {
 
 void main() {
   testWidgets('点击聊天室 @ 通知会打开频道并定位到目标消息', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
     final notification = DiscourseNotification(
       id: 101,
       userId: 7,
@@ -56,6 +63,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
           chatListProvider(12).overrideWith(() => _TestChatListNotifier(12)),
           currentUserProvider.overrideWith(_TestCurrentUserNotifier.new),
         ],
@@ -89,6 +97,62 @@ void main() {
     expect(page.channelId, 12);
     expect(page.initialMessageId, 456);
     expect(page.title, '站务讨论');
+  });
+
+  testWidgets('点击群组私信摘要会打开对应群组收件箱', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final notification = DiscourseNotification(
+      id: 102,
+      userId: 7,
+      notificationType: NotificationType.groupMessageSummary,
+      read: true,
+      highPriority: true,
+      createdAt: DateTime.utc(2026, 8, 14),
+      data: NotificationData(groupName: 'moderators', inboxCount: '1'),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(preferences),
+          currentUserProvider.overrideWith(_TestCurrentUserNotifier.new),
+        ],
+        child: TranslationProvider(
+          child: MaterialApp(
+            navigatorKey: navigatorKey,
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: AppLocaleUtils.supportedLocales,
+            home: Consumer(
+              builder: (context, ref, _) => TextButton(
+                onPressed: () =>
+                    handleNotificationTap(context, ref, notification),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final page = tester.widget<PrivateMessagesPage>(
+      find.byType(PrivateMessagesPage),
+    );
+    expect(page.groupName, 'moderators');
   });
 
   testWidgets('大屏通知弹窗支持切换相邻通知并全屏打开', (tester) async {

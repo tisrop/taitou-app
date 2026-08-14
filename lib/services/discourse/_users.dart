@@ -302,6 +302,22 @@ mixin _UsersMixin on _DiscourseServiceBase {
     return TopicListResponse.fromJson(response.data);
   }
 
+  /// 获取当前用户可访问的群组私信收件箱。
+  Future<TopicListResponse> getGroupPrivateMessages({
+    required String groupName,
+    int page = 0,
+  }) async {
+    final username = await getUsername();
+    if (username == null) {
+      throw Exception(S.current.error_notLoggedInNoUsername);
+    }
+    final response = await _dio.get(
+      '/topics/private-messages-group/$username/$groupName.json',
+      queryParameters: page > 0 ? {'page': page} : null,
+    );
+    return TopicListResponse.fromJson(response.data);
+  }
+
   /// 获取已发送私信
   Future<TopicListResponse> getPrivateMessagesSent({int page = 0}) async {
     final username = await getUsername();
@@ -345,10 +361,7 @@ mixin _UsersMixin on _DiscourseServiceBase {
 
   /// 拉书签接口并返回原始 JSON map，给本地缓存对账层使用——
   /// 需要保留每条书签自身的 updated_at 等字段，无法通过 [TopicListResponse] 转回。
-  Future<Map<String, dynamic>> getUserBookmarksRaw({
-    int page = 0,
-    int? limit,
-  }) {
+  Future<Map<String, dynamic>> getUserBookmarksRaw({int page = 0, int? limit}) {
     return _getUserBookmarksRaw(page: page, limit: limit);
   }
 
