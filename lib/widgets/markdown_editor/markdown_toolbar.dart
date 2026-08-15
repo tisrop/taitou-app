@@ -15,10 +15,8 @@ import 'package:dio/dio.dart';
 import '../../services/app_error_handler.dart';
 import '../../services/discourse/discourse_service.dart';
 import '../../services/toast_service.dart';
-import '../../utils/platform_utils.dart';
 import '../common/layout/fading_edge_scroll_view.dart';
 import '../content/discourse_html_content/image_utils.dart';
-import 'composer_shortcuts.dart';
 import 'editor_tools.dart';
 import 'emoji_popover.dart';
 import 'media_upload_helper.dart';
@@ -38,7 +36,6 @@ class MarkdownToolbar extends StatefulWidget {
 
   /// 内容焦点节点（可选，用于恢复焦点）
   final FocusNode? focusNode;
-
 
   /// 是否显示预览按钮
   final bool showPreviewButton;
@@ -68,9 +65,6 @@ class MarkdownToolbar extends StatefulWidget {
   /// 提供时为移动端模式：右侧显示「更多」按钮，全部工具收进网格面板
   final VoidCallback? onToggleTools;
 
-  /// 工具面板是否可见（控制「更多工具」按钮高亮）
-  final bool isToolsPanelVisible;
-
   /// 外显工具 id 列表（见 editor_tools.dart）
   /// null（桌面端）= 显示全部工具；空列表 = 中部不显示任何工具
   final List<String>? visibleToolIds;
@@ -92,7 +86,6 @@ class MarkdownToolbar extends StatefulWidget {
     this.onToggleEmoji,
     this.isEmojiPanelVisible = false,
     this.onToggleTools,
-    this.isToolsPanelVisible = false,
     this.visibleToolIds,
     this.emojiPopover,
   });
@@ -145,29 +138,35 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   ];
 
   /// 从 DataReader 读取图片字节（支持 PNG/JPEG/GIF/WebP）
-  static Future<(Uint8List, String)?> readImageFromReader(DataReader reader) async {
+  static Future<(Uint8List, String)?> readImageFromReader(
+    DataReader reader,
+  ) async {
     for (final format in _imageFormats) {
       if (reader.canProvide(format)) {
         final completer = Completer<Uint8List?>();
-        reader.getFile(format, (file) async {
-          final stream = file.getStream();
-          final chunks = <int>[];
-          await for (final chunk in stream) {
-            chunks.addAll(chunk);
-          }
-          completer.complete(Uint8List.fromList(chunks));
-        }, onError: (error) {
-          completer.complete(null);
-        });
+        reader.getFile(
+          format,
+          (file) async {
+            final stream = file.getStream();
+            final chunks = <int>[];
+            await for (final chunk in stream) {
+              chunks.addAll(chunk);
+            }
+            completer.complete(Uint8List.fromList(chunks));
+          },
+          onError: (error) {
+            completer.complete(null);
+          },
+        );
         final bytes = await completer.future;
         if (bytes != null && bytes.isNotEmpty) {
           final ext = format == Formats.png
               ? 'png'
               : format == Formats.jpeg
-                  ? 'jpg'
-                  : format == Formats.gif
-                      ? 'gif'
-                      : 'webp';
+              ? 'jpg'
+              : format == Formats.gif
+              ? 'gif'
+              : 'webp';
           return (bytes, ext);
         }
       }
@@ -201,7 +200,10 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         await tempFile.writeAsBytes(bytes);
 
         if (!mounted) return;
-        await uploadImageFromPath(imagePath: tempFile.path, imageName: fileName);
+        await uploadImageFromPath(
+          imagePath: tempFile.path,
+          imageName: fileName,
+        );
       }
     } catch (_) {
       // 读取图片失败，忽略，文本粘贴由 TextField 自行处理
@@ -209,7 +211,10 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   }
 
   /// 从字节数据上传图片（供 markdown_editor.dart 调用）
-  Future<void> uploadImageFromBytes({required Uint8List bytes, required String fileName}) async {
+  Future<void> uploadImageFromBytes({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
     try {
       final tempDir = await getTemporaryDirectory();
       final tempFile = File(p.join(tempDir.path, fileName));
@@ -319,7 +324,11 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
 
     if (currentLine.startsWith(prefix)) {
       // 已有前缀，移除它
-      final newText = text.replaceRange(lineStart, lineStart + prefix.length, '');
+      final newText = text.replaceRange(
+        lineStart,
+        lineStart + prefix.length,
+        '',
+      );
       widget.controller.value = TextEditingValue(
         text: newText,
         selection: TextSelection.collapsed(
@@ -348,7 +357,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       final placeholder = S.current.toolbar_codePlaceholder;
       final codeBlock = '```\n$placeholder\n```';
       final newText = text.isEmpty ? codeBlock : '$text\n$codeBlock';
-      final placeholderStart = newText.length - codeBlock.length + 4; // 4 = '```\n'.length
+      final placeholderStart =
+          newText.length - codeBlock.length + 4; // 4 = '```\n'.length
 
       widget.controller.value = TextEditingValue(
         text: newText,
@@ -504,7 +514,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         text: newText,
         selection: TextSelection(
           baseOffset: selection.start + '[spoiler]'.length,
-          extentOffset: selection.start + '[spoiler]'.length + selectedText.length,
+          extentOffset:
+              selection.start + '[spoiler]'.length + selectedText.length,
         ),
       );
     }
@@ -536,11 +547,7 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       // 有选中文本，用代码包裹
       final selectedText = selection.textInside(text);
       final code = '`$selectedText`';
-      final newText = text.replaceRange(
-        selection.start,
-        selection.end,
-        code,
-      );
+      final newText = text.replaceRange(selection.start, selection.end, code);
 
       // 选中代码内容
       widget.controller.value = TextEditingValue(
@@ -573,11 +580,17 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       if (images.length >= 2) {
         // 选中区域包含多张图片，直接包裹
         final wrappedText = '[grid]\n$selectedText\n[/grid]';
-        final newText = text.replaceRange(selection.start, selection.end, wrappedText);
+        final newText = text.replaceRange(
+          selection.start,
+          selection.end,
+          wrappedText,
+        );
 
         widget.controller.value = TextEditingValue(
           text: newText,
-          selection: TextSelection.collapsed(offset: selection.start + wrappedText.length),
+          selection: TextSelection.collapsed(
+            offset: selection.start + wrappedText.length,
+          ),
         );
         widget.focusNode?.requestFocus();
         return;
@@ -616,7 +629,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       }
 
       // 检查光标是否在这个图片附近
-      if (cursorPos >= allImages[consecutiveStart].start && cursorPos <= match.end + 10) {
+      if (cursorPos >= allImages[consecutiveStart].start &&
+          cursorPos <= match.end + 10) {
         groupStart = allImages[consecutiveStart].start;
         groupEnd = match.end;
 
@@ -652,7 +666,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     // 检查是否已经在 grid 内
     final beforeGroup = text.substring(0, groupStart);
     final afterGroup = text.substring(groupEnd);
-    if (beforeGroup.trimRight().endsWith('[grid]') && afterGroup.trimLeft().startsWith('[/grid]')) {
+    if (beforeGroup.trimRight().endsWith('[grid]') &&
+        afterGroup.trimLeft().startsWith('[/grid]')) {
       _showToast(S.current.toolbar_imagesAlreadyInGrid);
       return;
     }
@@ -663,7 +678,9 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
 
     widget.controller.value = TextEditingValue(
       text: newText,
-      selection: TextSelection.collapsed(offset: groupStart + wrappedText.length),
+      selection: TextSelection.collapsed(
+        offset: groupStart + wrappedText.length,
+      ),
     );
     widget.focusNode?.requestFocus();
   }
@@ -702,7 +719,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       );
 
       // 选中占位符
-      final placeholderStart = insertPos + (needNewline ? 1 : 0) + '> [!$type]\n> '.length;
+      final placeholderStart =
+          insertPos + (needNewline ? 1 : 0) + '> [!$type]\n> '.length;
       widget.controller.value = TextEditingValue(
         text: newText,
         selection: TextSelection(
@@ -756,7 +774,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       );
 
       // 选中占位符
-      final placeholderStart = insertPos + (needNewline ? 1 : 0) + 2; // '> '.length
+      final placeholderStart =
+          insertPos + (needNewline ? 1 : 0) + 2; // '> '.length
       widget.controller.value = TextEditingValue(
         text: newText,
         selection: TextSelection(
@@ -783,7 +802,10 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     }
   }
 
-  Future<void> uploadImageFromPath({required String imagePath, required String imageName}) async {
+  Future<void> uploadImageFromPath({
+    required String imagePath,
+    required String imageName,
+  }) async {
     try {
       // 显示确认弹框
       if (!mounted) return;
@@ -806,11 +828,14 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         // 图片独占一行：光标前不是换行符或文本开头时，先补一个换行
         final selection = widget.controller.selection;
         final text = widget.controller.text;
-        final needsLeadingNewline = selection.isValid &&
+        final needsLeadingNewline =
+            selection.isValid &&
             selection.start > 0 &&
             text[selection.start - 1] != '\n';
         final prefix = needsLeadingNewline ? '\n' : '';
-        insertText('$prefix${uploadResult.toMarkdown(alt: result.originalName)}\n');
+        insertText(
+          '$prefix${uploadResult.toMarkdown(alt: result.originalName)}\n',
+        );
       } finally {
         if (mounted) {
           setState(() => _uploadingCount--);
@@ -870,7 +895,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         // 插入 markdown
         final selection = widget.controller.selection;
         final text = widget.controller.text;
-        final needsLeadingNewline = selection.isValid &&
+        final needsLeadingNewline =
+            selection.isValid &&
             selection.start > 0 &&
             text[selection.start - 1] != '\n';
         final prefix = needsLeadingNewline ? '\n' : '';
@@ -919,7 +945,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
 
         final selection = widget.controller.selection;
         final text = widget.controller.text;
-        final needsLeadingNewline = selection.isValid &&
+        final needsLeadingNewline =
+            selection.isValid &&
             selection.start > 0 &&
             text[selection.start - 1] != '\n';
         final prefix = needsLeadingNewline ? '\n' : '';
@@ -942,7 +969,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
     if (tag == null || !mounted) return;
     final selection = widget.controller.selection;
     final text = widget.controller.text;
-    final needsLeadingNewline = selection.isValid &&
+    final needsLeadingNewline =
+        selection.isValid &&
         selection.start > 0 &&
         text[selection.start - 1] != '\n';
     final prefix = needsLeadingNewline ? '\n' : '';
@@ -955,7 +983,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   void insertBlockSnippet(String snippet) {
     final selection = widget.controller.selection;
     final text = widget.controller.text;
-    final needsLeadingNewline = selection.isValid &&
+    final needsLeadingNewline =
+        selection.isValid &&
         selection.start > 0 &&
         text[selection.start - 1] != '\n';
     final prefix = needsLeadingNewline ? '\n' : '';
@@ -992,7 +1021,8 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
       if (tag == null || !mounted) return;
       final selection = widget.controller.selection;
       final text = widget.controller.text;
-      final needsLeadingNewline = selection.isValid &&
+      final needsLeadingNewline =
+          selection.isValid &&
           selection.start > 0 &&
           text[selection.start - 1] != '\n';
       final prefix = needsLeadingNewline ? '\n' : '';
@@ -1020,10 +1050,7 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
 
   Widget _buildToolButton(EditorTool tool) {
     final s = S.current;
-    // 桌面端 tooltip 标注快捷键(如「粗体 (⌘B)」;移动端无物理键盘不标)
-    final hint =
-        PlatformUtils.isDesktop ? composerShortcutHint(tool.id) : null;
-    final tooltip = '${tool.label(s)}${hint ?? ''}';
+    final tooltip = tool.label(s);
 
     if (tool.hasMenu) {
       final theme = Theme.of(context);
@@ -1060,14 +1087,20 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   Widget _buildEmojiButton(ThemeData theme, Color pillColor) {
     final popover = widget.emojiPopover;
     final button = _ToolbarPill(
+      key: const ValueKey('markdownToolbarEmojiPill'),
       color: pillColor,
       child: IconButton(
-        visualDensity: VisualDensity.compact,
+        key: const ValueKey('markdownToolbarEmoji'),
+        constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+        padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
         icon: FaIcon(
           widget.isEmojiPanelVisible && popover == null
               ? FontAwesomeIcons.keyboard
               : FontAwesomeIcons.faceSmile,
-          size: 20,
+          size: 24,
           color: widget.isEmojiPanelVisible
               ? theme.colorScheme.primary
               : theme.colorScheme.onSurfaceVariant,
@@ -1082,8 +1115,9 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final pillColor =
-        theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45);
+    final pillColor = theme.colorScheme.surfaceContainerHighest.withValues(
+      alpha: 0.45,
+    );
     final isMobile = widget.onToggleTools != null;
 
     return Container(
@@ -1092,7 +1126,7 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
         canRequestFocus: false,
         descendantsAreFocusable: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+          padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
           child: Row(
             children: [
               // 左：表情按钮（胶囊背景，固定）
@@ -1113,6 +1147,7 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
               ),
               // 右：预览 +「更多」（移动端）/ 混排 + 预览（桌面端），胶囊背景
               _ToolbarPill(
+                key: const ValueKey('markdownToolbarActionsPill'),
                 color: pillColor,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1130,12 +1165,20 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
                       ),
                     if (widget.showPreviewButton)
                       IconButton(
-                        visualDensity: VisualDensity.compact,
+                        key: const ValueKey('markdownToolbarPreview'),
+                        constraints: const BoxConstraints.tightFor(
+                          width: 44,
+                          height: 44,
+                        ),
+                        padding: EdgeInsets.zero,
+                        style: IconButton.styleFrom(
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
                         icon: Icon(
                           widget.isPreview
                               ? Symbols.visibility_off_rounded
                               : Symbols.visibility_rounded,
-                          size: 20,
+                          size: 22,
                           color: widget.isPreview
                               ? theme.colorScheme.primary
                               : theme.colorScheme.onSurfaceVariant,
@@ -1149,46 +1192,55 @@ class MarkdownToolbarState extends State<MarkdownToolbar> {
                     // 往返;富文本开关未开时宿主不传,不显示)
                     if (widget.onSwitchToRich != null)
                       Tooltip(
+                        key: const ValueKey('markdownToolbarSwitchMode'),
                         message: '切换到富文本模式',
                         child: InkWell(
                           onTap: widget.onSwitchToRich,
                           borderRadius: BorderRadius.circular(18),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 7),
+                              horizontal: 8,
+                              vertical: 7,
+                            ),
                             child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Symbols.wysiwyg_rounded,
-                                    size: 18,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Symbols.wysiwyg_rounded,
+                                  size: 18,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  'Aa',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    height: 1.0,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    'Aa',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      height: 1.0,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.3,
-                                      color:
-                                          theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ]),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     if (isMobile)
                       IconButton(
-                        visualDensity: VisualDensity.compact,
+                        key: const ValueKey('markdownToolbarMoreTools'),
+                        constraints: const BoxConstraints.tightFor(
+                          width: 44,
+                          height: 44,
+                        ),
+                        padding: EdgeInsets.zero,
+                        style: IconButton.styleFrom(
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
                         icon: FaIcon(
                           FontAwesomeIcons.circlePlus,
-                          size: 20,
-                          color: widget.isToolsPanelVisible
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant,
+                          size: 24,
+                          color: theme.colorScheme.primary,
                         ),
                         onPressed: widget.onToggleTools,
                         tooltip: S.current.toolbar_moreTools,
@@ -1209,14 +1261,14 @@ class _ToolbarPill extends StatelessWidget {
   final Color color;
   final Widget child;
 
-  const _ToolbarPill({required this.color, required this.child});
+  const _ToolbarPill({super.key, required this.color, required this.child});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
       ),
       padding: const EdgeInsets.all(2),
       child: child,
@@ -1298,10 +1350,7 @@ class _ToolbarButton extends StatelessWidget {
         child: CircularProgressIndicator(strokeWidth: 2),
       );
     } else {
-      child = IconTheme.merge(
-        data: const IconThemeData(size: 16),
-        child: icon,
-      );
+      child = IconTheme.merge(data: const IconThemeData(size: 16), child: icon);
     }
 
     return IconButton(

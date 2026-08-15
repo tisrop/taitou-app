@@ -869,7 +869,6 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
         isEmojiPanelVisible: showEmojiPanel,
         emojiPopover: _emojiPopover,
         onToggleTools: () => _togglePanel(EditorPanelType.tools),
-        isToolsPanelVisible: _intendedPanel == EditorPanelType.tools,
         // Android 中部只显示用户自定义的外显工具（默认空）。
         visibleToolIds: ref.watch(preferencesProvider).editorToolbarTools,
       ),

@@ -50,8 +50,9 @@ class _MarkdownToolPanelState extends ConsumerState<MarkdownToolPanel> {
 
   /// 切换工具是否外显在工具栏
   void _togglePinned(String id) {
-    final current =
-        List<String>.of(ref.read(preferencesProvider).editorToolbarTools);
+    final current = List<String>.of(
+      ref.read(preferencesProvider).editorToolbarTools,
+    );
     if (!current.remove(id)) {
       current.add(id);
     }
@@ -66,16 +67,19 @@ class _MarkdownToolPanelState extends ConsumerState<MarkdownToolPanel> {
     final pinnedIds = ref.watch(preferencesProvider).editorToolbarTools;
 
     return Column(
+      key: const ValueKey('markdownToolPanel'),
       children: [
         // 头部：标题/自定义提示 + 自定义/完成按钮
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
+          padding: const EdgeInsets.fromLTRB(20, 7, 8, 0),
           child: Row(
             children: [
               Expanded(
                 child: Text(
-                  _customizing ? s.toolPanel_customizeHint : s.toolbar_moreTools,
-                  style: theme.textTheme.bodySmall?.copyWith(
+                  _customizing
+                      ? s.toolPanel_customizeHint
+                      : s.toolbar_moreTools,
+                  style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                   maxLines: 1,
@@ -84,7 +88,9 @@ class _MarkdownToolPanelState extends ConsumerState<MarkdownToolPanel> {
               ),
               TextButton(
                 onPressed: () => setState(() => _customizing = !_customizing),
-                child: Text(_customizing ? s.common_done : s.toolPanel_customize),
+                child: Text(
+                  _customizing ? s.common_done : s.toolPanel_customize,
+                ),
               ),
             ],
           ),
@@ -94,7 +100,7 @@ class _MarkdownToolPanelState extends ConsumerState<MarkdownToolPanel> {
             crossAxisCount: 4,
             childAspectRatio: 0.92,
             mainAxisSpacing: 4,
-            padding: EdgeInsets.fromLTRB(12, 8, 12, 16 + safeBottom),
+            padding: EdgeInsets.fromLTRB(12, 12, 12, 16 + safeBottom),
             children: [
               for (final tool in editorTools) _buildCell(tool, pinnedIds),
               // 混排优化：依赖编辑器回调，不参与外显自定义
@@ -172,20 +178,21 @@ class _ToolCellBody extends StatelessWidget {
           clipBehavior: Clip.none,
           children: [
             Container(
-              width: 52,
-              height: 52,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
                 color: highlight
                     ? theme.colorScheme.primaryContainer
-                    : theme.colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.6),
+                    : theme.colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.6,
+                      ),
                 borderRadius: BorderRadius.circular(14),
               ),
               alignment: Alignment.center,
               // 通过 IconTheme 统一图标尺寸和颜色（兼容 FaIcon 和 Icon）
               child: IconTheme.merge(
                 data: IconThemeData(
-                  size: 20,
+                  size: 24,
                   color: highlight
                       ? theme.colorScheme.onPrimaryContainer
                       : theme.colorScheme.onSurfaceVariant,
@@ -221,11 +228,11 @@ class _ToolCellBody extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Text(
           label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 14,
             color: theme.colorScheme.onSurfaceVariant,
           ),
           maxLines: 1,
