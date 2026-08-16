@@ -6,6 +6,7 @@
 library;
 
 import 'package:characters/characters.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo_render/src/editor/input/editor_ime_client.dart';
@@ -18,6 +19,8 @@ final pad = EditorImeClient.padCharForTesting;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  _cjkCommitRuleTests();
+  _softBreakTests();
 
   (EditorState, EditorImeClient) makeAttached({
     List<String> paragraphs = const ['第一段', 'second'],
@@ -264,6 +267,73 @@ void main() {
     });
   });
 
+  group('Android IME 整窗清空', () {
+    test('整窗含 pad 删成空串时清空当前段', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final (state, ime) = makeAttached();
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+
+      expect((state.blocks[0] as TextBlock).content.text, '');
+      expect(state.blocks.length, 2, reason: '只清空当前段，不合并段落');
+      expect(state.selection!.extent.offset, 0);
+    });
+
+    test('清空作为独立 undo 步', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final (state, ime) = makeAttached(paragraphs: const ['第一段']);
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+      expect((state.blocks[0] as TextBlock).content.text, '');
+
+      state.undo();
+      expect((state.blocks[0] as TextBlock).content.text, '第一段');
+    });
+
+    test('已升格的跨段全选在整窗清空时删除全文', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final (state, ime) = makeAttached(
+        paragraphs: const ['abcde', 'fgh'],
+        caret: 2,
+      );
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '${pad}abcde',
+          selection: const TextSelection(baseOffset: 1, extentOffset: 6),
+          composing: TextRange.empty,
+        ),
+      );
+      expect(state.selection!.isCollapsed, false);
+
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '',
+          selection: TextSelection.collapsed(offset: 0),
+        ),
+      );
+
+      final text = state.blocks
+          .whereType<TextBlock>()
+          .map((block) => block.content.text)
+          .join();
+      expect(text, '');
+    });
+  });
+
   group('平台 quirk', () {
     test('IME 直插 \\n(不走 performAction 的回车)→ 分段', () {
       final (state, ime) = makeAttached();
@@ -394,6 +464,209 @@ void main() {
       );
       expect((state.blocks[0] as TextBlock).content.text, 'hi world');
       expect(state.selection!.extent.offset, 2);
+    });
+  });
+}
+
+/// 段内软换行必须在普通 IME 编辑后保持不变。
+void _softBreakTests() {
+  group('段内软换行', () {
+    (EditorState, EditorImeClient) attach(String text, {int? caret}) {
+      final offset = caret ?? text.length;
+      final state = EditorState(
+        blocks: [
+          TextBlock(
+            id: 'b0',
+            content: EditableTextContent(text: text),
+          ),
+        ],
+      );
+      state.updateSelection(
+        EditorSelection.collapsed(
+          EditorPosition(blockId: 'b0', offset: offset),
+        ),
+      );
+      final ime = EditorImeClient(state: state);
+      ime.debugAttachToBlock(
+        'b0',
+        EditorImeClient.debugFormat(
+          TextEditingValue(
+            text: text,
+            selection: TextSelection.collapsed(offset: offset),
+          ),
+        ),
+      );
+      return (state, ime);
+    }
+
+    String textOf(EditorState state) =>
+        (state.blocks.first as TextBlock).content.text;
+
+    test('末尾打字时保留既有软换行', () {
+      const text = '第一行\n第二行\n第三行';
+      final (state, ime) = attach(text);
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad$text*',
+          selection: TextSelection.collapsed(offset: text.length + 2),
+        ),
+      );
+      expect(textOf(state), '$text*');
+    });
+
+    test('中间打字时保留既有软换行', () {
+      const text = '第一行\n第二行';
+      final (state, ime) = attach(text, caret: 3);
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad第一行X\n第二行',
+          selection: const TextSelection.collapsed(offset: 5),
+        ),
+      );
+      expect(textOf(state), '第一行X\n第二行');
+    });
+
+    test('平台新插入的纯换行仍转换为分段', () {
+      const text = '第一行\n第二行';
+      final (state, ime) = attach(text);
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad$text\n',
+          selection: TextSelection.collapsed(offset: text.length + 2),
+        ),
+      );
+      expect(state.blocks.length, 2);
+      expect(textOf(state), text, reason: '既有软换行不应被删除');
+    });
+
+    test('混合替换剥换行后修正光标位置', () {
+      final (state, ime) = attach('abc', caret: 2);
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '${EditorImeClient.padCharForTesting}aX\nYc',
+          selection: TextSelection.collapsed(offset: 5),
+        ),
+      );
+      expect(textOf(state), 'aXYc');
+      expect(state.blocks.length, 1);
+      expect(state.selection!.extent.offset, 3);
+    });
+
+    test('混合替换后回喂无换行基线，下一击不错位', () {
+      final (state, ime) = attach('abc', caret: 2);
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '${EditorImeClient.padCharForTesting}aX\nYc',
+          selection: TextSelection.collapsed(offset: 5),
+        ),
+      );
+      expect(ime.debugLastSent.text.contains('\n'), isFalse);
+      ime.updateEditingValue(
+        const TextEditingValue(
+          text: '${EditorImeClient.padCharForTesting}aXYZc',
+          selection: TextSelection.collapsed(offset: 5),
+        ),
+      );
+      expect(textOf(state), 'aXYZc');
+      expect(state.selection!.extent.offset, 4);
+    });
+  });
+}
+
+/// CJK 上屏收尾补判 input rules（真机日志固化）。
+void _cjkCommitRuleTests() {
+  group('CJK 上屏后补判 input rules', () {
+    (EditorState, EditorImeClient) attach(String text, int caret) {
+      final state = EditorState(
+        blocks: [
+          TextBlock(
+            id: 'b0',
+            content: EditableTextContent(text: text),
+          ),
+        ],
+      );
+      state.updateSelection(
+        EditorSelection.collapsed(EditorPosition(blockId: 'b0', offset: caret)),
+      );
+      final ime = EditorImeClient(state: state);
+      ime.debugAttachToBlock(
+        'b0',
+        EditorImeClient.debugFormat(
+          TextEditingValue(
+            text: text,
+            selection: TextSelection.collapsed(offset: caret),
+          ),
+        ),
+      );
+      return (state, ime);
+    }
+
+    TextBlock blockOf(EditorState state) => state.blocks.first as TextBlock;
+
+    test('**拼音** 上屏后应用加粗', () {
+      const typing = "新版fluxdo**bian'ji'qi**";
+      final (state, ime) = attach(typing, typing.length);
+
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad新版fluxdo**编辑器**',
+          selection: const TextSelection.collapsed(offset: 15),
+          composing: const TextRange(start: 15, end: 18),
+        ),
+      );
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad新版fluxdo**编辑器**',
+          selection: const TextSelection.collapsed(offset: 18),
+        ),
+      );
+
+      expect(blockOf(state).content.text, '新版fluxdo编辑器');
+      expect(blockOf(state).content.marks.single.kind, MarkKind.strong);
+    });
+
+    test('~~拼音~~ 上屏后应用删除线', () {
+      const typing = "~~huan'wo~~";
+      final (state, ime) = attach(typing, typing.length);
+
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad~~换我~~',
+          selection: const TextSelection.collapsed(offset: 5),
+          composing: const TextRange(start: 3, end: 5),
+        ),
+      );
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad~~换我~~',
+          selection: const TextSelection.collapsed(offset: 7),
+        ),
+      );
+
+      expect(blockOf(state).content.text, '换我');
+      expect(blockOf(state).content.marks.single.kind, MarkKind.lineThrough);
+    });
+
+    test('上屏后定界符不成对时不误触发', () {
+      const typing = "**bian'ji";
+      final (state, ime) = attach(typing, typing.length);
+
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad**编辑',
+          selection: const TextSelection.collapsed(offset: 3),
+          composing: const TextRange(start: 3, end: 5),
+        ),
+      );
+      ime.updateEditingValue(
+        TextEditingValue(
+          text: '$pad**编辑',
+          selection: const TextSelection.collapsed(offset: 5),
+        ),
+      );
+
+      expect(blockOf(state).content.text, '**编辑');
+      expect(blockOf(state).content.marks, isEmpty);
     });
   });
 }

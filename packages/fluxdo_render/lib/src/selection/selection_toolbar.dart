@@ -156,6 +156,13 @@ class SelectionToolbar {
             onPressed: items[i].onPressed,
             child: Text(
               AdaptiveTextSelectionToolbar.getButtonLabel(ctx, items[i]),
+              // SDK 按钮会提供自己的颜色、字号与禁用态，只补宿主主题的
+              // 字体族，避免划词工具栏退回系统字体而与正文观感不一致。
+              style: TextStyle(
+                fontFamily: Theme.of(ctx).textTheme.bodyMedium?.fontFamily,
+                fontFamilyFallback:
+                    Theme.of(ctx).textTheme.bodyMedium?.fontFamilyFallback,
+              ),
             ),
           ),
       ],

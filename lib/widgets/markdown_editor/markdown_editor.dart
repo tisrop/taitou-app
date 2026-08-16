@@ -10,6 +10,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 
+import '../../models/emoji.dart';
+import '../../providers/emoji_provider.dart';
 import '../../providers/preferences_provider.dart';
 import '../../services/discourse_cook_service.dart';
 import '../../services/emoji_handler.dart';
@@ -17,6 +19,7 @@ import '../../utils/emoji_shortcodes.dart';
 import '../../utils/platform_utils.dart';
 import '../mention/mention_autocomplete.dart';
 import 'composer_shortcuts.dart';
+import 'emoji_autocomplete.dart';
 import 'emoji_popover.dart';
 import 'emoji_sticker_panel.dart';
 import 'markdown_renderer.dart';
@@ -80,6 +83,16 @@ class MarkdownEditor extends ConsumerStatefulWidget {
   /// 分类/标签/字数等元数据常驻可见可改,不随滚动离场。null 时无。
   final Widget? metaBar;
 
+  /// 将格式工具栏放在编辑区顶部。默认仍保持移动端常用的底部工具栏布局。
+  final bool toolbarAtTop;
+
+  /// 编辑区（正文 + 工具栏）的外观与外边距。键盘/自定义面板不会被包进来。
+  final Decoration? editorDecoration;
+  final EdgeInsetsGeometry editorMargin;
+
+  /// 宿主操作栏，位于编辑区下方、键盘/自定义面板上方。
+  final Widget? footer;
+
   const MarkdownEditor({
     super.key,
     required this.controller,
@@ -96,6 +109,10 @@ class MarkdownEditor extends ConsumerStatefulWidget {
     this.onSwitchToRich,
     this.header,
     this.metaBar,
+    this.toolbarAtTop = false,
+    this.editorDecoration,
+    this.editorMargin = EdgeInsets.zero,
+    this.footer,
   });
 
   @override
@@ -108,6 +125,11 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
 
   final _toolbarKey = GlobalKey<MarkdownToolbarState>();
   final _scrollController = ScrollController();
+
+  /// 正文输入框定位锚。创建帖子页的 header 里还有标题输入框，
+  /// 光标跟随只能在正文子树内查找 RenderEditable，避免误把标题光标
+  /// 当成正文光标后将外层滚动位置拉回顶部。
+  final _bodyFieldKey = GlobalKey();
   final _pangu = Pangu();
   bool _isApplyingPangu = false;
   Timer? _panguTimer;
@@ -116,7 +138,8 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   String _previousText = '';
 
   // 面板控制器
-  final _panelController = ChatBottomPanelContainerController<EditorPanelType>();
+  final _panelController =
+      ChatBottomPanelContainerController<EditorPanelType>();
   EditorPanelType _currentPanelType = EditorPanelType.none;
   bool _readOnly = false;
   // 面板意图状态：用户希望打开的自定义面板（表情/工具），
@@ -210,11 +233,15 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
       }
 
       // 提取上一行的内容
-      final prevLine = currentText.substring(prevLineStart, selection.start - 1);
+      final prevLine = currentText.substring(
+        prevLineStart,
+        selection.start - 1,
+      );
 
       // 检测无序列表：- item 或 * item 或 + item
-      final unorderedMatch =
-          RegExp(r'^(\s*)([-*+])\s+(.*)$').firstMatch(prevLine);
+      final unorderedMatch = RegExp(
+        r'^(\s*)([-*+])\s+(.*)$',
+      ).firstMatch(prevLine);
       if (unorderedMatch != null) {
         final indent = unorderedMatch.group(1)!;
         final marker = unorderedMatch.group(2)!;
@@ -222,7 +249,9 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
 
         if (content.isEmpty) {
           // 空列表项，移除列表标记（含前面的换行符，避免多余空行）
-          final removeStart = prevLineStart > 0 ? prevLineStart - 1 : prevLineStart;
+          final removeStart = prevLineStart > 0
+              ? prevLineStart - 1
+              : prevLineStart;
           final newText = currentText.replaceRange(
             removeStart,
             selection.start,
@@ -244,16 +273,18 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
           _previousText = newText;
           widget.controller.value = TextEditingValue(
             text: newText,
-            selection:
-                TextSelection.collapsed(offset: selection.start + prefix.length),
+            selection: TextSelection.collapsed(
+              offset: selection.start + prefix.length,
+            ),
           );
         }
         return;
       }
 
       // 检测有序列表：1. item
-      final orderedMatch =
-          RegExp(r'^(\s*)(\d+)\.\s+(.*)$').firstMatch(prevLine);
+      final orderedMatch = RegExp(
+        r'^(\s*)(\d+)\.\s+(.*)$',
+      ).firstMatch(prevLine);
       if (orderedMatch != null) {
         final indent = orderedMatch.group(1)!;
         final number = int.parse(orderedMatch.group(2)!);
@@ -261,7 +292,9 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
 
         if (content.isEmpty) {
           // 空列表项，移除列表标记（含前面的换行符，避免多余空行）
-          final removeStart = prevLineStart > 0 ? prevLineStart - 1 : prevLineStart;
+          final removeStart = prevLineStart > 0
+              ? prevLineStart - 1
+              : prevLineStart;
           final newText = currentText.replaceRange(
             removeStart,
             selection.start,
@@ -283,8 +316,9 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
           _previousText = newText;
           widget.controller.value = TextEditingValue(
             text: newText,
-            selection:
-                TextSelection.collapsed(offset: selection.start + prefix.length),
+            selection: TextSelection.collapsed(
+              offset: selection.start + prefix.length,
+            ),
           );
         }
         return;
@@ -427,7 +461,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
       final selection = widget.controller.selection;
       if (!selection.isValid) return;
 
-      final renderObject = context.findRenderObject();
+      final renderObject = _bodyFieldKey.currentContext?.findRenderObject();
       if (renderObject == null) return;
 
       RenderEditable? editable;
@@ -439,6 +473,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
           obj.visitChildren(find);
         }
       }
+
       renderObject.visitChildren(find);
 
       if (editable == null) return;
@@ -451,20 +486,23 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
       // 外滚结构:caret 是 RenderEditable 局部坐标,TextField 上方还有
       // header sliver —— 经全局坐标换算到滚动 viewport 局部
       // (0=视口顶部,viewportDimension=视口底部)再判越界。
-      final viewportBox =
-          position.context.storageContext.findRenderObject();
+      final viewportBox = position.context.storageContext.findRenderObject();
       if (viewportBox is! RenderBox || !viewportBox.attached) return;
       final topLeftGlobal = editable!.localToGlobal(caretLocal.topLeft);
       final caretTop = viewportBox.globalToLocal(topLeftGlobal).dy;
       final caretBottom = caretTop + caretLocal.height;
 
       double? target;
+      // 大于 EditableText 默认 scrollPadding(20)，避免它随后再次 reveal
+      // 同一个光标矩形，形成两个滚动驱动之间的轻微抖动。
+      const margin = 24.0;
       if (caretBottom > position.viewportDimension) {
         // 光标在视口下方，需要向下滚
-        target = position.pixels + caretBottom - position.viewportDimension + 8.0;
+        target =
+            position.pixels + caretBottom - position.viewportDimension + margin;
       } else if (caretTop < 0) {
         // 光标在视口上方，需要向上滚
-        target = position.pixels + caretTop - 8.0;
+        target = position.pixels + caretTop - margin;
       }
 
       if (target != null) {
@@ -542,7 +580,8 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
         final result = await MarkdownToolbarState.readImageFromReader(reader);
         if (result != null) {
           final (bytes, ext) = result;
-          final fileName = 'paste_${DateTime.now().millisecondsSinceEpoch}.$ext';
+          final fileName =
+              'paste_${DateTime.now().millisecondsSinceEpoch}.$ext';
           _toolbarKey.currentState?.uploadImageFromBytes(
             bytes: bytes,
             fileName: fileName,
@@ -556,7 +595,10 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   }
 
   /// 自定义上下文菜单：替换粘贴按钮以支持图片粘贴
-  Widget _buildContextMenu(BuildContext context, EditableTextState editableTextState) {
+  Widget _buildContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
     final items = editableTextState.contextMenuButtonItems.toList();
 
     // 找到粘贴按钮并替换
@@ -621,9 +663,32 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
     );
   }
 
-  /// 构建文本编辑器（可选包含 @提及自动补全）
+  Future<List<Emoji>> _searchEmojiShortcodes(String term) async {
+    Map<String, List<Emoji>>? groups = ref
+        .read(emojiGroupsProvider)
+        .asData
+        ?.value;
+    if (groups == null) {
+      try {
+        groups = await ref.read(emojiGroupsProvider.future);
+      } catch (_) {
+        return const [];
+      }
+    }
+
+    final loadedGroups = groups;
+    if (loadedGroups == null) return const [];
+
+    return filterEmojiAutocompleteResults(
+      loadedGroups.values.expand((group) => group),
+      term,
+    );
+  }
+
+  /// 构建文本编辑器（包含 emoji shortcode 与可选的 @提及补全）。
   Widget _buildTextEditor() {
     final textField = TextField(
+      key: _bodyFieldKey,
       controller: widget.controller,
       focusNode: _focusNode,
       readOnly: _readOnly,
@@ -648,7 +713,9 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
         onContentInserted: _handleContentInserted,
       ),
       decoration: InputDecoration(
-        hintText: widget.hintText.isEmpty ? S.current.editor_hintText : widget.hintText,
+        hintText: widget.hintText.isEmpty
+            ? S.current.editor_hintText
+            : widget.hintText,
         border: InputBorder.none,
       ),
     );
@@ -680,17 +747,23 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
           : textField,
     );
 
-    // 如果提供了 mentionDataSource，则包裹 MentionAutocomplete
+    Widget editor = wrappedField;
+
     if (widget.mentionDataSource != null) {
-      return MentionAutocomplete(
+      editor = MentionAutocomplete(
         controller: widget.controller,
         focusNode: _focusNode,
         dataSource: widget.mentionDataSource!,
-        child: wrappedField,
+        child: editor,
       );
     }
 
-    return wrappedField;
+    return EmojiAutocomplete(
+      controller: widget.controller,
+      focusNode: _focusNode,
+      dataSource: _searchEmojiShortcodes,
+      child: editor,
+    );
   }
 
   /// 自定义面板高度：键盘高度已知时直接使用（与 _KeyboardPlaceholder 等高），
@@ -734,8 +807,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
           _toolbarKey.currentState?.insertText(markdown);
         }
       },
-      onBackspace: () =>
-          deleteBackwardWithEmojiShortcodes(widget.controller),
+      onBackspace: () => deleteBackwardWithEmojiShortcodes(widget.controller),
     );
     return _emojiPanelChild!;
   }
@@ -744,10 +816,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
   Widget _buildEmojiPanel() {
     // TextFieldTapRegion 防止点击表情面板时 TextField 失焦
     return TextFieldTapRegion(
-      child: SizedBox(
-        height: _panelHeight,
-        child: _ensureEmojiPanelChild(),
-      ),
+      child: SizedBox(height: _panelHeight, child: _ensureEmojiPanelChild()),
     );
   }
 
@@ -776,124 +845,130 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
         : _buildEmojiPanel();
   }
 
+  /// 供宿主操作栏直接触发图片选择/上传。
+  Future<void> pickAndUploadImages() async {
+    await _toolbarKey.currentState?.pickAndUploadImages();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Column(
-      children: [
-        // 编辑/预览区域
-        Expanded(
-          child: _isPreview && widget.onTogglePreview == null
-              ? SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (widget.header != null) widget.header!,
-                      Padding(
-                        padding:
-                            const EdgeInsets.fromLTRB(20, 16, 20, 16),
-                        child: widget.controller.text.isEmpty
-                            ? Text(
-                                S.current.editor_noContent,
-                                style: TextStyle(
-                                    color: theme.colorScheme.onSurfaceVariant),
-                              )
-                            : MarkdownBody(
-                                data: widget.controller.text,
-                                // 预览里可缩放图(上传图)的 100/75/50 胶囊:
-                                // 官方同款正则改 raw 的 `, N%` 后缀,预览随
-                                // controller 变更自动重 cook。
-                                onImageScaleChanged: (image, scale) {
-                                  final next = applyImageScaleToRaw(
-                                      widget.controller.text, image, scale);
-                                  if (next != null) {
-                                    widget.controller.text = next;
-                                    setState(() {});
-                                  }
-                                },
+    final toolbar = TextFieldTapRegion(
+      child: MarkdownToolbar(
+        key: _toolbarKey,
+        controller: widget.controller,
+        focusNode: _focusNode,
+        showPreviewButton: widget.showPreviewButton,
+        isPreview: _isPreview,
+        onTogglePreview: _togglePreview,
+        onSwitchToRich: widget.onSwitchToRich,
+        onApplyPangu: _applyPanguSpacing,
+        showPanguButton: !ref.watch(preferencesProvider).autoPanguSpacing,
+        onToggleEmoji: () => _togglePanel(EditorPanelType.emoji),
+        isEmojiPanelVisible: showEmojiPanel,
+        emojiPopover: _emojiPopover,
+        onToggleTools: () => _togglePanel(EditorPanelType.tools),
+        // Android 中部只显示用户自定义的外显工具（默认空）。
+        visibleToolIds: ref.watch(preferencesProvider).editorToolbarTools,
+      ),
+    );
+
+    final editorSurface = Container(
+      decoration: widget.editorDecoration,
+      clipBehavior: widget.editorDecoration == null
+          ? Clip.none
+          : Clip.antiAlias,
+      child: Column(
+        children: [
+          if (widget.toolbarAtTop) toolbar,
+          // 编辑/预览区域
+          Expanded(
+            child: _isPreview && widget.onTogglePreview == null
+                ? SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (widget.header != null) widget.header!,
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                          child: widget.controller.text.isEmpty
+                              ? Text(
+                                  S.current.editor_noContent,
+                                  style: TextStyle(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                )
+                              : MarkdownBody(
+                                  data: widget.controller.text,
+                                  onImageScaleChanged: (image, scale) {
+                                    final next = applyImageScaleToRaw(
+                                      widget.controller.text,
+                                      image,
+                                      scale,
+                                    );
+                                    if (next != null) {
+                                      widget.controller.text = next;
+                                      setState(() {});
+                                    }
+                                  },
+                                ),
+                        ),
+                      ],
+                    ),
+                  )
+                : CustomScrollView(
+                    controller: _scrollController,
+                    slivers: [
+                      if (widget.header != null)
+                        SliverToBoxAdapter(child: widget.header),
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
                               ),
-                      ),
-                    ],
-                  ),
-                )
-              // 外滚结构:header(标题/元数据)与 TextField 同在一个
-              // CustomScrollView,写正文时头部随内容滚出屏。
-              // SliverFillRemaining(hasScrollBody:false):内容短时编辑列
-              // 仍撑满剩余视口,下方空白由 filler 接管点击(聚焦+光标置
-              // 末,对齐旧 expands 整区可点行为)。TextField 支持内在
-              // 高度计算,SliverFillRemaining 的 intrinsic 测量安全。
-              : CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    if (widget.header != null)
-                      SliverToBoxAdapter(child: widget.header),
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Padding(
-                            // 水平 20 = 与 header 标题对齐(富文本同值)
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 20),
-                            child: _buildTextEditor(),
-                          ),
-                          // 空白填充区:点击等价"点在正文末尾"。包
-                          // TextFieldTapRegion 防 TextField 的 onTapOutside
-                          // 先收键盘再由我们重新聚焦(闪一下)。
-                          Expanded(
-                            child: TextFieldTapRegion(
-                              child: MouseRegion(
-                                cursor: SystemMouseCursors.text,
-                                child: GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: _onBlankAreaTap,
+                              child: _buildTextEditor(),
+                            ),
+                            Expanded(
+                              child: TextFieldTapRegion(
+                                child: MouseRegion(
+                                  cursor: SystemMouseCursors.text,
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: _onBlankAreaTap,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-        ),
+                    ],
+                  ),
+          ),
+          if (widget.metaBar != null) widget.metaBar!,
+          if (!widget.toolbarAtTop) toolbar,
+        ],
+      ),
+    );
 
-        // 底部属性条(分类/标签/字数常驻,不随滚动离场)
-        if (widget.metaBar != null) widget.metaBar!,
-
-        // 工具栏（纯按钮行，TextFieldTapRegion 防止点击时 TextField 失焦）
-        TextFieldTapRegion(
-          child: MarkdownToolbar(
-          key: _toolbarKey,
-          controller: widget.controller,
-          focusNode: _focusNode,
-          showPreviewButton: widget.showPreviewButton,
-          isPreview: _isPreview,
-          onTogglePreview: _togglePreview,
-          onSwitchToRich: widget.onSwitchToRich,
-          onApplyPangu: _applyPanguSpacing,
-          showPanguButton: !ref.watch(preferencesProvider).autoPanguSpacing,
-          onToggleEmoji: () => _togglePanel(EditorPanelType.emoji),
-          isEmojiPanelVisible: showEmojiPanel,
-          // 桌面端表情按钮由弹层锚点包裹(跟随定位 + toggle 无闪烁)
-          emojiPopover: _emojiPopover,
-          // 桌面端空间充足，显示全部工具，不启用网格面板
-          onToggleTools:
-              _isDesktop ? null : () => _togglePanel(EditorPanelType.tools),
-          isToolsPanelVisible: _intendedPanel == EditorPanelType.tools,
-          // 移动端中部只显示用户自定义的外显工具（默认空）
-          visibleToolIds: _isDesktop
-              ? null
-              : ref.watch(preferencesProvider).editorToolbarTools,
+    return Column(
+      children: [
+        Expanded(
+          child: Padding(padding: widget.editorMargin, child: editorSurface),
         ),
-        ),
+        if (widget.footer != null) widget.footer!,
 
         // 键盘/面板容器（管理键盘占位、表情面板、安全区域）
         ChatBottomPanelContainer<EditorPanelType>(
           controller: _panelController,
           inputFocusNode: _focusNode,
+          // 插件默认使用纯白背景，深色主题切换键盘/面板时会闪白。
+          panelBgColor: Theme.of(context).scaffoldBackgroundColor,
           otherPanelWidget: (type) {
             switch (type) {
               case EditorPanelType.emoji:
@@ -973,9 +1048,7 @@ class MarkdownEditorState extends ConsumerState<MarkdownEditor> {
                 }
                 return const SizedBox.shrink();
               case ChatBottomPanelType.none:
-                return _SafeAreaPlaceholder(
-                  color: theme.colorScheme.surface,
-                );
+                return _SafeAreaPlaceholder(color: theme.colorScheme.surface);
             }
           },
         ),

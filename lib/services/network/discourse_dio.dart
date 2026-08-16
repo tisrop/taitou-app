@@ -19,6 +19,38 @@ import 'interceptors/self_healing_interceptor.dart';
 
 /// 统一封装的 Dio 工厂
 class DiscourseDio {
+  static const _retryableReadMethods = {'GET', 'HEAD', 'OPTIONS'};
+
+  /// 只对幂等读请求做短暂网络故障重试。
+  ///
+  /// 业务层的“加载失败，点重试又好了”通常是首个请求撞上连接抖动、
+  /// 网关 5xx。写请求不能在这里自动重放，避免重复发帖、
+  /// 重复投票等副作用；CF challenge / 鉴权错误也交给对应拦截器处理。
+  @visibleForTesting
+  static bool shouldRetryReadRequest(DioException error, int attempt) {
+    final method = error.requestOptions.method.toUpperCase();
+    if (!_retryableReadMethods.contains(method)) return false;
+
+    if (error.type == DioExceptionType.badResponse) {
+      final status = error.response?.statusCode;
+      // 429 的等待窗口由服务端 Retry-After / wait_seconds 决定，固定的短延迟
+      // 会在窗口内重复撞限流；交给 ErrorInterceptor 保留真实退避信息。
+      return status != null &&
+          status != status429TooManyRequests &&
+          defaultRetryableStatuses.contains(status);
+    }
+
+    // 不重试 cancel、CF challenge 等业务错误；只覆盖真实的传输层抖动。
+    return switch (error.type) {
+      DioExceptionType.connectionError ||
+      DioExceptionType.connectionTimeout ||
+      DioExceptionType.receiveTimeout ||
+      DioExceptionType.sendTimeout ||
+      DioExceptionType.badCertificate => true,
+      _ => false,
+    };
+  }
+
   static Dio create({
     Duration connectTimeout = const Duration(seconds: 30),
     Duration receiveTimeout = const Duration(seconds: 30),
@@ -89,13 +121,15 @@ class DiscourseDio {
         RetryInterceptor(
           dio: dio,
           logPrint: (msg) => debugPrint('[Dio Retry] $msg'),
-          retries: 0, // TODO: 调试完成后改回 3
+          // 首次请求失败时自动补两次，页面不再直接落入“加载失败”；
+          // 仅幂等读请求会通过上面的 retryEvaluator。
+          retries: 2,
           retryDelays: const [
             Duration(seconds: 1),
             Duration(seconds: 2),
             Duration(seconds: 4),
           ],
-          retryableExtraStatuses: {429, 502, 503, 504},
+          retryEvaluator: shouldRetryReadRequest,
         ),
       );
     }

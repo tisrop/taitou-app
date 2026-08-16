@@ -464,9 +464,6 @@ class _NotificationBodyState extends ConsumerState<_NotificationBody> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final notificationsAsync = ref.watch(recentNotificationsProvider);
-    final systemAvatarTemplate = ref
-        .watch(systemUserAvatarTemplateProvider)
-        .value;
 
     return Expanded(
       child: notificationsAsync.when(
@@ -511,9 +508,13 @@ class _NotificationBodyState extends ConsumerState<_NotificationBody> {
               final notification = visibleNotifications[index];
               return NotificationItem(
                 notification: notification,
-                systemAvatarTemplate: systemAvatarTemplate,
                 onTap: () {
-                  handleNotificationTap(context, ref, notification);
+                  handleNotificationTap(
+                    context,
+                    ref,
+                    notification,
+                    siblings: visibleNotifications,
+                  );
                 },
               );
             },

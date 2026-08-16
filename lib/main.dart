@@ -20,6 +20,8 @@ import 'providers/app_state_refresher.dart';
 import 'services/highlighter_service.dart';
 import 'widgets/common/misc/notification_icon_button.dart';
 import 'widgets/common/misc/clipboard_topic_link_snack_content.dart';
+import 'widgets/common/layout/anchor_guard_sliver.dart';
+import 'widgets/common/layout/fullscreen_swipe_back.dart';
 import 'widgets/common/layout/predictive_back_cupertino_transitions.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -43,7 +45,7 @@ import 'services/browser_trust_coordinator.dart';
 import 'services/update_service.dart';
 import 'services/update_checker_helper.dart';
 import 'package:fluxdo_render/fluxdo_render.dart'
-    show FlattenCache, ParagraphLayoutCache;
+    show FlattenCache, FoldShiftHook, ParagraphLayoutCache;
 
 import 'services/clipboard_topic_link_service.dart';
 import 'services/deep_link_service.dart';
@@ -56,6 +58,7 @@ import 'services/log/log_writer.dart';
 import 'services/download_service.dart';
 import 'services/migration_service.dart';
 import 'services/navigation/app_route_observer.dart';
+import 'services/navigation/back_exit_guard.dart';
 import 'services/webview_settings.dart';
 import 'services/user_presence_service.dart';
 import 'models/user.dart';
@@ -63,9 +66,11 @@ import 'constants.dart';
 import 'providers/connectivity_provider.dart';
 import 'utils/dialog_utils.dart';
 import 'utils/frame_jank_monitor.dart';
+import 'utils/hashtag_handlers.dart';
 import 'utils/image_decode_gate.dart';
 import 'widgets/post/post_item/render_parse_cache.dart';
 import 'utils/scroll_busy_signal.dart';
+import 'utils/seed_color_scheme.dart';
 import 'utils/time_utils.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -322,6 +327,12 @@ Future<void> main() async {
     await BlobImageCache.sweep(prefs);
   }());
 
+  // 折叠块(details/callout)展开动画帧武装滚动锚定哨兵:center 双向
+  // 列表的 reverse 半场里子项向上生长,否则展开会把标题顶出视口。
+  FoldShiftHook.onFrame = AnchorGuardSliver.arm;
+
+  installHashtagHandlers();
+
   // 注入 AI 模型管理包的消息提示实现
   AiToastDelegate.configure((message, {type = AiToastType.info}) {
     switch (type) {
@@ -462,6 +473,16 @@ const _pageTransitionsTheme = PageTransitionsTheme(
   },
 );
 
+/// 「全屏侧滑返回」开启时，在 Android 原转场树里追加整页 iOS 式返回
+/// 手势。视觉保持不变，只扩大手势探测区。
+const _fullscreenSwipePageTransitionsTheme = PageTransitionsTheme(
+  builders: <TargetPlatform, PageTransitionsBuilder>{
+    TargetPlatform.android: FullscreenSwipeBackTransitionsBuilder(
+      PredictiveBackCupertinoPageTransitionsBuilder(),
+    ),
+  },
+);
+
 /// M3E 按钮按压形变,参数对照 Compose ButtonSmallTokens 标准:
 /// ContainerShapeRound = CornerFull(Stadium)→ PressedContainerShape =
 /// CornerSmall(8dp)。形状插值由 Material 内部 ImplicitlyAnimatedWidget
@@ -496,14 +517,20 @@ ButtonStyle _m3eIconButtonShapeStyle() => ButtonStyle(
 
 /// light/dark 共用的 ThemeData 装配(两侧必须对称,尤其 M3eFlags ——
 /// ThemeData.lerp 对单边缺失的 extension 不插值而是瞬时并入)。
-ThemeData _buildAppTheme(ColorScheme scheme, ThemeState themeState) {
+ThemeData _buildAppTheme(
+  ColorScheme scheme,
+  ThemeState themeState, {
+  required bool fullscreenSwipeBack,
+}) {
   final m3e = themeState.m3eEnabled;
   final buttonStyle = m3e ? _m3ePressedShapeStyle() : null;
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
     fontFamily: themeState.fontFamilyName,
-    pageTransitionsTheme: _pageTransitionsTheme,
+    pageTransitionsTheme: fullscreenSwipeBack
+        ? _fullscreenSwipePageTransitionsTheme
+        : _pageTransitionsTheme,
     iconTheme: _appIconTheme(scheme.onSurface),
     primaryIconTheme: _appIconTheme(scheme.onPrimary),
     extensions: [M3eFlags(enabled: m3e)],
@@ -549,6 +576,11 @@ class MainApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeState = ref.watch(themeProvider);
+    final fullscreenSwipeBack = ref.watch(
+      preferencesProvider.select(
+        (preferences) => preferences.fullscreenSwipeBack,
+      ),
+    );
     ref.listen<Locale?>(localeProvider, (_, next) {
       unawaited(_syncSlangLocale(next));
     });
@@ -566,10 +598,10 @@ class MainApp extends ConsumerWidget {
 
         // 动态色路径只取系统动态色 primary 当种子,不用 OEM 原始 scheme。
         ColorScheme buildScheme(Color seed, Brightness brightness) {
-          return ColorScheme.fromSeed(
+          return SeedColorScheme.from(
             seedColor: seed,
             brightness: brightness,
-            dynamicSchemeVariant: themeState.schemeVariant,
+            variant: themeState.schemeVariant,
           );
         }
 
@@ -602,10 +634,18 @@ class MainApp extends ConsumerWidget {
               // 系统字体（chinese_font_library 自带的 ThemeData.useSystemChineseFont
               // 会强制改为 Roboto，导致字体显得比之前粗）。
               theme: _withChineseFallback(
-                _buildAppTheme(lightScheme, themeState),
+                _buildAppTheme(
+                  lightScheme,
+                  themeState,
+                  fullscreenSwipeBack: fullscreenSwipeBack,
+                ),
               ),
               darkTheme: _withChineseFallback(
-                _buildAppTheme(darkScheme, themeState),
+                _buildAppTheme(
+                  darkScheme,
+                  themeState,
+                  fullscreenSwipeBack: fullscreenSwipeBack,
+                ),
               ),
               builder: (context, child) {
                 final brightness = Theme.of(context).brightness;
@@ -715,7 +755,7 @@ class _MainPageState extends ConsumerState<MainPage>
   Timer? _pendingSingleTap;
   List<NavEntry> _lastResolvedEntries = const [];
   Timer? _resumeDebounceTimer;
-  DateTime? _lastBackPressTime;
+  final BackExitGuard _backExitGuard = BackExitGuard();
 
   // 不能是 const，需要传入 isActive
 
@@ -764,16 +804,16 @@ class _MainPageState extends ConsumerState<MainPage>
       }
     });
 
+    // 提前捕获根 Provider 容器：认证广播可能落在 MainPage 的
+    // deactivate/重挂载窗口，回调中再通过 context 查祖先会中断刷新链。
+    final appContainer = ProviderScope.containerOf(context, listen: false);
     _authStateSub = ref.listenManual<AsyncValue<void>>(authStateProvider, (
       _,
       next,
     ) {
       next.whenData((_) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          AppStateRefresher.refreshAll(
-            ProviderScope.containerOf(context, listen: false),
-          );
+          AppStateRefresher.refreshAll(appContainer);
         });
       });
     });
@@ -1268,12 +1308,9 @@ class _MainPageState extends ConsumerState<MainPage>
           NotificationQuickPanel.dismiss();
           return;
         }
-        final now = DateTime.now();
-        if (_lastBackPressTime != null &&
-            now.difference(_lastBackPressTime!).inMilliseconds < 2000) {
+        if (_backExitGuard.shouldExit()) {
           SystemNavigator.pop();
         } else {
-          _lastBackPressTime = now;
           ToastService.showInfo(S.current.toast_pressAgainToExit);
         }
       },
@@ -1320,7 +1357,7 @@ class _MainPageState extends ConsumerState<MainPage>
     for (final id in ids) {
       final e = byId[id];
       if (e == null) continue;
-      if (e.requiresLogin && user == null) continue;
+      if (!NavEntryRegistry.isAvailable(e, user)) continue;
       if (seen.contains(id)) continue;
       resolved.add(e);
       seen.add(id);
@@ -1331,7 +1368,7 @@ class _MainPageState extends ConsumerState<MainPage>
       if (seen.contains(id)) continue;
       final e = byId[id];
       if (e == null) continue;
-      if (e.requiresLogin && user == null) continue;
+      if (!NavEntryRegistry.isAvailable(e, user)) continue;
       resolved.add(e);
       seen.add(id);
     }

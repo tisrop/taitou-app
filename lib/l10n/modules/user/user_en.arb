@@ -97,6 +97,23 @@
   "userCard_lastPosted": "Last post",
   "userCard_mute": "Mute",
   "userCard_ignore": "Ignore",
+  "userCard_postedAt": "Posted",
+  "userCard_joinedAt": "Joined:",
+  "userCard_reading": "Read {total} (recent {recent})",
+  "@userCard_reading": {
+    "placeholders": {
+      "total": { "type": "String" },
+      "recent": { "type": "String" }
+    }
+  },
+  "userCard_otherBadges": "Other (+{count})",
+  "@userCard_otherBadges": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "userCard_referenceTopicTitle": "Re: {title}",
   "@userCard_referenceTopicTitle": {
     "placeholders": {
@@ -164,6 +181,17 @@
   "userProfile_twoMonths": "Two months",
   "userProfile_twoWeeks": "Two weeks",
   "userProfile_website": "Website",
+  "user_trustLevelTitle": "Trust level",
+  "user_trustLevelCurrent": "Current level",
+  "user_trustLevelOverview": "Trust levels reflect how familiar and engaged an account is with the community. The system may adjust the level automatically through continued, healthy reading and participation.",
+  "user_trustLevelPermissionNote": "Exact promotion criteria and feature access are determined by the community server. Groups, staff roles, and site settings may also affect actual permissions.",
+  "user_trustLevelDescription0": "New to the community. Some interaction features are usually limited.",
+  "user_trustLevelDescription1": "Familiar with the basics and able to use more community interaction features.",
+  "user_trustLevelDescription2": "A continuing participant with a more complete set of everyday features.",
+  "user_trustLevelDescription3": "A long-term active participant with a good participation record and typically more community collaboration abilities.",
+  "user_trustLevelDescription4": "The highest regular trust level granted by the community, with broader collaboration abilities.",
+  "user_trustLevelChatAvailable": "Chat available",
+  "user_trustLevelChatUnavailable": "Chat unavailable",
   "user_trustLevel0": "L0 New User",
   "user_trustLevel1": "L1 Basic User",
   "user_trustLevel2": "L2 Member",

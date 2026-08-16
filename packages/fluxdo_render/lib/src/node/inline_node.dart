@@ -19,22 +19,30 @@ sealed class InlineNode {
 /// 纯文本片段。
 @immutable
 class TextRun extends InlineNode {
-  const TextRun(this.text);
+  const TextRun(this.text, {this.isMarkdownMarker = false});
 
   final String text;
+
+  /// 仅用于富文本编辑态显示的 Markdown 分隔符。
+  ///
+  /// 标记参与渲染，但不属于编辑内容：投影层会把它映射成零内容宽度，
+  /// 因此复制、IME、光标与选区仍使用原始语义文本坐标。
+  final bool isMarkdownMarker;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is TextRun &&
           runtimeType == other.runtimeType &&
-          text == other.text;
+          text == other.text &&
+          isMarkdownMarker == other.isMarkdownMarker;
 
   @override
-  int get hashCode => text.hashCode;
+  int get hashCode => Object.hash(text, isMarkdownMarker);
 
   @override
-  String toString() => 'TextRun(${text.length} chars)';
+  String toString() =>
+      'TextRun(${text.length} chars${isMarkdownMarker ? ", markdown marker" : ""})';
 }
 
 /// `<em>` / `<i>` 斜体,可包含嵌套行内子节点。
@@ -137,13 +145,25 @@ class StyledRun extends InlineNode {
 /// [color] 与 [background] 至少一个非 null(parser 解析不出颜色时不建本节点)。
 @immutable
 class ColoredRun extends InlineNode {
-  const ColoredRun({this.color, this.background, required this.children});
+  const ColoredRun({
+    this.color,
+    this.background,
+    this.colorRaw,
+    this.backgroundRaw,
+    required this.children,
+  });
 
   /// 字色(`color`),无则 null。
   final Color? color;
 
   /// 背景色(`background-color`),无则 null。
   final Color? background;
+
+  /// `color` 的 CSS 原文(如 `red` / `#F00`)。用于 BBCode 无损往返。
+  final String? colorRaw;
+
+  /// `background-color` 的 CSS 原文,同 [colorRaw]。
+  final String? backgroundRaw;
 
   final List<InlineNode> children;
 
@@ -154,14 +174,51 @@ class ColoredRun extends InlineNode {
           runtimeType == other.runtimeType &&
           color == other.color &&
           background == other.background &&
+          colorRaw == other.colorRaw &&
+          backgroundRaw == other.backgroundRaw &&
           listEquals(children, other.children);
 
   @override
-  int get hashCode => Object.hash(color, background, Object.hashAll(children));
+  int get hashCode => Object.hash(
+    color,
+    background,
+    colorRaw,
+    backgroundRaw,
+    Object.hashAll(children),
+  );
 
   @override
   String toString() =>
       'ColoredRun(color: $color, bg: $background, ${children.length} children)';
+}
+
+/// 字号缩放(`<span style="font-size:N%">`;Discourse `[size=N]` BBCode 产出)。
+@immutable
+class SizedRun extends InlineNode {
+  const SizedRun({required this.scale, this.pctRaw, required this.children});
+
+  /// 相对父字号的倍数(1.0 = 100%)。
+  final double scale;
+
+  /// `font-size:N%` 里 N 的原文(如 `150` / `007`)。
+  final String? pctRaw;
+
+  final List<InlineNode> children;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SizedRun &&
+          runtimeType == other.runtimeType &&
+          scale == other.scale &&
+          pctRaw == other.pctRaw &&
+          listEquals(children, other.children);
+
+  @override
+  int get hashCode => Object.hash(scale, pctRaw, Object.hashAll(children));
+
+  @override
+  String toString() => 'SizedRun(${scale}x, ${children.length} children)';
 }
 
 /// `<br>` 强制换行。
@@ -204,6 +261,7 @@ class LinkRun extends InlineNode {
     this.filename = '',
     this.origHref,
     this.hashtagRef,
+    this.hashtagIcon,
     this.isOneboxLink = false,
   });
 
@@ -233,6 +291,10 @@ class LinkRun extends InlineNode {
   /// (仍走普通 LinkRun 链路)。
   final String? hashtagRef;
 
+  /// hashtag 药丸的图标名。优先取 cooked 中 `<use href="#name">` 的
+  /// name，缺失时取 svg 的 `d-icon-name` class；渲染侧交给宿主映射。
+  final String? hashtagIcon;
+
   /// onebox 系链接(`<a class="inline-onebox">` 行内 onebox,或
   /// `<a class="onebox">` 未展开的裸链)。两者 raw 里都是裸 URL:
   /// 行内 onebox 的锚文本是 cook 异步取回的页面标题(不能固化进 raw),
@@ -250,15 +312,25 @@ class LinkRun extends InlineNode {
           filename == other.filename &&
           origHref == other.origHref &&
           hashtagRef == other.hashtagRef &&
+          hashtagIcon == other.hashtagIcon &&
           isOneboxLink == other.isOneboxLink &&
           listEquals(children, other.children);
 
   @override
-  int get hashCode => Object.hash(href, isAttachment, filename, origHref,
-      hashtagRef, isOneboxLink, Object.hashAll(children));
+  int get hashCode => Object.hash(
+    href,
+    isAttachment,
+    filename,
+    origHref,
+    hashtagRef,
+    hashtagIcon,
+    isOneboxLink,
+    Object.hashAll(children),
+  );
 
   @override
-  String toString() => 'LinkRun($href'
+  String toString() =>
+      'LinkRun($href'
       '${isAttachment ? ", attachment=$filename" : ""}'
       '${hashtagRef == null ? "" : ", #$hashtagRef"}'
       ', ${children.length} children)';
@@ -339,8 +411,7 @@ class EmojiRun extends InlineNode {
   int get hashCode => Object.hash(name, url, isOnlyEmoji);
 
   @override
-  String toString() =>
-      'EmojiRun($name${isOnlyEmoji ? ", only" : ""}, $url)';
+  String toString() => 'EmojiRun($name${isOnlyEmoji ? ", only" : ""}, $url)';
 }
 
 /// `<a class="mention" href="/u/username">@username</a>` 用户提及。
@@ -540,26 +611,25 @@ class ImageRun extends InlineNode {
     double? scale,
     double? origWidth,
     double? origHeight,
-  }) =>
-      ImageRun(
-        src: src,
-        alt: alt ?? this.alt,
-        width: width ?? this.width,
-        height: height ?? this.height,
-        indexInPost: indexInPost,
-        lightboxUrl: lightboxUrl ?? this.lightboxUrl,
-        origSrc: origSrc,
-        scale: scale ?? this.scale,
-        previewImageIndex: previewImageIndex,
-        origWidth: origWidth ?? this.origWidth,
-        origHeight: origHeight ?? this.origHeight,
-        srcset: srcset,
-        dominantColor: dominantColor,
-        base62Sha1: base62Sha1,
-        naturalWidth: naturalWidth,
-        naturalHeight: naturalHeight,
-        fileSizeText: fileSizeText,
-      );
+  }) => ImageRun(
+    src: src,
+    alt: alt ?? this.alt,
+    width: width ?? this.width,
+    height: height ?? this.height,
+    indexInPost: indexInPost,
+    lightboxUrl: lightboxUrl ?? this.lightboxUrl,
+    origSrc: origSrc,
+    scale: scale ?? this.scale,
+    previewImageIndex: previewImageIndex,
+    origWidth: origWidth ?? this.origWidth,
+    origHeight: origHeight ?? this.origHeight,
+    srcset: srcset,
+    dominantColor: dominantColor,
+    base62Sha1: base62Sha1,
+    naturalWidth: naturalWidth,
+    naturalHeight: naturalHeight,
+    fileSizeText: fileSizeText,
+  );
 
   /// lightbox 包装解析专用:一次带上 anchor 侧的全部契约字段。
   ImageRun withLightboxMeta({
@@ -567,26 +637,25 @@ class ImageRun extends InlineNode {
     double? naturalWidth,
     double? naturalHeight,
     String? fileSizeText,
-  }) =>
-      ImageRun(
-        src: src,
-        alt: alt,
-        width: width,
-        height: height,
-        indexInPost: indexInPost,
-        lightboxUrl: lightboxUrl ?? this.lightboxUrl,
-        origSrc: origSrc,
-        scale: scale,
-        previewImageIndex: previewImageIndex,
-        origWidth: origWidth,
-        origHeight: origHeight,
-        srcset: srcset,
-        dominantColor: dominantColor,
-        base62Sha1: base62Sha1,
-        naturalWidth: naturalWidth ?? this.naturalWidth,
-        naturalHeight: naturalHeight ?? this.naturalHeight,
-        fileSizeText: fileSizeText ?? this.fileSizeText,
-      );
+  }) => ImageRun(
+    src: src,
+    alt: alt,
+    width: width,
+    height: height,
+    indexInPost: indexInPost,
+    lightboxUrl: lightboxUrl ?? this.lightboxUrl,
+    origSrc: origSrc,
+    scale: scale,
+    previewImageIndex: previewImageIndex,
+    origWidth: origWidth,
+    origHeight: origHeight,
+    srcset: srcset,
+    dominantColor: dominantColor,
+    base62Sha1: base62Sha1,
+    naturalWidth: naturalWidth ?? this.naturalWidth,
+    naturalHeight: naturalHeight ?? this.naturalHeight,
+    fileSizeText: fileSizeText ?? this.fileSizeText,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -613,23 +682,24 @@ class ImageRun extends InlineNode {
 
   @override
   int get hashCode => Object.hash(
-      src,
-      alt,
-      width,
-      height,
-      indexInPost,
-      lightboxUrl,
-      origSrc,
-      scale,
-      previewImageIndex,
-      origWidth,
-      origHeight,
-      Object.hashAll(srcset),
-      dominantColor,
-      base62Sha1,
-      naturalWidth,
-      naturalHeight,
-      fileSizeText);
+    src,
+    alt,
+    width,
+    height,
+    indexInPost,
+    lightboxUrl,
+    origSrc,
+    scale,
+    previewImageIndex,
+    origWidth,
+    origHeight,
+    Object.hashAll(srcset),
+    dominantColor,
+    base62Sha1,
+    naturalWidth,
+    naturalHeight,
+    fileSizeText,
+  );
 
   @override
   String toString() =>
@@ -649,9 +719,7 @@ class ImageSrcsetCandidate {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ImageSrcsetCandidate &&
-          url == other.url &&
-          scale == other.scale;
+      other is ImageSrcsetCandidate && url == other.url && scale == other.scale;
 
   @override
   int get hashCode => Object.hash(url, scale);
@@ -839,16 +907,16 @@ class LocalDateRun extends InlineNode {
 
   @override
   int get hashCode => Object.hash(
-        date,
-        time,
-        timezone,
-        format,
-        displayedTimezone,
-        countdown,
-        range,
-        fallbackText,
-        Object.hashAll(timezones),
-      );
+    date,
+    time,
+    timezone,
+    format,
+    displayedTimezone,
+    countdown,
+    range,
+    fallbackText,
+    Object.hashAll(timezones),
+  );
 
   @override
   String toString() =>

@@ -1,6 +1,8 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core_providers.dart';
 import 'bookmark_name_suggestions_provider.dart';
+import 'bookmark_sync_controller.dart';
 import 'notification_list_provider.dart';
 import 'topic_list/topic_list_provider.dart';
 import 'topic_list/filter_provider.dart';
@@ -11,11 +13,23 @@ import 'user_content_providers.dart';
 import 'category_provider.dart';
 import 'message_bus/notification_providers.dart';
 import 'message_bus/topic_tracking_providers.dart';
+import 'chat/chat_channel_list_provider.dart';
 
 class AppStateRefresher {
   AppStateRefresher._();
 
   static DateTime? _lastRefreshTime;
+
+  /// 等待当前导航帧收口后，使用调用前捕获的根容器刷新全局状态。
+  ///
+  /// 页面从登录路由返回时可能正处于 deactivate/重挂载窗口；此时
+  /// `mounted` 仍可能为 true，但通过 `context` 查找祖先已经不安全。
+  static Future<void> refreshAfterRouteTransition(
+    ProviderContainer container,
+  ) async {
+    await WidgetsBinding.instance.endOfFrame;
+    refreshAll(container);
+  }
 
   /// 调用方用 [ProviderScope.containerOf] 取 container 后传入，
   /// 避免 [Future.delayed] 闭包持有的 [WidgetRef] 在延迟期间随 widget unmount 失效，
@@ -46,6 +60,7 @@ class AppStateRefresher {
     container.read(currentUserProvider.notifier).clearCache();
     container.read(userSummaryProvider.notifier).clearCache();
     container.read(bookmarkNameSuggestionsProvider.notifier).clearCache();
+    container.read(bookmarkSyncControllerProvider.notifier).reset();
     // 登出时 invalidate 所有（不会发请求，因为数据被清空了）
     for (final refresh in _coreRefreshers) {
       refresh(container);
@@ -117,5 +132,6 @@ class AppStateRefresher {
     (c) => c.invalidate(notificationAlertChannelProvider),
     (c) => c.invalidate(latestChannelProvider),
     (c) => c.invalidate(messageBusInitProvider),
+    (c) => c.invalidate(chatChannelListProvider),
   ];
 }

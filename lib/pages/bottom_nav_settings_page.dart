@@ -14,6 +14,7 @@ import '../settings/definitions/bottom_nav_defs.dart';
 import '../settings/settings_model.dart';
 import '../settings/settings_renderer.dart';
 import '../utils/dialog_utils.dart';
+import '../utils/responsive.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 
 /// 底栏设置页
@@ -23,7 +24,7 @@ import 'package:m3e_ui/m3e_ui.dart';
 /// - 中部：可添加的候选池（点 + 加入）
 /// - 底部：手势分组（复用 [SettingsRenderer] 渲染 bottom_nav_defs 的 ActionModel）
 ///
-/// 约束：2 ≤ 已启用数量 ≤ 5；locked entry（home、profile）不可移除。
+/// 约束：已启用数量至少为 2；上限随设备类型调整；locked entry（home、profile）不可移除。
 class BottomNavSettingsPage extends ConsumerStatefulWidget {
   final String? highlightId;
 
@@ -37,7 +38,14 @@ class BottomNavSettingsPage extends ConsumerStatefulWidget {
 class _BottomNavSettingsPageState
     extends ConsumerState<BottomNavSettingsPage> {
   static const int _minCount = 2;
-  static const int _maxCount = 5;
+
+  int get _maxCount {
+    return switch (Responsive.getDeviceType(context)) {
+      DeviceType.mobile => 5,
+      DeviceType.tablet => 7,
+      DeviceType.desktop => NavEntryRegistry.buildAll().length,
+    };
+  }
 
   late List<String> _enabledIds;
 

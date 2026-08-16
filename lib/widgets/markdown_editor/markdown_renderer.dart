@@ -436,17 +436,30 @@ class _MarkdownBodyState extends State<MarkdownBody> {
 
       // 解析属性
       String? username;
+      String? displayName;
       String? post;
       String? topic;
       if (attrs.isNotEmpty) {
-        // 格式: "username, post:N, topic:T"
+        // 格式: "displayName, post:N, topic:T, username:realUsername"
+        // 显示名可能含逗号，因此把 post: 之前的片段重新拼接。
         final parts = attrs.split(',').map((s) => s.trim()).toList();
-        if (parts.isNotEmpty) username = parts[0];
         for (final part in parts.skip(1)) {
           if (part.startsWith('post:')) {
             post = part.substring(5);
           } else if (part.startsWith('topic:')) {
             topic = part.substring(6);
+          } else if (part.startsWith('username:')) {
+            username = part.substring(9);
+          }
+        }
+        final postIdx = parts.indexWhere((part) => part.startsWith('post:'));
+        final first = (postIdx == -1 ? parts.take(1) : parts.take(postIdx))
+            .join(', ');
+        if (first.isNotEmpty) {
+          if (username == null) {
+            username = first;
+          } else if (first != username) {
+            displayName = first;
           }
         }
       }
@@ -460,6 +473,9 @@ class _MarkdownBodyState extends State<MarkdownBody> {
       // 构建 aside.quote HTML（与 Discourse 的格式一致）
       final dataAttrs = StringBuffer();
       if (username != null) dataAttrs.write(' data-username="$username"');
+      if (displayName != null) {
+        dataAttrs.write(' data-display-name="$displayName"');
+      }
       if (post != null) dataAttrs.write(' data-post="$post"');
       if (topic != null) dataAttrs.write(' data-topic="$topic"');
 

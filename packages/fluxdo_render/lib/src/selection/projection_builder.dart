@@ -32,23 +32,41 @@ RenderTextProjection buildInlineProjection(List<InlineNode> inlines) {
 
   void addText(String text, ProjectionKind kind) {
     if (text.isEmpty) return;
-    entries.add(ProjectionEntry(
-      renderStart: cursor,
-      renderLen: text.length,
-      logicalText: text,
-      kind: kind,
-    ));
+    entries.add(
+      ProjectionEntry(
+        renderStart: cursor,
+        renderLen: text.length,
+        logicalText: text,
+        kind: kind,
+      ),
+    );
+    cursor += text.length;
+  }
+
+  // 即时渲染 Markdown 标记:渲染可见，但不进入复制/编辑内容坐标。
+  void addMarkdownMarker(String text) {
+    if (text.isEmpty) return;
+    entries.add(
+      ProjectionEntry(
+        renderStart: cursor,
+        renderLen: text.length,
+        logicalText: '',
+        kind: ProjectionKind.markdownMarker,
+      ),
+    );
     cursor += text.length;
   }
 
   // 占位符:渲染层占 1 个 ￼,逻辑投影为 [logical](可空)。
   void addPlaceholder(String logical, ProjectionKind kind) {
-    entries.add(ProjectionEntry(
-      renderStart: cursor,
-      renderLen: 1,
-      logicalText: logical,
-      kind: kind,
-    ));
+    entries.add(
+      ProjectionEntry(
+        renderStart: cursor,
+        renderLen: 1,
+        logicalText: logical,
+        kind: kind,
+      ),
+    );
     cursor += 1;
   }
 
@@ -59,8 +77,12 @@ RenderTextProjection buildInlineProjection(List<InlineNode> inlines) {
   void walk(List<InlineNode> nodes) {
     for (final node in nodes) {
       switch (node) {
-        case TextRun(:final text):
-          addText(insertSoftBreaks(text), ProjectionKind.text);
+        case TextRun(:final text, :final isMarkdownMarker):
+          if (isMarkdownMarker) {
+            addMarkdownMarker(text);
+          } else {
+            addText(insertSoftBreaks(text), ProjectionKind.text);
+          }
         case LineBreakRun():
           addText('\n', ProjectionKind.lineBreak);
         case InlineCodeRun(:final text):
@@ -84,10 +106,21 @@ RenderTextProjection buildInlineProjection(List<InlineNode> inlines) {
             default:
               walk(children);
           }
-        case LinkRun(:final children):
-          walk(children);
+        case LinkRun(:final children, :final hashtagRef):
+          if (hashtagRef != null) {
+            final label = concatLogical(children).trim();
+            addPlaceholder(
+              label.startsWith('#') ? label : '#$label',
+              ProjectionKind.hashtag,
+            );
+          } else {
+            walk(children);
+          }
         case ColoredRun(:final children):
           // 纯 TextSpan 着色,偏移连续 → 递归(同 Em/Strong)。
+          walk(children);
+        case SizedRun(:final children):
+          // 纯 TextSpan 字号缩放,偏移连续 → 递归。
           walk(children);
         case EmojiRun(:final name):
           addPlaceholder(name.isEmpty ? '' : ':$name:', ProjectionKind.emoji);

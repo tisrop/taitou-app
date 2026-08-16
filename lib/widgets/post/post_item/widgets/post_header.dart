@@ -22,6 +22,29 @@ String _getEmojiUrl(String emojiName) {
   return EmojiHandler().getEmojiUrl(emojiName);
 }
 
+/// 生日 / 社区纪念日图标，对齐站点 14x14 twemoji 视觉。
+class _PostAnniversaryIcon extends StatelessWidget {
+  final String emojiName;
+  final String tooltip;
+
+  const _PostAnniversaryIcon({required this.emojiName, required this.tooltip});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = _getEmojiUrl(emojiName);
+    if (url.isEmpty) return const SizedBox.shrink();
+    return Tooltip(
+      message: tooltip,
+      child: Image(
+        image: discourseImageProvider(url),
+        width: 14,
+        height: 14,
+        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      ),
+    );
+  }
+}
+
 /// 帖子头像组件（独立widget避免不必要的重建）
 class PostAvatar extends StatefulWidget {
   final Post post;
@@ -284,6 +307,20 @@ class PostHeader extends StatelessWidget {
                                   maxLines: 1,
                                 );
                         }(),
+                      ),
+                    ],
+                    if (post.isTodayBirthday) ...[
+                      const SizedBox(width: 4),
+                      _PostAnniversaryIcon(
+                        emojiName: 'birthday',
+                        tooltip: context.l10n.post_todayIsBirthday,
+                      ),
+                    ],
+                    if (post.isTodayCakeday) ...[
+                      const SizedBox(width: 4),
+                      _PostAnniversaryIcon(
+                        emojiName: 'cake',
+                        tooltip: context.l10n.post_todayIsCakeday,
                       ),
                     ],
                     // 帖子头部徽章

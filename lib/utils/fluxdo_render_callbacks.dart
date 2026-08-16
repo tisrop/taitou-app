@@ -29,6 +29,7 @@ import '../services/emoji_handler.dart';
 import '../services/highlighter_service.dart';
 import '../services/toast_service.dart';
 import '../utils/discourse_url_parser.dart';
+import '../utils/html_to_markdown.dart';
 import '../utils/link_launcher.dart';
 import '../utils/svg_utils.dart';
 import '../utils/url_helper.dart';
@@ -143,6 +144,7 @@ class FluxdoRenderCallbacks {
     TextStyle? baseTextStyle,
     bool selectionEnabled = true,
     bool compact = false,
+    bool shrinkWrapWidth = false,
     bool screenshotMode = false,
     List<BlockNode>? parsedNodes,
     String? footnotesHtml,
@@ -162,6 +164,7 @@ class FluxdoRenderCallbacks {
       baseTextStyle: baseTextStyle,
       selectionEnabled: selectionEnabled,
       compact: compact,
+      shrinkWrapWidth: shrinkWrapWidth,
       screenshotMode: screenshotMode,
       footnotesHtml: footnotesHtml,
       imageIndexOffset: imageIndexOffset,
@@ -1034,9 +1037,18 @@ class FluxdoRenderCallbacks {
       mathInlineBuilder: _mathInlineBuilder,
       oneboxBuilder: _oneboxHandler(const []),
       imageGridBuilder: _imageGridBuilder,
-      // 无 post → 无法做接受/撤销 + 票数交互,返回 null 让子包出 fallback 占位。
+      // 无 post → 无法做接受/撤销交互,返回 null 让子包出 fallback 占位。
       policyBuilder: (ctx, node) => null,
-      pollBuilder: (ctx, node) => null,
+      // 富文本编辑器拿不到票数与投票交互数据，但 cooked poll 中仍有
+      // 标题、选项和属性，展示静态预览比通用占位更接近最终发布效果。
+      pollBuilder: (ctx, node) {
+        if (node.rawHtml.isEmpty) return null;
+        return legacy_poll.buildPollStaticPreview(
+          context: ctx,
+          theme: Theme.of(ctx),
+          element: _elementFromHtml(node.rawHtml),
+        );
+      },
       chatTranscriptBuilder: _chatTranscriptHandler(heroTagNamespace, topicId),
       svgBuilder: _svgBuilder,
       videoBuilder: _videoBuilder,
@@ -1314,7 +1326,35 @@ class FluxdoRenderCallbacks {
       topicId: topicId,
       onQuoteImage: liveQuoteHandler,
       position: position,
+      quoteMarkdown: _uploadMarkdownForImage(image),
       heroTag: heroTag,
+      imageWidth: image.naturalWidth ?? image.width,
+      imageHeight: image.naturalHeight ?? image.height,
+      fileSizeText: image.fileSizeText,
+    );
+  }
+
+  /// 图片引用优先保留 Discourse upload:// 短链，避免把站内上传退化为
+  /// CDN 完整地址。回退顺序：base62Sha1 → origSrc → src。
+  static String? _uploadMarkdownForImage(ImageRun image) {
+    String src;
+    final base62Sha1 = image.base62Sha1;
+    if (base62Sha1 != null && base62Sha1.isNotEmpty) {
+      src = 'upload://$base62Sha1';
+      final ext = HtmlToMarkdown.extensionFromUrl(image.src) ??
+          HtmlToMarkdown.extensionFromUrl(image.lightboxUrl) ??
+          HtmlToMarkdown.extensionFromUrl(image.origSrc);
+      if (ext != null) src = '$src.$ext';
+    } else {
+      final origSrc = image.origSrc;
+      src = (origSrc != null && origSrc.isNotEmpty) ? origSrc : image.src;
+    }
+    if (src.isEmpty) return null;
+    return HtmlToMarkdown.buildImageMarkdown(
+      src: src,
+      alt: image.alt.isNotEmpty ? image.alt : 'image',
+      width: image.width?.round().toString(),
+      height: image.height?.round().toString(),
     );
   }
 

@@ -63,6 +63,7 @@ class QuoteSelectionHelper {
 
     final quote = QuoteBuilder.build(
       markdown: markdown,
+      displayName: post.name,
       username: post.username,
       postNumber: post.postNumber,
       topicId: topicId,

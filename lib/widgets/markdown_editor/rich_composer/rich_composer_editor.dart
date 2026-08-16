@@ -24,6 +24,7 @@ import 'package:fluxdo_render/fluxdo_render.dart'
         CalloutKind,
         CodeBlockNode,
         OneboxNode,
+        PollNode,
         QuoteCardNode,
         EmojiRun,
         ImageRun,
@@ -59,10 +60,12 @@ import '../emoji_popover.dart';
 import '../emoji_sticker_panel.dart';
 import '../image_upload_dialog.dart';
 import '../link_insert_dialog.dart';
+import '../poll_builder_dialog.dart';
 import '../template_insert_dialog.dart';
 import '../composer_shortcuts.dart' show composerShortcutHint;
 import '../markdown_toolbar.dart' show MarkdownToolbarState;
 import 'callout_edit_dialog.dart';
+import 'block_completion_rules.dart';
 import 'composer_doc_codec.dart';
 import 'html_to_markdown.dart';
 import 'local_date_edit_dialog.dart';
@@ -87,6 +90,7 @@ NodeFactory buildComposerNodeFactory(BuildContext context) {
     mathBlockBuilder: callbacks.mathBlockBuilder,
     mathInlineBuilder: callbacks.mathInlineBuilder,
     svgBuilder: callbacks.svgBuilder,
+    pollBuilder: callbacks.pollBuilder,
   );
 }
 
@@ -98,6 +102,11 @@ class RichComposerEditor extends StatefulWidget {
     this.hintText = '',
     this.header,
     this.metaBar,
+    this.toolbarAtTop = false,
+    this.instantRendering = false,
+    this.editorDecoration,
+    this.editorMargin = EdgeInsets.zero,
+    this.footer,
     this.emojiPanelHeight = 280.0,
     this.onEmojiPanelChanged,
     this.mentionDataSource,
@@ -119,6 +128,14 @@ class RichComposerEditor extends StatefulWidget {
   /// 底部属性条(编辑区与工具栏之间,如 ComposerMetaBar):
   /// 分类/标签/字数等元数据常驻可见可改,不随滚动离场。null 时无。
   final Widget? metaBar;
+  final bool toolbarAtTop;
+
+  /// 聚焦段落显示 Markdown 标记，其他段落保持所见即所得。
+  final bool instantRendering;
+
+  final Decoration? editorDecoration;
+  final EdgeInsetsGeometry editorMargin;
+  final Widget? footer;
   final double emojiPanelHeight;
   final ValueChanged<bool>? onEmojiPanelChanged;
   final MentionDataSource? mentionDataSource;
@@ -227,7 +244,12 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       widget.onFallbackToPlain?.call();
       return;
     }
-    final editor = EditorState(blocks: doc);
+    // 逃生口:导入的文档若以非空引用/岛结尾、或有相邻困住块,补顶层空段,
+    // 让光标有落点跳出(引用回复正文才不会被吸进引用块里)。只在导入这
+    // 处补,不动 EditorState 命令契约;序列化时未填的空段自动回收。
+    var gapN = 0;
+    final gapped = insertEscapeGaps(doc, () => 'e_gap_${gapN++}');
+    final editor = EditorState(blocks: gapped);
     editor.addListener(_onDocChanged);
     setState(() {
       _editor = editor;
@@ -359,6 +381,19 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         event.logicalKey == LogicalKeyboardKey.keyK &&
         HardwareKeyboard.instance.isControlPressed) {
       _insertLink();
+      return true;
+    }
+    final isEnterKey = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    final keyboard = HardwareKeyboard.instance;
+    if (_slashOverlay == null &&
+        _mentionOverlay == null &&
+        isEnterKey &&
+        !keyboard.isControlPressed &&
+        !keyboard.isMetaPressed &&
+        !keyboard.isAltPressed &&
+        !keyboard.isShiftPressed &&
+        _tryBlockCompletion()) {
       return true;
     }
     if (_slashOverlay == null) return false;
@@ -972,6 +1007,96 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     editor.insertAtom(EmojiRun(name: name, url: url));
   }
 
+  // -----------------------------------------------------------------
+  // 块完成规则(回车触发 → cook → 岛)
+  // -----------------------------------------------------------------
+
+  /// 回车时判定当前位置能否收尾成一个可渲染结构;命中则替换。
+  ///
+  /// 判定逻辑在 [detectBlockCompletion](纯函数,单测覆盖);这里只负责
+  /// 前置条件与真正的替换。返回 true = 已接管这次回车。
+  bool _tryBlockCompletion() {
+    final editor = _editor;
+    if (editor == null || editor.hasComposing) return false;
+    final sel = editor.selection;
+    if (sel == null || !sel.isCollapsed) return false;
+    final blocks = editor.blocks;
+    final i = blocks.indexWhere((b) => b.id == sel.extent.blockId);
+    if (i < 0 || blocks[i] is! TextBlock) return false;
+
+    // 软换行让一个 TextBlock 可以包含多行;块完成按逻辑行判定，
+    // 否则正文后的 ``` / $$ / 表头无法匹配行首行尾规则。
+    final lines = <String?>[];
+    final anchors = <_LineAnchor?>[];
+    for (var blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+      final block = blocks[blockIndex];
+      if (block is! TextBlock) {
+        lines.add(null);
+        anchors.add(null);
+        continue;
+      }
+      final text = block.content.text;
+      var start = 0;
+      while (true) {
+        final newline = text.indexOf('\n', start);
+        final end = newline < 0 ? text.length : newline;
+        lines.add(text.substring(start, end));
+        anchors.add(
+          _LineAnchor(blockIndex: blockIndex, start: start, end: end),
+        );
+        if (newline < 0) break;
+        start = newline + 1;
+      }
+    }
+
+    // 只在当前逻辑行末尾收尾;行中回车仍由内核正常分段。
+    final caret = sel.extent.offset;
+    final lineIndex = anchors.indexWhere(
+      (anchor) =>
+          anchor != null && anchor.blockIndex == i && anchor.end == caret,
+    );
+    if (lineIndex < 0) return false;
+
+    final completion = detectBlockCompletion(lines, lineIndex);
+    if (completion == null) return false;
+    final from = anchors[completion.from]!;
+    final to = anchors[completion.to]!;
+    _replaceRangeWithSnippet(
+      blocks[from.blockIndex].id,
+      from.start,
+      blocks[to.blockIndex].id,
+      to.end,
+      completion.markdown,
+      splitAfter: completion.splitAfter,
+    );
+    return true;
+  }
+
+  /// 删除指定文本范围，再把 [markdown] 经 cook 插入为富内容。
+  void _replaceRangeWithSnippet(
+    String fromBlockId,
+    int fromOffset,
+    String toBlockId,
+    int toOffset,
+    String markdown, {
+    bool splitAfter = false,
+  }) {
+    final editor = _editor;
+    if (editor == null) return;
+    editor.updateSelection(
+      EditorSelection(
+        base: EditorPosition(blockId: fromBlockId, offset: fromOffset),
+        extent: EditorPosition(blockId: toBlockId, offset: toOffset),
+      ),
+    );
+    editor.deleteSelection();
+    unawaited(() async {
+      await insertMarkdownSnippet(markdown);
+      if (!mounted || !identical(_editor, editor)) return;
+      if (splitAfter) editor.splitBlock();
+    }());
+  }
+
   /// 万能插入原语:markdown 片段 → cook 链路 → 富内容块,粘贴语义并入
   /// 光标处。所有"+"菜单项(表格/公式/details/…)与链接/图片全走这条 ——
   /// 插入面 = markdown 语法面,零专用代码。cook 失败/超时降级纯文本。
@@ -1043,6 +1168,9 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       AppErrorHandler.handleUnexpected(e, s);
     }
   }
+
+  /// 供宿主操作栏直接触发图片选择/上传。
+  Future<void> pickAndUploadImages() => _pickAndUploadImages();
 
   int _uploadingCount = 0;
 
@@ -1204,6 +1332,7 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         item('__link__', Icons.link_rounded, '插入链接'),
         // 日期时间:弹属性对话框选时间再插原子(不再是死模板)
         item('__date__', Icons.event_rounded, '日期时间'),
+        item('__poll__', Icons.poll_outlined, '创建投票'),
         // 音视频:选文件改名 .xz 上传后插 <audio>/<video> 标签
         item('__audio__', Icons.audiotrack_rounded, '上传音频'),
         item('__video__', Icons.videocam_outlined, '上传视频'),
@@ -1219,6 +1348,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
       await _insertCustomMarkdown();
     } else if (selected == '__date__') {
       await _insertLocalDate();
+    } else if (selected == '__poll__') {
+      await _insertPoll();
     } else if (selected == '__audio__' || selected == '__video__') {
       await _pickAndInsertMedia(isAudio: selected == '__audio__');
     } else if (selected == '__voice__') {
@@ -1252,6 +1383,22 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     editor.insertAtom(run);
   }
 
+  /// 投票构建器产出 BBCode，再复用富编辑器统一的 markdown → cook 插入
+  /// 链路。这样投票仍作为原子岛呈现，提交时由文档序列化器还原为 raw。
+  Future<void> _insertPoll() async {
+    flushToController();
+    final existing = RegExp(
+      r'\[poll(?:\s|\])',
+      caseSensitive: false,
+    ).allMatches(widget.controller.text).length;
+    final spec = await showPollBuilderDialog(
+      context,
+      existingPollCount: existing,
+    );
+    if (spec == null || !mounted) return;
+    await insertMarkdownSnippet(spec.toBBCode(existingPollCount: existing));
+  }
+
   /// 自由 markdown 输入(兜底:poll/policy/iframe 等任意语法都能进来,
   /// 走 cook 后所见即所得 —— 相当于局部源码模式)。
   Future<void> _insertCustomMarkdown() async {
@@ -1271,6 +1418,23 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     if (editor == null) return;
 
     final source = serializeIslandNode(island.node);
+
+    // 表单能够完整建模的 poll 优先回到创建时的构建器；不支持的复杂
+    // poll（如 ranked_choice）仍走下面的源码编辑兜底，避免信息丢失。
+    if (island.node is PollNode) {
+      final spec = PollSpec.tryParse(source);
+      if (spec != null) {
+        final edited = await showPollBuilderDialog(context, initial: spec);
+        if (edited == null || !mounted) return;
+        final markdown = edited.toBBCode();
+        if (markdown == source) return;
+        final fragment = await markdownToDoc(markdown);
+        if (!mounted || fragment == null) return;
+        editor.replaceIsland(island.id, fragment);
+        return;
+      }
+    }
+
     final text = await _showMarkdownDialog(
       title: '编辑源码',
       confirmLabel: '应用',
@@ -2277,6 +2441,44 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     );
   }
 
+  Widget _buildComposerToolbar(EditorState editor) {
+    return _RichToolbar(
+      state: editor,
+      isEmojiPanelVisible: _showEmojiPanel,
+      onToggleEmoji: _toggleEmojiPanel,
+      emojiPopover: _emojiPopover,
+      uploading: _uploadingCount > 0,
+      onPickImage: _pickAndUploadImages,
+      onInsertLink: _insertLink,
+      onInsertMenu: _showInsertMenu,
+      onPointerStart: ({required extend}) =>
+          _virtualPointer.start(extend: extend),
+      onPointerMove: _virtualPointer.moveBy,
+      onPointerEnd: _virtualPointer.end,
+      onSwitchToSource: widget.onSwitchToSource == null
+          ? null
+          : () {
+              flushToController();
+              _editorFocus.unfocus();
+              widget.onSwitchToSource!();
+              if (!_ownsFocus) {
+                final node = _editorFocus;
+                final controller = widget.controller;
+                Timer(const Duration(milliseconds: 80), () {
+                  try {
+                    if (!controller.selection.isValid) {
+                      controller.selection = TextSelection.collapsed(
+                        offset: controller.text.length,
+                      );
+                    }
+                    if (node.canRequestFocus) node.requestFocus();
+                  } catch (_) {}
+                });
+              }
+            },
+    );
+  }
+
   // -----------------------------------------------------------------
   // build
   // -----------------------------------------------------------------
@@ -2294,212 +2496,178 @@ class RichComposerEditorState extends State<RichComposerEditor> {
     }
 
     final isEmpty = _lastIsEmpty = _computeIsEmpty();
+    final toolbar = _buildComposerToolbar(editor);
+
+    final editorSurface = Container(
+      decoration: widget.editorDecoration,
+      clipBehavior: widget.editorDecoration == null
+          ? Clip.none
+          : Clip.antiAlias,
+      child: Column(
+        children: [
+          if (widget.toolbarAtTop) toolbar,
+          Expanded(
+            child: CompositedTransformTarget(
+              link: _mentionLink,
+              // 滚动结构:header(标题/标签等元数据)与编辑器同在一个
+              // CustomScrollView —— 手机上写正文时头部随内容滚出屏,
+              // 编辑区满格;头部高度恒定,零跳变。
+              // 不用 SliverFillRemaining:它对 child 调 getMaxIntrinsicHeight
+              // (整文档每帧算内在高度,岛内自定义 RenderObject 不支持时
+              // 会被 tight 布局裁内容);编辑器 minHeight 仍由显式
+              // ConstrainedBox 撑(viewport 高 - 上下 padding)——
+              // ConstrainedBox.enforce 不受 Stack loosen 影响(**不能换
+              // Align 等 loosen 约束的 widget**,编辑器会收缩回内容尺寸
+              // —— "只有第一行能唤起键盘"的根因)。代价:有 header 时
+              // 空文档也能把 header 滚出屏(编辑区恒可满屏,可接受)。
+              child: LayoutBuilder(
+                builder: (context, viewport) => CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    if (widget.header != null)
+                      SliverToBoxAdapter(child: widget.header),
+                    SliverToBoxAdapter(
+                      // Listener:表情面板开着时点编辑区任意处 → 切回键盘态
+                      // (原始 down,不进手势竞技场不干扰编辑器 tap)。
+                      // 只包编辑器区不包 header:点标题不走该路径。
+                      // Focus(_editorAreaFocus):编辑区**祖先**焦点 ——
+                      // ChatBottomPanelContainer 的 inputFocusNode 挂它,
+                      // 表格 cell/alt 输入等子输入框聚焦时祖先仍 hasFocus,
+                      // 容器不误判"离开输入区"收键盘(表格 cell 键盘被
+                      // 秒收的根因)。
+                      child: Listener(
+                        behavior: HitTestBehavior.translucent,
+                        onPointerDown: (_) => _onEditorAreaPointerDown(),
+                        child: Focus(
+                          focusNode: _editorAreaFocus,
+                          canRequestFocus: false,
+                          skipTraversal: true,
+                          child: Stack(
+                            children: [
+                              ConstrainedBox(
+                                // padding 在内,故 min = 全视口高
+                                constraints: BoxConstraints(
+                                  minHeight: viewport.maxHeight,
+                                ),
+                                child: Padding(
+                                  // 水平 20 = 与 header 标题对齐(源码模式
+                                  // 同值);垂直 12 兼吸收表格悬挂柄溢出
+                                  padding: const EdgeInsets.fromLTRB(
+                                    20,
+                                    12,
+                                    20,
+                                    12,
+                                  ),
+                                  child: FluxdoEditor(
+                                    state: editor,
+                                    autofocus: true,
+                                    instantRendering: widget.instantRendering,
+                                    focusNode: _editorFocus,
+                                    nodeFactory: _nodeFactory ??=
+                                        buildComposerNodeFactory(context),
+                                    // 粘贴导入:剪贴板 markdown → cook 链路 →
+                                    // 编辑块(失败/不可用时 FluxdoEditor 内部
+                                    // 降级纯文本粘贴)
+                                    markdownImporter: markdownToDoc,
+                                    virtualPointer: _virtualPointer,
+                                    // 富粘贴:剪贴板 text/html(网页/Word)
+                                    // → markdown 清洗 → 同一条 cook 导入链;
+                                    // 无 html/转换落空回落上面纯文本路径
+                                    richPasteImporter: _importRichPaste,
+                                    // 双击岛 → 源码编辑对话框
+                                    onIslandEditRequest: _editIsland,
+                                    // 点 details/callout 壳标题 → 原位改标题
+                                    onContainerTitleEdit: _editContainerTitle,
+                                    // 表格 cell 原位编辑 → 重建 markdown 经
+                                    // cook 替换
+                                    onTableEdited: _onTableEdited,
+                                    // 代码块岛内原位编辑 → 结构化节点直换
+                                    // (不经 cook)
+                                    onCodeBlockEdited: _onCodeBlockEdited,
+                                    // 单击 date chip → 属性编辑对话框
+                                    onAtomTap: _onAtomTap,
+                                    // 图片原子选中 → 浮出工具条(缩放/删除/
+                                    // 加网格)+ alt 条
+                                    onImageAtomSelectionChanged:
+                                        _onImageAtomSelectionChanged,
+                                    // 已选中的图再点 → 打开查看器
+                                    onImageAtomOpenRequest: _openImageViewer,
+                                    // grid 内图交互内聚在子包;宿主只接查看器
+                                    onGridImageOpenRequest:
+                                        _openGridImageViewer,
+                                    // 光标全局矩形上抛(斜杠/mention 浮层锚定
+                                    // 用)。矩形变化且浮层活跃 → 重建重锚定:
+                                    // 浮层首建发生在文档变更回调里(同步),
+                                    // 彼时矩形还是上一帧旧值,不跟随的话初始
+                                    // 位置错、直到下次 markNeedsBuild(如按
+                                    // 上下键)才跳到正确位置。
+                                    // collapsed 光标进出链接 → 链接工具条
+                                    // (编辑/复制/取消链接/预览/访问)
+                                    onLinkCaret: _onLinkCaret,
+                                    // 岛整选 → onebox 工具条(复制/移除
+                                    // 预览/访问)
+                                    onIslandSelected: _onIslandSelected,
+                                    onCaretRectChanged: (r) {
+                                      if (r == _caretGlobalRect) return;
+                                      _caretGlobalRect = r;
+                                      _slashOverlay?.markNeedsBuild();
+                                      _mentionOverlay?.markNeedsBuild();
+                                    },
+                                    // 浮层激活时接管上下/回车/Esc(否则被编辑
+                                    // 器拿去移光标)
+                                    keyEventInterceptor: _interceptKeyEvent,
+                                    baseTextStyle: Theme.of(context)
+                                        .textTheme
+                                        .bodyLarge
+                                        ?.copyWith(height: 1.5),
+                                  ),
+                                ),
+                              ),
+                              if (isEmpty)
+                                Positioned(
+                                  // 与编辑区 padding 同源:水平 20(对齐
+                                  // header 标题),垂直 12 + 4(块 vertical
+                                  // padding)= 首行文字基线
+                                  left: 20,
+                                  top: 16,
+                                  child: IgnorePointer(
+                                    child: Text(
+                                      widget.hintText,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyLarge
+                                          ?.copyWith(
+                                            height: 1.5,
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.outline,
+                                          ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // 底部属性条(分类/标签/字数常驻,不随滚动离场)
+          if (widget.metaBar != null) widget.metaBar!,
+          if (!widget.toolbarAtTop) toolbar,
+        ],
+      ),
+    );
 
     return Column(
       children: [
         Expanded(
-          child: CompositedTransformTarget(
-            link: _mentionLink,
-            // 滚动结构:header(标题/标签等元数据)与编辑器同在一个
-            // CustomScrollView —— 手机上写正文时头部随内容滚出屏,
-            // 编辑区满格;头部高度恒定,零跳变。
-            // 不用 SliverFillRemaining:它对 child 调 getMaxIntrinsicHeight
-            // (整文档每帧算内在高度,岛内自定义 RenderObject 不支持时
-            // 会被 tight 布局裁内容);编辑器 minHeight 仍由显式
-            // ConstrainedBox 撑(viewport 高 - 上下 padding)——
-            // ConstrainedBox.enforce 不受 Stack loosen 影响(**不能换
-            // Align 等 loosen 约束的 widget**,编辑器会收缩回内容尺寸
-            // —— "只有第一行能唤起键盘"的根因)。代价:有 header 时
-            // 空文档也能把 header 滚出屏(编辑区恒可满屏,可接受)。
-            child: LayoutBuilder(
-              builder: (context, viewport) => CustomScrollView(
-                controller: _scrollController,
-                slivers: [
-                  if (widget.header != null)
-                    SliverToBoxAdapter(child: widget.header),
-                  SliverToBoxAdapter(
-                    // Listener:表情面板开着时点编辑区任意处 → 切回键盘态
-                    // (原始 down,不进手势竞技场不干扰编辑器 tap)。
-                    // 只包编辑器区不包 header:点标题不走该路径。
-                    // Focus(_editorAreaFocus):编辑区**祖先**焦点 ——
-                    // ChatBottomPanelContainer 的 inputFocusNode 挂它,
-                    // 表格 cell/alt 输入等子输入框聚焦时祖先仍 hasFocus,
-                    // 容器不误判"离开输入区"收键盘(表格 cell 键盘被
-                    // 秒收的根因)。
-                    child: Listener(
-                      behavior: HitTestBehavior.translucent,
-                      onPointerDown: (_) => _onEditorAreaPointerDown(),
-                      child: Focus(
-                        focusNode: _editorAreaFocus,
-                        canRequestFocus: false,
-                        skipTraversal: true,
-                        child: Stack(
-                          children: [
-                            ConstrainedBox(
-                              // padding 在内,故 min = 全视口高
-                              constraints: BoxConstraints(
-                                minHeight: viewport.maxHeight,
-                              ),
-                              child: Padding(
-                                // 水平 20 = 与 header 标题对齐(源码模式
-                                // 同值);垂直 12 兼吸收表格悬挂柄溢出
-                                padding: const EdgeInsets.fromLTRB(
-                                  20,
-                                  12,
-                                  20,
-                                  12,
-                                ),
-                                child: FluxdoEditor(
-                                  state: editor,
-                                  autofocus: true,
-                                  focusNode: _editorFocus,
-                                  nodeFactory: _nodeFactory ??=
-                                      buildComposerNodeFactory(context),
-                                  // 粘贴导入:剪贴板 markdown → cook 链路 →
-                                  // 编辑块(失败/不可用时 FluxdoEditor 内部
-                                  // 降级纯文本粘贴)
-                                  markdownImporter: markdownToDoc,
-                                  virtualPointer: _virtualPointer,
-                                  // 富粘贴:剪贴板 text/html(网页/Word)
-                                  // → markdown 清洗 → 同一条 cook 导入链;
-                                  // 无 html/转换落空回落上面纯文本路径
-                                  richPasteImporter: _importRichPaste,
-                                  // 双击岛 → 源码编辑对话框
-                                  onIslandEditRequest: _editIsland,
-                                  // 点 details/callout 壳标题 → 原位改标题
-                                  onContainerTitleEdit: _editContainerTitle,
-                                  // 表格 cell 原位编辑 → 重建 markdown 经
-                                  // cook 替换
-                                  onTableEdited: _onTableEdited,
-                                  // 代码块岛内原位编辑 → 结构化节点直换
-                                  // (不经 cook)
-                                  onCodeBlockEdited: _onCodeBlockEdited,
-                                  // 单击 date chip → 属性编辑对话框
-                                  onAtomTap: _onAtomTap,
-                                  // 图片原子选中 → 浮出工具条(缩放/删除/
-                                  // 加网格)+ alt 条
-                                  onImageAtomSelectionChanged:
-                                      _onImageAtomSelectionChanged,
-                                  // 已选中的图再点 → 打开查看器
-                                  onImageAtomOpenRequest: _openImageViewer,
-                                  // grid 内图交互内聚在子包;宿主只接查看器
-                                  onGridImageOpenRequest: _openGridImageViewer,
-                                  // 光标全局矩形上抛(斜杠/mention 浮层锚定
-                                  // 用)。矩形变化且浮层活跃 → 重建重锚定:
-                                  // 浮层首建发生在文档变更回调里(同步),
-                                  // 彼时矩形还是上一帧旧值,不跟随的话初始
-                                  // 位置错、直到下次 markNeedsBuild(如按
-                                  // 上下键)才跳到正确位置。
-                                  // collapsed 光标进出链接 → 链接工具条
-                                  // (编辑/复制/取消链接/预览/访问)
-                                  onLinkCaret: _onLinkCaret,
-                                  // 岛整选 → onebox 工具条(复制/移除
-                                  // 预览/访问)
-                                  onIslandSelected: _onIslandSelected,
-                                  onCaretRectChanged: (r) {
-                                    if (r == _caretGlobalRect) return;
-                                    _caretGlobalRect = r;
-                                    _slashOverlay?.markNeedsBuild();
-                                    _mentionOverlay?.markNeedsBuild();
-                                  },
-                                  // 浮层激活时接管上下/回车/Esc(否则被编辑
-                                  // 器拿去移光标)
-                                  keyEventInterceptor: _interceptKeyEvent,
-                                  baseTextStyle: Theme.of(
-                                    context,
-                                  ).textTheme.bodyLarge?.copyWith(height: 1.5),
-                                ),
-                              ),
-                            ),
-                            if (isEmpty)
-                              Positioned(
-                                // 与编辑区 padding 同源:水平 20(对齐
-                                // header 标题),垂直 12 + 4(块 vertical
-                                // padding)= 首行文字基线
-                                left: 20,
-                                top: 16,
-                                child: IgnorePointer(
-                                  child: Text(
-                                    widget.hintText,
-                                    style: Theme.of(context).textTheme.bodyLarge
-                                        ?.copyWith(
-                                          height: 1.5,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.outline,
-                                        ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          child: Padding(padding: widget.editorMargin, child: editorSurface),
         ),
-        // 底部属性条(分类/标签/字数常驻,不随滚动离场)
-        if (widget.metaBar != null) widget.metaBar!,
-        // 单一底部工具栏(与 MarkdownToolbar 同构:左表情胶囊 + 中部
-        // 可滚工具 + 右胶囊;FaIcon 图标语言 + compact 密度)
-        _RichToolbar(
-          state: editor,
-          isEmojiPanelVisible: _showEmojiPanel,
-          onToggleEmoji: _toggleEmojiPanel,
-          // 桌面端表情按钮由弹层锚点包裹(跟随定位 + toggle 无闪烁)
-          emojiPopover: _emojiPopover,
-          uploading: _uploadingCount > 0,
-          onPickImage: _pickAndUploadImages,
-          onInsertLink: _insertLink,
-          onInsertMenu: _showInsertMenu,
-          // 手势光标(虚拟指针):幽灵光标跟手+实光标吸附+贴边自动滚;
-          // 桌面有物理键盘,不占工具栏
-          onPointerStart: _isDesktop
-              ? null
-              : ({required extend}) => _virtualPointer.start(extend: extend),
-          onPointerMove: _isDesktop ? null : _virtualPointer.moveBy,
-          onPointerEnd: _isDesktop ? null : _virtualPointer.end,
-          onSwitchToSource: widget.onSwitchToSource == null
-              ? null
-              : () {
-                  // 先落盘再切换:controller.text 即最新 markdown,
-                  // 宿主换 MarkdownEditor 后内容无缝衔接
-                  flushToController();
-                  // 关键:两编辑器共用同一 focusNode,富文本用自管 IME
-                  // (EditorImeClient 持全局 TextInput 连接)。切换是
-                  // AnimatedSwitcher 150ms 动画,期间富↔源并存;焦点始终
-                  // 停在同一 focusNode(hasFocus 不变)→ 富文本 _ime.detach
-                  // (只在失焦时触发)不会跑 → 源码 TextField 抢不到有效
-                  // 连接 = 切过去无法输入/删除。unfocus 主动让富文本失焦
-                  // 放开连接,再延迟交棒回同一 node —— 彼时富文本已
-                  // 退场,挂着它的源码 TextField attach 即干净重连,
-                  // 切完立刻能打能删(不用点一下正文)。
-                  _editorFocus.unfocus();
-                  widget.onSwitchToSource!();
-                  if (!_ownsFocus) {
-                    final node = _editorFocus;
-                    final controller = widget.controller;
-                    // 宿主已换 KeyedSubtree 直切(无 150ms 并存窗口),
-                    // 80ms 只等本帧 dispose 落定
-                    Timer(const Duration(milliseconds: 80), () {
-                      // 本 State 已 dispose,不查 mounted;node/controller
-                      // 归宿主所有。220ms 内页面整体退场会撞已 dispose
-                      // 对象 —— fire-and-forget 场景,吞掉即可。
-                      try {
-                        if (!controller.selection.isValid) {
-                          controller.selection = TextSelection.collapsed(
-                            offset: controller.text.length,
-                          );
-                        }
-                        if (node.canRequestFocus) node.requestFocus();
-                      } catch (_) {}
-                    });
-                  }
-                },
-        ),
+        if (widget.footer != null) widget.footer!,
         // 键盘/表情面板容器(MarkdownEditor 同款 ChatBottomPanelContainer:
         // 键盘态=原生键盘高占位、表情态=等高面板、无键盘=底部安全区;
         // 键盘⇄表情切换零跳变,编辑器自管 IME 一样适用 —— 容器只看
@@ -2507,6 +2675,8 @@ class RichComposerEditorState extends State<RichComposerEditor> {
         ChatBottomPanelContainer<_RichPanelType>(
           controller: _panelController,
           inputFocusNode: _editorAreaFocus,
+          // 外壳默认纯白，深色主题下键盘/表情面板过渡会闪白。
+          panelBgColor: Theme.of(context).scaffoldBackgroundColor,
           otherPanelWidget: (type) => type == _RichPanelType.emoji
               ? _buildEmojiPanel()
               : const SizedBox.shrink(),
@@ -3210,6 +3380,19 @@ class _FloatingPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 逻辑行在编辑文档中的位置映射。
+class _LineAnchor {
+  const _LineAnchor({
+    required this.blockIndex,
+    required this.start,
+    required this.end,
+  });
+
+  final int blockIndex;
+  final int start;
+  final int end;
 }
 
 /// 斜杠菜单行:图标底板 + 紧凑行高 + 圆角选中态(Notion 风)。

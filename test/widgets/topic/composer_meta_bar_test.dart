@@ -129,4 +129,50 @@ void main() {
     await tester.pump();
     expect(tapped, isFalse);
   });
+
+  testWidgets('问答开关可切换并支持分类强制锁定', (tester) async {
+    bool? selected;
+    await tester.pumpWidget(
+      _wrap(
+        ComposerMetaBar(
+          category: _cat(),
+          categories: const [],
+          onCategorySelected: (_) {},
+          selectedTags: const [],
+          allTags: const [],
+          onTagsChanged: (_) {},
+          charCount: 0,
+          showPostVotingToggle: true,
+          postVotingEnabled: false,
+          onPostVotingChanged: (value) => selected = value,
+        ),
+      ),
+    );
+    await tester.tap(find.text(S.current.createTopic_postVoting));
+    expect(selected, isTrue);
+
+    selected = null;
+    await tester.pumpWidget(
+      _wrap(
+        ComposerMetaBar(
+          category: _cat(),
+          categories: const [],
+          onCategorySelected: (_) {},
+          selectedTags: const [],
+          allTags: const [],
+          onTagsChanged: (_) {},
+          charCount: 0,
+          showPostVotingToggle: true,
+          postVotingEnabled: true,
+          postVotingLocked: true,
+          onPostVotingChanged: (value) => selected = value,
+        ),
+      ),
+    );
+    await tester.tap(
+      find.text(S.current.createTopic_postVoting),
+      warnIfMissed: false,
+    );
+    expect(selected, isNull);
+  });
 }

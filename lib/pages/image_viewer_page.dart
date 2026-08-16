@@ -1,5 +1,6 @@
 import 'dart:async' show unawaited;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:common_ui/common_ui.dart';
@@ -23,6 +24,7 @@ import '../services/toast_service.dart';
 import '../utils/platform_utils.dart';
 import '../utils/share_utils.dart';
 import '../widgets/common/overlay/app_bottom_sheet.dart';
+import '../widgets/common/layout/predictive_back_cupertino_transitions.dart';
 import '../widgets/common/visual/image_context_menu.dart';
 import 'package:m3e_ui/m3e_ui.dart';
 import '../l10n/s.dart';
@@ -84,6 +86,10 @@ class ImageViewerPage extends ConsumerStatefulWidget {
     );
   }
 
+  static bool _hasHeroTransition(String? heroTag, List<String>? heroTags) {
+    return heroTag != null || (heroTags?.isNotEmpty ?? false);
+  }
+
   /// 使用透明路由打开图片查看器。返回的 Future 在查看器关闭时完成
   /// (调用方可借此恢复被隐藏的浮层等)。
   static Future<void> open(
@@ -100,6 +106,12 @@ class ImageViewerPage extends ConsumerStatefulWidget {
     BoxFit? heroSourceFit,
     double heroSourceRadius = 0,
   }) {
+    // Hero 只会在同一 Navigator 的两个 PageRoute 之间飞行。从 dialog
+    // 等 PopupRoute 打开时禁用配对，避免查看器误走 Hero 退场路径。
+    if (ModalRoute.of(context) is! PageRoute) {
+      heroTag = null;
+      heroTags = null;
+    }
     return Navigator.push(
       context,
       PageRouteBuilder(
@@ -120,12 +132,20 @@ class ImageViewerPage extends ConsumerStatefulWidget {
             heroSourceRadius: heroSourceRadius,
           );
         },
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(
-            opacity: _routeFadeAnimation(animation),
-            child: child,
-          );
-        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            buildPredictiveBackPageTransitions(
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+              // Hero 飞行体自己承担 shared-element 预览；这里仍认领手势，
+              // 让路由动画进度驱动两端 transitionOnUserGestures Hero。
+              useSharedElementPreview: !_hasHeroTransition(heroTag, heroTags),
+              fallbackBuilder: (_, animation, _, child) => FadeTransition(
+                opacity: _routeFadeAnimation(animation),
+                child: child,
+              ),
+            ),
       ),
     );
   }
@@ -140,12 +160,17 @@ class ImageViewerPage extends ConsumerStatefulWidget {
         pageBuilder: (context, animation, secondaryAnimation) {
           return ImageViewerPage(imageBytes: bytes);
         },
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(
-            opacity: _routeFadeAnimation(animation),
-            child: child,
-          );
-        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            buildPredictiveBackPageTransitions(
+              context,
+              animation,
+              secondaryAnimation,
+              child,
+              fallbackBuilder: (_, animation, _, child) => FadeTransition(
+                opacity: _routeFadeAnimation(animation),
+                child: child,
+              ),
+            ),
       ),
     );
   }
@@ -179,6 +204,11 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
   /// 持有 —— loading→completed 等树切换只换绘制载体,手势状态与进行
   /// 中的交互(如下滑关闭)不再随载体销毁。
   final Map<int, ImageGestureController> _gestureControllers = {};
+
+  /// 退场开始时将当前页缩放归位，避免 Hero 把全屏缩放画布压进
+  /// 逐帧缩小的飞行盒子，造成内容闪跳。
+  ModalRoute<dynamic>? _route;
+  ValueListenable<bool>? _navUserGesture;
 
   ImageGestureController _obtainGestureController(
     int index, {
@@ -232,6 +262,7 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
         widget.heroSourceFit == BoxFit.cover && thumbUrl != null;
     return Hero(
       tag: tag,
+      transitionOnUserGestures: true,
       flightShuttleBuilder: !coverSource
           ? (_, _, _, _, _) => child
           : (flightContext, animation, direction, fromContext, toContext) {
@@ -350,7 +381,45 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (!identical(route, _route)) {
+      _route?.animation?.removeStatusListener(_onRouteAnimationStatus);
+      _route = route;
+      _route?.animation?.addStatusListener(_onRouteAnimationStatus);
+    }
+    final userGesture = route?.navigator?.userGestureInProgressNotifier;
+    if (!identical(userGesture, _navUserGesture)) {
+      _navUserGesture?.removeListener(_onNavUserGestureChanged);
+      _navUserGesture = userGesture;
+      _navUserGesture?.addListener(_onNavUserGestureChanged);
+    }
+  }
+
+  void _onRouteAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.reverse) {
+      _resetZoomForExit();
+    }
+  }
+
+  void _onNavUserGestureChanged() {
+    if (_navUserGesture?.value == true && (_route?.isCurrent ?? false)) {
+      _resetZoomForExit();
+    }
+  }
+
+  void _resetZoomForExit() {
+    final controller = _gestureControllers[currentIndex];
+    final scale = controller?.details?.totalScale ?? 1.0;
+    if (scale == 1.0) return;
+    controller?.reset();
+  }
+
+  @override
   void dispose() {
+    _route?.animation?.removeStatusListener(_onRouteAnimationStatus);
+    _navUserGesture?.removeListener(_onNavUserGestureChanged);
     HeroVisibilityController.instance.clear();
     _activeHeroPage.dispose();
     _galleryPageController?.dispose();

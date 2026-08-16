@@ -130,6 +130,9 @@ class AppPreferences {
   /// 竖屏锁定
   final bool portraitLock;
 
+  /// 全屏侧滑返回（页面任意位置右滑；关闭时仅屏幕左缘响应）
+  final bool fullscreenSwipeBack;
+
   /// 滚动时收起顶栏和底栏
   final bool hideBarOnScroll;
 
@@ -147,6 +150,9 @@ class AppPreferences {
 
   /// 富文本编辑器(实验性,自研 WYSIWYG composer)
   final bool useRichComposer;
+
+  /// 富文本编辑器即时渲染：活动段落显示 Markdown 标记。
+  final bool instantRendering;
 
   /// 发帖前 AI 审核
   final bool aiPostReviewEnabled;
@@ -166,6 +172,9 @@ class AppPreferences {
   /// (signatures_visible_by_default 默认 false,需用户主动开启),
   /// 且第三方签名图成本高、良莠不齐,默认关对齐网页更稳妥。
   final bool showSignatures;
+
+  /// 在话题底部显示相关话题和建议话题。
+  final bool showSuggestedTopics;
 
   /// Boost 弹幕化（默认关闭）
   final bool boostDanmaku;
@@ -239,17 +248,20 @@ class AppPreferences {
     this.blockedUsernames = const [],
     required this.crashlytics,
     required this.portraitLock,
+    required this.fullscreenSwipeBack,
     required this.hideBarOnScroll,
     required this.clearCacheOnExit,
     required this.autoCfChallenge,
     required this.expandRelatedLinks,
     required this.aiSwipeEntry,
     this.useRichComposer = false,
+    this.instantRendering = false,
     this.aiPostReviewEnabled = false,
     this.aiPostReviewModelKey,
     this.hcaptchaCreateEndpoint,
     required this.dialogBlur,
     this.showSignatures = false,
+    this.showSuggestedTopics = true,
     this.boostDanmaku = false,
     this.defaultNestedView = false,
     this.nestedLineStyle = NestedLineStyle.auto,
@@ -286,17 +298,20 @@ class AppPreferences {
     List<String>? blockedUsernames,
     bool? crashlytics,
     bool? portraitLock,
+    bool? fullscreenSwipeBack,
     bool? hideBarOnScroll,
     bool? clearCacheOnExit,
     bool? autoCfChallenge,
     bool? expandRelatedLinks,
     bool? aiSwipeEntry,
     bool? useRichComposer,
+    bool? instantRendering,
     bool? aiPostReviewEnabled,
     Object? aiPostReviewModelKey = _unset,
     Object? hcaptchaCreateEndpoint = _unset,
     bool? dialogBlur,
     bool? showSignatures,
+    bool? showSuggestedTopics,
     bool? boostDanmaku,
     bool? defaultNestedView,
     NestedLineStyle? nestedLineStyle,
@@ -334,12 +349,14 @@ class AppPreferences {
       blockedUsernames: blockedUsernames ?? this.blockedUsernames,
       crashlytics: crashlytics ?? this.crashlytics,
       portraitLock: portraitLock ?? this.portraitLock,
+      fullscreenSwipeBack: fullscreenSwipeBack ?? this.fullscreenSwipeBack,
       hideBarOnScroll: hideBarOnScroll ?? this.hideBarOnScroll,
       clearCacheOnExit: clearCacheOnExit ?? this.clearCacheOnExit,
       autoCfChallenge: autoCfChallenge ?? this.autoCfChallenge,
       expandRelatedLinks: expandRelatedLinks ?? this.expandRelatedLinks,
       aiSwipeEntry: aiSwipeEntry ?? this.aiSwipeEntry,
       useRichComposer: useRichComposer ?? this.useRichComposer,
+      instantRendering: instantRendering ?? this.instantRendering,
       aiPostReviewEnabled: aiPostReviewEnabled ?? this.aiPostReviewEnabled,
       aiPostReviewModelKey: identical(aiPostReviewModelKey, _unset)
           ? this.aiPostReviewModelKey
@@ -349,6 +366,7 @@ class AppPreferences {
           : hcaptchaCreateEndpoint as String?,
       dialogBlur: dialogBlur ?? this.dialogBlur,
       showSignatures: showSignatures ?? this.showSignatures,
+      showSuggestedTopics: showSuggestedTopics ?? this.showSuggestedTopics,
       boostDanmaku: boostDanmaku ?? this.boostDanmaku,
       defaultNestedView: defaultNestedView ?? this.defaultNestedView,
       nestedLineStyle: nestedLineStyle ?? this.nestedLineStyle,
@@ -399,18 +417,21 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
   static const String _blockedUsernamesKey = 'pref_blocked_usernames';
   static const String _crashlyticsKey = 'pref_crashlytics';
   static const String _portraitLockKey = 'pref_portrait_lock';
+  static const String _fullscreenSwipeBackKey = 'pref_fullscreen_swipe_back';
   static const String _hideBarOnScrollKey = 'pref_hide_bar_on_scroll';
   static const String _clearCacheOnExitKey = 'pref_clear_cache_on_exit';
   static const String _autoCfChallengeKey = 'pref_auto_cf_challenge';
   static const String _expandRelatedLinksKey = 'pref_expand_related_links';
   static const String _aiSwipeEntryKey = 'pref_ai_swipe_entry';
   static const String _useRichComposerKey = 'pref_use_rich_composer';
+  static const String _instantRenderingKey = 'pref_instant_rendering';
   static const String _aiPostReviewEnabledKey = 'pref_ai_post_review_enabled';
   static const String _aiPostReviewModelPrefKey = 'pref_ai_post_review_model';
   static const String _hcaptchaCreateEndpointKey =
       'pref_hcaptcha_create_endpoint';
   static const String _dialogBlurKey = 'pref_dialog_blur';
   static const String _showSignaturesKey = 'pref_show_signatures';
+  static const String _showSuggestedTopicsKey = 'pref_show_suggested_topics';
   static const String _boostDanmakuKey = 'pref_boost_danmaku';
   static const String _defaultNestedViewKey = 'pref_default_nested_view';
   static const String _nestedLineStyleKey = 'pref_nested_line_style';
@@ -466,17 +487,20 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
               _prefs.getStringList(_blockedUsernamesKey) ?? const [],
           crashlytics: _prefs.getBool(_crashlyticsKey) ?? true,
           portraitLock: _prefs.getBool(_portraitLockKey) ?? false,
+          fullscreenSwipeBack: _prefs.getBool(_fullscreenSwipeBackKey) ?? false,
           hideBarOnScroll: _prefs.getBool(_hideBarOnScrollKey) ?? true,
           clearCacheOnExit: _prefs.getBool(_clearCacheOnExitKey) ?? false,
           autoCfChallenge: _prefs.getBool(_autoCfChallengeKey) ?? true,
           expandRelatedLinks: _prefs.getBool(_expandRelatedLinksKey) ?? false,
           aiSwipeEntry: _prefs.getBool(_aiSwipeEntryKey) ?? false,
           useRichComposer: _prefs.getBool(_useRichComposerKey) ?? false,
+          instantRendering: _prefs.getBool(_instantRenderingKey) ?? false,
           aiPostReviewEnabled: _prefs.getBool(_aiPostReviewEnabledKey) ?? false,
           aiPostReviewModelKey: _prefs.getString(_aiPostReviewModelPrefKey),
           hcaptchaCreateEndpoint: _prefs.getString(_hcaptchaCreateEndpointKey),
           dialogBlur: _prefs.getBool(_dialogBlurKey) ?? true,
           showSignatures: _prefs.getBool(_showSignaturesKey) ?? false,
+          showSuggestedTopics: _prefs.getBool(_showSuggestedTopicsKey) ?? true,
           boostDanmaku: _prefs.getBool(_boostDanmakuKey) ?? false,
           defaultNestedView: _prefs.getBool(_defaultNestedViewKey) ?? false,
           nestedLineStyle: NestedLineStyle.fromString(
@@ -498,7 +522,7 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
           ),
           bottomNavIds:
               _prefs.getStringList(_bottomNavIdsKey) ??
-              const [NavEntryIds.home, NavEntryIds.profile],
+              const [NavEntryIds.home, NavEntryIds.chat, NavEntryIds.profile],
           displayModeRefreshRate:
               _prefs.getInt(_displayModeRefreshRateKey) ?? 0,
           progressGesturesEnabled:
@@ -636,6 +660,11 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
     }
   }
 
+  Future<void> setFullscreenSwipeBack(bool enabled) async {
+    state = state.copyWith(fullscreenSwipeBack: enabled);
+    await _prefs.setBool(_fullscreenSwipeBackKey, enabled);
+  }
+
   Future<void> setHideBarOnScroll(bool enabled) async {
     state = state.copyWith(hideBarOnScroll: enabled);
     await _prefs.setBool(_hideBarOnScrollKey, enabled);
@@ -665,6 +694,11 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
   Future<void> setUseRichComposer(bool enabled) async {
     state = state.copyWith(useRichComposer: enabled);
     await _prefs.setBool(_useRichComposerKey, enabled);
+  }
+
+  Future<void> setInstantRendering(bool enabled) async {
+    state = state.copyWith(instantRendering: enabled);
+    await _prefs.setBool(_instantRenderingKey, enabled);
   }
 
   Future<void> setAiPostReviewEnabled(bool enabled) async {
@@ -699,6 +733,12 @@ class PreferencesNotifier extends StateNotifier<AppPreferences> {
   Future<void> setShowSignatures(bool enabled) async {
     state = state.copyWith(showSignatures: enabled);
     await _prefs.setBool(_showSignaturesKey, enabled);
+  }
+
+  Future<void> setShowSuggestedTopics(bool enabled) async {
+    if (state.showSuggestedTopics == enabled) return;
+    state = state.copyWith(showSuggestedTopics: enabled);
+    await _prefs.setBool(_showSuggestedTopicsKey, enabled);
   }
 
   Future<void> setBoostDanmaku(bool enabled) async {

@@ -66,6 +66,7 @@ class FluxdoRender extends StatefulWidget {
     this.onDownloadAttachment,
     this.baseTextStyle,
     this.compact = false,
+    this.shrinkWrapWidth = false,
     this.screenshotMode = false,
     this.selectionEnabled = true,
     this.onQuoteRequest,
@@ -196,6 +197,10 @@ class FluxdoRender extends StatefulWidget {
   /// (对齐 legacy DiscourseHtmlContent 的 compact)。透传给默认 [NodeFactory]。
   /// 传 [factory] 时以 factory 自带的 compact 为准。
   final bool compact;
+
+  /// 是否让顶层内容列按子内容宽度收缩。默认保持正文场景的横向拉伸；
+  /// 聊天气泡等宽度由内容决定的场景可开启，并由外层约束最大宽度。
+  final bool shrinkWrapWidth;
 
   /// 截图 / 离屏渲染模式 —— 分享成图场景。透传给默认 [NodeFactory](关掉大表格
   /// 行虚拟化,全渲染),并在渲染树上包 [ScreenshotMode],让 mermaid 等懒加载
@@ -356,6 +361,7 @@ class _FluxdoRenderState extends State<FluxdoRender> {
       !identical(old.onDownloadAttachment, widget.onDownloadAttachment) ||
       old.baseTextStyle != widget.baseTextStyle ||
       old.compact != widget.compact ||
+      old.shrinkWrapWidth != widget.shrinkWrapWidth ||
       old.screenshotMode != widget.screenshotMode ||
       old.chunkIndex != widget.chunkIndex ||
       old.trimTopMargin != widget.trimTopMargin ||
@@ -473,7 +479,9 @@ class _FluxdoRenderState extends State<FluxdoRender> {
           docOrders: _docOrders,
         );
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+      crossAxisAlignment: widget.shrinkWrapWidth
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.stretch,
       children: [
         for (int i = 0; i < _nodes.length; i++)
           factory.build(

@@ -133,6 +133,19 @@ class PaginationHelper<T> {
     );
   }
 
+  /// 按 key 原位合并更新，保留当前列表的顺序和长度。
+  ///
+  /// 适用于从详情页返回后的静默状态同步：只更新当前已加载条目，
+  /// 不让第一页响应截断已经加载的后续分页数据。
+  List<T> mergeUpdates(List<T> currentItems, Iterable<T> updates) {
+    final updatesByKey = <Object, T>{
+      for (final item in updates) keyExtractor(item): item,
+    };
+    return [
+      for (final item in currentItems) updatesByKey[keyExtractor(item)] ?? item,
+    ];
+  }
+
   /// 处理加载更多的结果
   PaginationState<T> processLoadMore(
     PaginationState<T> currentState,

@@ -29,7 +29,7 @@ String topicCardEmojiUrlResolver(String name) =>
 ///
 /// 图片(头像/标题 emoji)经 [TopicCardImages] 全局解码缓存:命中
 /// 同步画;miss 发起解码,完成后 markNeedsPaint 补画。
-class PaintedTopicCard extends StatelessWidget {
+class PaintedTopicCard extends StatefulWidget {
   const PaintedTopicCard({
     super.key,
     required this.layout,
@@ -53,24 +53,41 @@ class PaintedTopicCard extends StatelessWidget {
   final Color? highlightColor;
 
   @override
+  State<PaintedTopicCard> createState() => _PaintedTopicCardState();
+}
+
+class _PaintedTopicCardState extends State<PaintedTopicCard> {
+  /// 已就绪在播的动图 URL。仅与当前 layout 的 URL 一致时，画布才
+  /// 停画静态头像；换话题、换头像或加载失败都会恢复静态兜底。
+  String? _readyAnimatedUrl;
+
+  @override
   Widget build(BuildContext context) {
+    final layout = widget.layout;
     final cardRadius = BorderRadius.circular(10);
     final theme = Theme.of(context);
-    final bgColor = isSelected
+    final bgColor = widget.isSelected
         ? theme.colorScheme.primaryContainer.withValues(alpha: 0.4)
-        : (highlightColor ?? layout.cardColor);
-    // 动图头像混合岛:layout.animatedAvatarUrl 非空(开关开启且用户有
-    // 动图)时挂播放 overlay 钉在 avatarRect,画布仍照常画静态模板
-    // 小图(几 KB 秒出)—— 感知上先见静态首帧,ready 后原位开始动
+        : (widget.highlightColor ?? layout.cardColor);
+    // 动图头像混合岛:首帧就绪前由画布绘制静态模板小图，首帧就绪
+    // 后停画底图，避免透明 gif 从透明像素后透出静态首帧形成双影。
     final animatedUrl = layout.animatedAvatarUrl;
     final Widget? avatarOverlay = animatedUrl != null
-        ? AnimatedAvatarOverlay(url: animatedUrl)
+        ? AnimatedAvatarOverlay(
+            url: animatedUrl,
+            onReadyChanged: (ready) {
+              final value = ready ? animatedUrl : null;
+              if (value != _readyAnimatedUrl) {
+                setState(() => _readyAnimatedUrl = value);
+              }
+            },
+          )
         : null;
     Widget card = DecoratedBox(
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: cardRadius,
-        border: isSelected
+        border: widget.isSelected
             ? Border.all(
                 color: theme.colorScheme.primary.withValues(alpha: 0.5),
               )
@@ -78,10 +95,15 @@ class PaintedTopicCard extends StatelessWidget {
       ),
       child: TopicCardInteractiveSurface(
         borderRadius: cardRadius,
-        onTap: onTap,
-        onLongPress: onLongPress,
-        onMiddleClick: onMiddleClick,
-        child: _PaintedTopicCardLeaf(layout: layout, child: avatarOverlay),
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        onMiddleClick: widget.onMiddleClick,
+        child: _PaintedTopicCardLeaf(
+          layout: layout,
+          paintStaticAvatar:
+              animatedUrl == null || animatedUrl != _readyAnimatedUrl,
+          child: avatarOverlay,
+        ),
       ),
     );
     if (layout.band != null) {
@@ -92,13 +114,23 @@ class PaintedTopicCard extends StatelessWidget {
 }
 
 class _PaintedTopicCardLeaf extends SingleChildRenderObjectWidget {
-  const _PaintedTopicCardLeaf({required this.layout, super.child});
+  const _PaintedTopicCardLeaf({
+    required this.layout,
+    required this.paintStaticAvatar,
+    super.child,
+  });
 
   final TopicCardLayout layout;
 
+  /// 动图 overlay 已就绪时为 false，避免透明帧透出静态底图。
+  final bool paintStaticAvatar;
+
   @override
   RenderObject createRenderObject(BuildContext context) {
-    return _RenderTopicCard(layout: layout);
+    return _RenderTopicCard(
+      layout: layout,
+      paintStaticAvatar: paintStaticAvatar,
+    );
   }
 
   @override
@@ -106,13 +138,19 @@ class _PaintedTopicCardLeaf extends SingleChildRenderObjectWidget {
     BuildContext context,
     covariant _RenderTopicCard renderObject,
   ) {
-    renderObject.layoutData = layout;
+    renderObject
+      ..layoutData = layout
+      ..paintStaticAvatar = paintStaticAvatar;
   }
 }
 
 class _RenderTopicCard extends RenderBox
     with RenderObjectWithChildMixin<RenderBox> {
-  _RenderTopicCard({required TopicCardLayout layout}) : _layout = layout;
+  _RenderTopicCard({
+    required TopicCardLayout layout,
+    required bool paintStaticAvatar,
+  }) : _layout = layout,
+       _paintStaticAvatar = paintStaticAvatar;
 
   TopicCardLayout _layout;
   int _seenRevision = 0;
@@ -121,6 +159,13 @@ class _RenderTopicCard extends RenderBox
     _layout = v;
     _seenRevision = v.revision;
     markNeedsLayout();
+  }
+
+  bool _paintStaticAvatar;
+  set paintStaticAvatar(bool value) {
+    if (value == _paintStaticAvatar) return;
+    _paintStaticAvatar = value;
+    markNeedsPaint();
   }
 
   /// 在屏订阅分钟心跳:跳一次即原地重排本卡(时间串换新)并重绘。
@@ -213,28 +258,35 @@ class _RenderTopicCard extends RenderBox
       canvas.drawParagraph(l.excerpt!, offset + l.excerptOffset);
     }
 
-    // 头像:画布始终画静态首帧(TopicCardImages 单帧,未到则灰底),
-    // 动图 overlay 子节点 ready 前透明,ready 后原位盖住此层开始播放
-    final avatarRect = l.avatarRect.shift(offset);
-    final avatar = l.avatarUrl == null
-        ? null
-        : TopicCardImages.lookup(
-            l.avatarUrl!,
-            this,
-            bucket: BlobImageCache.avatarBucket,
-          );
-    if (avatar != null) {
-      canvas.save();
-      canvas.clipPath(Path()..addOval(avatarRect));
-      canvas.drawImageRect(
-        avatar,
-        Rect.fromLTWH(0, 0, avatar.width.toDouble(), avatar.height.toDouble()),
-        avatarRect,
-        Paint()..filterQuality = FilterQuality.low,
-      );
-      canvas.restore();
-    } else {
-      canvas.drawOval(avatarRect, Paint()..color = const Color(0x14888888));
+    // 动图首帧就绪前画静态头像顶住观感；就绪后停画底图，避免
+    // 透明 gif 的像素透出静态头像形成双影。
+    if (_paintStaticAvatar) {
+      final avatarRect = l.avatarRect.shift(offset);
+      final avatar = l.avatarUrl == null
+          ? null
+          : TopicCardImages.lookup(
+              l.avatarUrl!,
+              this,
+              bucket: BlobImageCache.avatarBucket,
+            );
+      if (avatar != null) {
+        canvas.save();
+        canvas.clipPath(Path()..addOval(avatarRect));
+        canvas.drawImageRect(
+          avatar,
+          Rect.fromLTWH(
+            0,
+            0,
+            avatar.width.toDouble(),
+            avatar.height.toDouble(),
+          ),
+          avatarRect,
+          Paint()..filterQuality = FilterQuality.low,
+        );
+        canvas.restore();
+      } else {
+        canvas.drawOval(avatarRect, Paint()..color = const Color(0x14888888));
+      }
     }
 
     // 署名/时间可被字段开关关闭(layout 中为 null)

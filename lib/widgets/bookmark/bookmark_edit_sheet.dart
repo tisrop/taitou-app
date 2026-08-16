@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:dio/dio.dart';
 
 import '../../models/bookmark.dart';
 import '../../pages/bookmarks/bookmarks_models.dart';
+import '../../providers/user_content_providers.dart';
 import '../../l10n/s.dart';
 import '../../services/log/bookmark_edit_trace.dart';
 import '../../services/discourse/discourse_service.dart';
@@ -180,6 +184,11 @@ class _BookmarkEditSheetState extends State<BookmarkEditSheet> {
           resultName: name.isNotEmpty ? name : null,
           hasReminder: reminderAt != null,
         );
+        unawaited(
+          refreshBookmarkListCacheSilently(
+            ProviderScope.containerOf(context, listen: false),
+          ),
+        );
         Navigator.pop(
           context,
           BookmarkEditResult(
@@ -260,6 +269,11 @@ class _BookmarkEditSheetState extends State<BookmarkEditSheet> {
     try {
       await _service.deleteBookmark(widget.bookmarkId);
       if (mounted) {
+        await purgeBookmarkFromLocalCache(
+          ProviderScope.containerOf(context, listen: false),
+          widget.bookmarkId,
+        );
+        if (!mounted) return;
         writeBookmarkEditTrace(
           phase: 'sheet_delete_success',
           traceId: _traceId,

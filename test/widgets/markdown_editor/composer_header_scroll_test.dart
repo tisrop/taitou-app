@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:chat_bottom_container/chat_bottom_container.dart';
 import 'package:fluxdo/l10n/s.dart';
 import 'package:fluxdo/providers/theme_provider.dart';
 import 'package:fluxdo/services/local_notification_service.dart';
@@ -149,6 +150,86 @@ void main() {
       reason: '光标在视口下方时外层滚动必须跟随',
     );
     await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('header 含标题输入框时正文光标跟随不会跳回顶部', (tester) async {
+    final bodyController = TextEditingController(
+      text: List.generate(120, (i) => '正文第 $i 行').join('\n'),
+    );
+    final titleController = TextEditingController(text: '标题');
+    final bodyFocus = FocusNode();
+    addTearDown(() {
+      bodyController.dispose();
+      titleController.dispose();
+      bodyFocus.dispose();
+    });
+
+    await tester.pumpWidget(
+      await _wrap(
+        MarkdownEditor(
+          controller: bodyController,
+          focusNode: bodyFocus,
+          expands: true,
+          header: SizedBox(
+            height: 80,
+            child: TextField(controller: titleController),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final fields = find.byType(TextField);
+    expect(fields, findsNWidgets(2));
+    await tester.tap(fields.at(1), warnIfMissed: false);
+    await tester.pump();
+
+    final scrollView = find.byType(CustomScrollView);
+    await tester.drag(scrollView, const Offset(0, -10000), warnIfMissed: false);
+    await tester.pump();
+    final before = _outerScrollOffset(tester);
+    expect(before, greaterThan(0));
+
+    bodyController.value = bodyController.value.copyWith(
+      text: '${bodyController.text}x',
+      selection: TextSelection.collapsed(
+        offset: bodyController.text.length + 1,
+      ),
+      composing: TextRange.empty,
+    );
+    await tester.pump(); // 执行 _scrollToCursor 的 post-frame 回调
+
+    expect(
+      _outerScrollOffset(tester),
+      greaterThan(before - 80),
+      reason: '正文变化不能误用 header 标题的 RenderEditable 拉回顶部',
+    );
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('深色主题面板容器跟随页面背景色', (tester) async {
+    const background = Color(0xFF121416);
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      await _wrap(
+        Theme(
+          data: ThemeData.dark().copyWith(scaffoldBackgroundColor: background),
+          child: MarkdownEditor(controller: controller, expands: true),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final panelFinder = find.byWidgetPredicate(
+      (widget) => widget is ChatBottomPanelContainer<EditorPanelType>,
+    );
+    expect(panelFinder, findsOneWidget);
+    final panel = tester.widget<ChatBottomPanelContainer<EditorPanelType>>(
+      panelFinder,
+    );
+    expect(panel.panelBgColor, background);
   });
 
   testWidgets('无 header(回复弹框形态)回归:点击聚焦正常', (tester) async {

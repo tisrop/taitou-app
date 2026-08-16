@@ -142,8 +142,7 @@ extension _UserActions on _TopicDetailPageState {
                     : () async {
                         setState(() => isDeleting = true);
                         try {
-                          await DiscourseService()
-                              .deleteReviewable(pending.id);
+                          await DiscourseService().deleteReviewable(pending.id);
                           if (dialogContext.mounted) {
                             Navigator.pop(dialogContext, true);
                           }
@@ -581,6 +580,70 @@ extension _UserActions on _TopicDetailPageState {
     }
   }
 
+  /// 标记话题为未读并退出详情页。
+  ///
+  /// 必须先放弃 ScreenTrack 的未上报数据，否则 timings 请求可能在服务端
+  /// 回退阅读游标后马上把它推进回来。服务端成功后再同步全局 tracking
+  /// 与当前已挂载的话题列表，最后离开页面，避免继续阅读再次产生 timings。
+  Future<void> _handleMarkUnread(TopicDetail detail, {bool all = false}) async {
+    _screenTrack.abandon();
+    try {
+      await ref
+          .read(discourseServiceProvider)
+          .markTopicUnread(widget.topicId, all: all);
+    } on DioException catch (e) {
+      debugPrint('[TopicDetail] 标记未读失败: ${e.response?.statusCode}');
+      _restartScreenTrackAfterMarkUnreadFailure();
+      return;
+    } catch (e, s) {
+      _restartScreenTrackAfterMarkUnreadFailure();
+      AppErrorHandler.handleUnexpected(e, s);
+      return;
+    }
+
+    if (!mounted) return;
+
+    // Discourse 的 destroy_last_for 以最高楼层号为回退基准；该值包含
+    // small action 等不计入 posts_count 的楼层，因此优先使用详情字段。
+    final highestPostNumber = detail.highestPostNumber > 0
+        ? detail.highestPostNumber
+        : detail.postsCount;
+    final container = ProviderScope.containerOf(context, listen: false);
+    container
+        .read(topicTrackingStateProvider.notifier)
+        .markTopicUnread(
+          widget.topicId,
+          highestPostNumber: highestPostNumber,
+          categoryId: detail.categoryId,
+          notificationLevel: detail.notificationLevel.value,
+          all: all,
+        );
+
+    // 只改已经挂载的列表，避免为一次本地状态写入触发未打开分类的请求。
+    final pinnedIds = container.read(pinnedCategoriesProvider);
+    for (final categoryId in [null, ...pinnedIds]) {
+      final provider = topicListProvider(categoryId);
+      if (!container.exists(provider)) continue;
+      container.read(provider.notifier).markUnread(widget.topicId, all: all);
+    }
+
+    ToastService.showSuccess(S.current.topicDetail_markUnreadSuccess);
+    if (widget.embeddedMode) {
+      widget.onEmbeddedBack?.call();
+    } else {
+      unawaited(Navigator.of(context).maybePop());
+    }
+  }
+
+  void _restartScreenTrackAfterMarkUnreadFailure() {
+    if (!mounted || !_controller.trackEnabled) return;
+    _screenTrack.start(widget.topicId);
+    if (_controller.visiblePostNumbers.isNotEmpty) {
+      _screenTrack.setOnscreen(_controller.visiblePostNumbers);
+      _screenTrack.scrolled();
+    }
+  }
+
   void _shareTopic() {
     final user = ref.read(currentUserProvider).value;
     final username = user?.username ?? '';
@@ -675,6 +738,7 @@ extension _UserActions on _TopicDetailPageState {
 
     final quote = QuoteBuilder.build(
       markdown: markdown,
+      displayName: post.name,
       username: post.username,
       postNumber: post.postNumber,
       topicId: widget.topicId,
@@ -794,6 +858,10 @@ extension _UserActions on _TopicDetailPageState {
     try {
       final bookmarkId = await DiscourseService().bookmarkPost(post.id);
       if (!mounted) return;
+
+      unawaited(
+        ref.read(bookmarkSyncControllerProvider.notifier).pullFirstPage(),
+      );
 
       notifier.updatePost(
         post.copyWith(
@@ -1035,6 +1103,7 @@ extension _UserActions on _TopicDetailPageState {
     // 构建引用格式
     final quote = QuoteBuilder.build(
       markdown: markdown,
+      displayName: post.name,
       username: post.username,
       postNumber: post.postNumber,
       topicId: widget.topicId,
@@ -1139,18 +1208,23 @@ extension _UserActions on _TopicDetailPageState {
     }
   }
 
+  /// 当前活跃的嵌套视图 family 参数(context 定位模式带目标楼层)
+  NestedTopicParams get _activeNestedParams => NestedTopicParams(
+    topicId: widget.topicId,
+    targetPostNumber: _nestedTargetPostNumber,
+  );
+
   /// 回复成功后更新嵌套视图
   void _updateNestedViewAfterReply(Post newPost) {
     if (!_isNestedView) return;
-    final nestedParams = NestedTopicParams(topicId: widget.topicId);
     ref
-        .read(nestedTopicProvider(nestedParams).notifier)
+        .read(nestedTopicProvider(_activeNestedParams).notifier)
         .addNewPost(newPost, isOwnPost: true);
   }
 
   /// MessageBus created 事件：获取完整帖子数据并更新嵌套视图
   Future<void> _handleNestedCreated(int postId, int? userId) async {
-    final nestedParams = NestedTopicParams(topicId: widget.topicId);
+    final nestedParams = _activeNestedParams;
     final nestedNotifier = ref.read(nestedTopicProvider(nestedParams).notifier);
 
     // 去重：如果已存在（自己回复时 _updateNestedViewAfterReply 可能已处理）
@@ -1212,7 +1286,7 @@ extension _UserActions on _TopicDetailPageState {
       FrameJankMonitor.logEvent(
         'MSGBUS',
         '积压批量 ${updates.length} 条(${networkPostIds.length} 帖需刷新),'
-        '坍缩为一次整流刷新',
+            '坍缩为一次整流刷新',
       );
       // 旧积压全部作废:整流刷新拉回的就是最终态
       _deferredPostUpdates.clear();
@@ -1352,7 +1426,11 @@ extension _UserActions on _TopicDetailPageState {
   /// 切换嵌套视图
   void _toggleNestedView() {
     if (_isNestedView) {
-      setState(() => _isNestedView = false);
+      setState(() {
+        _isNestedView = false;
+        _nestedAutoEnabled = false;
+        _nestedTargetPostNumber = null;
+      });
       _scheduleCheckTitleVisibility();
       return;
     }
@@ -1363,7 +1441,11 @@ extension _UserActions on _TopicDetailPageState {
         notifier.isSummaryMode ||
         notifier.isAuthorOnlyMode ||
         notifier.isTopLevelMode;
-    setState(() => _isNestedView = true);
+    setState(() {
+      _isNestedView = true;
+      // 手动开启:失败时显示错误页可重试,不做静默回落
+      _nestedAutoEnabled = false;
+    });
     if (hadFilter) {
       unawaited(notifier.cancelFilter());
     }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import '../../l10n/s.dart';
+import '../../utils/nav_chrome_metrics.dart';
 import '../../utils/responsive.dart';
 import '../../utils/layout_lock.dart';
 import 'draggable_divider.dart';
@@ -55,9 +56,13 @@ class MasterDetailLayout extends StatefulWidget {
     double minDetailWidth = defaultMinDetailWidth,
   }) {
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final computed =
-        screenWidth >= masterWidth + minDetailWidth &&
-        !Responsive.isMobile(context);
+    final isMobile = Responsive.isMobile(context);
+    // Rail 宽度只作用于 AdaptiveScaffold 子树内；独立 push 路由
+    //（无 Rail 的全屏页）读不到 scope，按不扣除处理。
+    final contentWidth =
+        screenWidth -
+        navChromeReservedWidth(context, showRailByBreakpoint: !isMobile);
+    final computed = contentWidth >= masterWidth + minDetailWidth && !isMobile;
     return LayoutLock.resolveCanShowBoth(computed: computed);
   }
 

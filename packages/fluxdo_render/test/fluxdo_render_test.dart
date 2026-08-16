@@ -64,5 +64,37 @@ void main() {
       expect(findRenderedText('parsed'), findsOneWidget);
       expect(findRenderedText('ignored'), findsNothing);
     });
+
+    testWidgets('可按内容收缩宽度且默认仍横向拉伸', (tester) async {
+      final renderKey = GlobalKey();
+
+      Future<void> pumpWithWidth({required bool shrinkWrapWidth}) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  child: FluxdoRender(
+                    key: renderKey,
+                    cookedHtml: '<p>短消息</p>',
+                    selectionEnabled: false,
+                    compact: true,
+                    shrinkWrapWidth: shrinkWrapWidth,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      await pumpWithWidth(shrinkWrapWidth: false);
+      expect(tester.getSize(find.byKey(renderKey)).width, 400);
+
+      await pumpWithWidth(shrinkWrapWidth: true);
+      expect(tester.getSize(find.byKey(renderKey)).width, lessThan(400));
+    });
   });
 }

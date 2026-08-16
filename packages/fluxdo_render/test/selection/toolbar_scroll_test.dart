@@ -15,10 +15,12 @@ void main() {
     WidgetTester tester, {
     required void Function(String) onQuote,
     VoidCallback? onSelectAll,
+    ThemeData? theme,
   }) async {
     late BuildContext ctx;
     await tester.pumpWidget(
       MaterialApp(
+        theme: theme,
         home: Scaffold(
           body: Builder(builder: (c) {
             ctx = c;
@@ -52,6 +54,29 @@ void main() {
     t.hide();
     await tester.pump();
     expect(copyText, findsNothing);
+  });
+
+  testWidgets('按钮文字继承宿主主题字体族，但保留 SDK 按钮样式', (tester) async {
+    final theme = ThemeData(
+      textTheme: const TextTheme(
+        bodyMedium: TextStyle(
+          fontFamily: 'ToolbarFont',
+          fontFamilyFallback: ['ToolbarFallback'],
+          color: Colors.pink,
+          fontSize: 37,
+        ),
+      ),
+    );
+    final t = await mountToolbar(tester, onQuote: (_) {}, theme: theme);
+    t.show(dataAt(const Rect.fromLTWH(100, 300, 80, 20)));
+    await tester.pump();
+
+    final text = tester.widget<Text>(copyText);
+    expect(text.style?.fontFamily, 'ToolbarFont');
+    expect(text.style?.fontFamilyFallback, ['ToolbarFallback']);
+    expect(text.style?.color, isNull, reason: '前景色应继续由 SDK 按钮样式控制');
+    expect(text.style?.fontSize, isNull, reason: '字号应继续由 SDK 按钮样式控制');
+    t.hide();
   });
 
   testWidgets('onSelectAll 注入时显示「全选」并回调', (tester) async {

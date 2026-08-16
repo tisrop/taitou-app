@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/models/topic.dart';
@@ -41,6 +43,7 @@ BookmarkCacheEntry _entry({
 ProviderContainer _container({
   required BookmarksRepository repo,
   required String username,
+  BookmarkRawPageLoader? loader,
 }) {
   final container = ProviderContainer(
     overrides: [
@@ -48,11 +51,12 @@ ProviderContainer _container({
       currentUsernameProvider.overrideWith((ref) async => username),
       // 让 reconciler 看到 empty page 立即停止，不发 HTTP。
       bookmarkRawPageLoaderProvider.overrideWithValue(
-        (_) async => BookmarkPageParseResult(
-          topics: const [],
-          entries: const [],
-          moreUrl: null,
-        ),
+        loader ??
+            (_) async => BookmarkPageParseResult(
+              topics: const [],
+              entries: const [],
+              moreUrl: null,
+            ),
       ),
     ],
   );
@@ -127,6 +131,39 @@ void main() {
     expect(container.read(bookmarksProvider.notifier).hasMore, isFalse);
   });
 
+  test('空缓存后台同步立即写入时不会被 build 空结果覆盖', () async {
+    final entry = _entry(
+      bookmarkId: 1,
+      updatedAt: DateTime.utc(2026, 1, 1),
+    );
+    final container = _container(
+      repo: repo,
+      username: username,
+      loader: (page) async => BookmarkPageParseResult(
+        topics: const [],
+        entries: page == 0 ? [entry] : const [],
+        moreUrl: page == 0 ? 'next' : null,
+      ),
+    );
+    final synced = Completer<void>();
+    final syncSubscription = container.listen<AsyncValue<List<Topic>>>(
+      bookmarksProvider,
+      (_, next) {
+        if (next.value?.length == 1 && !synced.isCompleted) {
+          synced.complete();
+        }
+      },
+      fireImmediately: true,
+    );
+    addTearDown(syncSubscription.close);
+
+    await container.read(bookmarksProvider.future);
+    await synced.future;
+
+    expect(container.read(bookmarksProvider).value, hasLength(1));
+    expect(container.read(bookmarksProvider).value!.single.bookmarkId, 1);
+  });
+
   test('loadMore 按批追加，最后一批正确收尾', () async {
     await repo.upsertEntries(username, await _preset(70));
 
@@ -196,5 +233,35 @@ void main() {
     // 被改的那条因 updated_at 变成 2026-06-01 应排到最前
     expect(container.read(bookmarksProvider).value!.first.bookmarkId, 50);
     expect(notifier.hasMore, isTrue); // 70 - 60 = 10 条未 hydrate
+  });
+
+  test('乐观删除失败时可用备份恢复列表', () async {
+    await repo.upsertEntries(username, await _preset(1));
+
+    final container = _container(repo: repo, username: username);
+    await container.read(bookmarksProvider.future);
+    final notifier = container.read(bookmarksProvider.notifier);
+    final removed = Completer<void>();
+    final restored = Completer<void>();
+    final subscription = container.listen<AsyncValue<List<Topic>>>(
+      bookmarksProvider,
+      (_, next) {
+        final length = next.value?.length;
+        if (length == 0 && !removed.isCompleted) removed.complete();
+        if (removed.isCompleted && length == 1 && !restored.isCompleted) {
+          restored.complete();
+        }
+      },
+    );
+    addTearDown(subscription.close);
+
+    final backup = await notifier.removeBookmarkOptimistically(1);
+    await removed.future;
+    expect(container.read(bookmarksProvider).value, isEmpty);
+
+    await notifier.restoreBookmark(backup);
+    await restored.future;
+    expect(container.read(bookmarksProvider).value, hasLength(1));
+    expect(container.read(bookmarksProvider).value!.single.bookmarkId, 1);
   });
 }

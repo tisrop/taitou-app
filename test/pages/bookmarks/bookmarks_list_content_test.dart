@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fluxdo/l10n/slang/strings.g.dart';
 import 'package:fluxdo/models/category.dart';
 import 'package:fluxdo/models/topic.dart';
+import 'package:fluxdo/providers/bookmark_sync_controller.dart';
 import 'package:fluxdo/providers/category_provider.dart';
 import 'package:fluxdo/providers/theme_provider.dart';
 import 'package:fluxdo/utils/platform_utils.dart';
@@ -389,6 +390,57 @@ void main() {
     expect(summaryScrollable.position.pixels, greaterThan(0));
     expect(state._selectedBookmarkName, isNull);
   });
+
+  testWidgets('首次同步时空列表显示同步状态而非真实空态', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          categoryMapProvider.overrideWith(
+            (ref) => const AsyncValue.data(<int, Category>{}),
+          ),
+        ],
+        child: const _BookmarksListTestHost(
+          topics: [],
+          syncState: BookmarkSyncState(
+            phase: BookmarkSyncPhase.syncing,
+            isInitialSync: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('正在同步书签...'), findsOneWidget);
+    expect(find.text('暂无书签'), findsNothing);
+  });
+
+  testWidgets('首次同步失败时显示重试并触发回调', (tester) async {
+    var retries = 0;
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          categoryMapProvider.overrideWith(
+            (ref) => const AsyncValue.data(<int, Category>{}),
+          ),
+        ],
+        child: _BookmarksListTestHost(
+          topics: const [],
+          syncState: const BookmarkSyncState(
+            phase: BookmarkSyncPhase.failed,
+            isInitialSync: true,
+          ),
+          onRetrySync: () => retries++,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('同步失败，请稍后重试'), findsOneWidget);
+    await tester.tap(find.text('重试'));
+    expect(retries, 1);
+  });
 }
 
 class _BookmarkSeed {
@@ -404,9 +456,15 @@ class _BookmarkSeed {
 }
 
 class _BookmarksListTestHost extends StatefulWidget {
-  const _BookmarksListTestHost({required this.topics});
+  const _BookmarksListTestHost({
+    required this.topics,
+    this.syncState = const BookmarkSyncState(),
+    this.onRetrySync,
+  });
 
   final List<_BookmarkSeed> topics;
+  final BookmarkSyncState syncState;
+  final VoidCallback? onRetrySync;
 
   @override
   State<_BookmarksListTestHost> createState() => _BookmarksListTestHostState();
@@ -470,6 +528,8 @@ class _BookmarksListTestHostState extends State<_BookmarksListTestHost> {
             hasMore: false,
             isLoadMoreFailed: false,
             isLoadingMore: false,
+            syncState: widget.syncState,
+            onRetrySync: widget.onRetrySync,
             onRetryLoadMore: () {},
             onEditBookmark: (_) async {},
             onQuickRenameBookmark: (_, _) async => true,

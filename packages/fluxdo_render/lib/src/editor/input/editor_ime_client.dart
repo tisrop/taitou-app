@@ -207,6 +207,22 @@ class EditorImeClient with TextInputClient {
     );
   }
 
+  /// CJK 上屏后补判 input rules（typedChar 取光标前一字符）。
+  void _tryRulesAfterCommit(String blockId) {
+    final block = state.textBlockById(blockId);
+    final caret = state.selection?.extent.offset ?? 0;
+    if (block == null || caret <= 0 || caret > block.content.length) return;
+
+    final outcome = tryApplyInputRules(
+      state,
+      blockId,
+      typedChar: block.content.text[caret - 1],
+    );
+    if (outcome == InputRuleOutcome.hrRequest) {
+      onHorizontalRuleRequest?.call(blockId);
+    }
+  }
+
   /// 剥 pad。返回 null 表示 pad 已被 IME 删掉(= 段首退格信号)。
   static TextEditingValue? _unformat(TextEditingValue v) {
     if (!v.text.startsWith(_padChar)) return null;
@@ -282,15 +298,28 @@ class EditorImeClient with TextInputClient {
     final value = _unformat(rawValue);
     if (value == null) {
       // 文本不以 pad 开头。只有「恰好等于上次值去掉 pad」才是真·段首退格
-      // (IME 只删了 pad)；其余空值回显或陈旧回显一律
-      // 视为平台状态失真 → 重喂权威状态,**绝不**触发合并(否则空回显会
-      // 把段落错误合并)。
+      // (IME 只删了 pad)；移动端把整个窗口删成空串则按清空落地；其余
+      // 空值回显或陈旧回显一律视为平台状态失真 → 重喂权威状态。
       final expectedRemainder = _lastSent.text.startsWith(_padChar)
           ? _lastSent.text.substring(1)
           : null;
       if (expectedRemainder != null && rawValue.text == expectedRemainder) {
         state.sealHistory();
         state.mergeWithPrevious(blockId);
+      } else if (rawValue.text.isEmpty &&
+          expectedRemainder != null &&
+          expectedRemainder.isNotEmpty &&
+          defaultTargetPlatform == TargetPlatform.android) {
+        _log('IME window cleared — apply as clear');
+        state.sealHistory();
+        final selection = state.selection;
+        if (selection != null && !selection.isCollapsed) {
+          state.deleteSelection();
+        } else {
+          final length = state.textBlockById(blockId)?.content.length ?? 0;
+          state.imeReplace(blockId, 0, length, '', caretOffset: 0);
+        }
+        state.sealHistory();
       }
       syncFromState(show: false, force: true);
       return;
@@ -302,29 +331,32 @@ class EditorImeClient with TextInputClient {
           text: state.textBlockById(blockId)?.content.text ?? '',
         );
 
-    // 平台可能插入 '\n'(部分 IME 的回车路径不走 performAction)——
-    // 编辑器语义是分段,拦下来转 splitParagraph。
-    if (value.text.contains('\n')) {
-      final cleaned = value.text.replaceAll('\n', '');
-      if (cleaned == prev.text) {
+    // 换行按来源区分:新插入的 '\n' 是回车；段内既有的 '\n' 是
+    // cook `<br>` 导入的软换行，必须保留。只清理 diff 插入段里的换行，
+    // 避免编辑一次就把整段已有换行全部洗掉。
+    var sanitizedText = value.text;
+    var caret = value.selection.extentOffset;
+    final rawDiff = diffWithCaret(prev.text, sanitizedText, caret);
+    if (rawDiff != null && rawDiff.inserted.contains('\n')) {
+      final withoutBreaks = rawDiff.inserted.replaceAll('\n', '');
+      if (withoutBreaks.isEmpty && rawDiff.oldEnd == rawDiff.start) {
         state.splitBlock();
         syncFromState(show: false);
         return;
       }
-      // 混合变更(罕见):先按纯文本处理,'\n' 剥掉。
+      sanitizedText =
+          sanitizedText.substring(0, rawDiff.start) +
+          withoutBreaks +
+          sanitizedText.substring(rawDiff.start + rawDiff.inserted.length);
+      for (var i = 0; i < rawDiff.inserted.length; i++) {
+        if (rawDiff.inserted[i] == '\n' && rawDiff.start + i < caret) {
+          caret--;
+        }
+      }
     }
-    // 剥 '\n'(编辑器语义是分段,不进文本)。注意**不能**在这里剥 FFFC:
-    // 窗口文本里的 FFFC 是既有原子的合法哨兵,整体剥除会被 diff 误判为
-    // "删除了原子"。幻造哨兵只可能出现在**新插入段**里 → 对 diff.inserted
-    // 单独 sanitize(见下)。
-    final sanitizedText = value.text.replaceAll('\n', '');
 
     // 三段式 diff(对比上次值,caret 锚定):公共前缀/后缀 → 中段即变更。
-    final diff = diffWithCaret(
-      prev.text,
-      sanitizedText,
-      value.selection.extentOffset,
-    );
+    final diff = diffWithCaret(prev.text, sanitizedText, caret);
 
     final composing = value.composing;
 
@@ -346,9 +378,35 @@ class EditorImeClient with TextInputClient {
           composing: composing,
         );
       } else if (state.hasComposing) {
-        // composing 刚结束的收尾通知(无文本变化):清标记 + 封历史口。
-        state.updateComposing(TextRange.empty);
+        // composing 刚结束的收尾通知（无文本变化）：采纳输入法给出的
+        // 最终光标并清除 composing。部分 CJK 输入法会把文本上屏和最终
+        // 光标拆成两次通知；忽略后者会让输入规则在错误位置判定。
+        if (value.selection.isValid) {
+          state.imeReplace(
+            blockId,
+            0,
+            0,
+            '',
+            caretOffset: value.selection.extentOffset.clamp(
+              0,
+              sanitizedText.length,
+            ),
+          );
+        } else {
+          state.updateComposing(TextRange.empty);
+        }
         state.sealHistory();
+        // 本通知没有文本 diff，常规 input rules 路径不会执行。但
+        // tryApplyInputRules 的兜底 _tryBbcodeInsidePairRules 不看
+        // diff —— 收尾光标若恰好停在字面 `[/color]` 等闭合标签前，
+        // 仍可能改文档。命中后必须 reconcile 回喂,否则 _lastSent 停在
+        // 变换前原文且 _applyingPlatformUpdate 挡住 syncFromState,
+        // 平台窗口与文档失步(next diff 基准错位)。
+        _tryRulesAfterCommit(blockId);
+        final now = state.textBlockById(blockId);
+        if (now != null && now.content.text != value.text) {
+          syncFromState(show: false, force: true);
+        }
       } else if (!isEcho && value.selection.isValid) {
         // 只认**全选形状**(0..len):菜单 Edit 唯一主动发的选区就是
         // Select All;其余非回显纯选区通知维持忽略(回显可能带轻微
@@ -377,7 +435,7 @@ class EditorImeClient with TextInputClient {
       diff.start,
       diff.oldEnd,
       cleanInserted,
-      caretOffset: (value.selection.extentOffset - phantomCount).clamp(
+      caretOffset: (caret - phantomCount).clamp(
         0,
         sanitizedText.length - phantomCount,
       ),
@@ -407,12 +465,15 @@ class EditorImeClient with TextInputClient {
       if (outcome == InputRuleOutcome.hrRequest) {
         onHorizontalRuleRequest?.call(blockId);
       }
+    } else if (!composingActive && wasComposing) {
+      // 部分 IME 会把最后一次文本变化与上屏合并发送。
+      _tryRulesAfterCommit(blockId);
     }
 
-    // reconcile:若应用后文档与 IME 认知不一致(编辑器改写了内容,
-    // 比如剥了 '\n'/幻造 FFFC/input rule 转换),回喂纠正。
+    // reconcile 要与平台窗口原文比较。若插入段的换行被剥掉，文档会
+    // 等于 sanitizedText，但平台仍持有换行；此时也必须强制回喂纠正。
     final now = state.textBlockById(blockId);
-    if (now != null && now.content.text != sanitizedText) {
+    if (now != null && now.content.text != value.text) {
       syncFromState(show: false, force: true);
     }
   }

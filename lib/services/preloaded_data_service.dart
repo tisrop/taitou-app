@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 import 'package:flutter/material.dart';
 import '../constants.dart';
 import '../models/topic.dart';
@@ -57,6 +57,9 @@ class PreloadedDataService {
           'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         },
       );
+
+  @visibleForTesting
+  PreloadedDataService.forTesting(this._dio);
 
   /// 是否已加载数据
   bool get isLoaded => _loaded;
@@ -214,6 +217,26 @@ class PreloadedDataService {
     return null;
   }
 
+  /// 获取标签搜索结果上限。
+  ///
+  /// Discourse 会拒绝超过 `max_tag_search_results` 的 limit，因此不能在
+  /// 客户端写死一个固定值。读取不到配置时返回 null，由调用方省略 limit，
+  /// 交给服务端采用自己的默认行为。
+  Future<int?> getMaxTagSearchResults() async {
+    await _ensureLoaded();
+    return parsePositiveIntSetting(_siteSettings?['max_tag_search_results']);
+  }
+
+  @visibleForTesting
+  static int? parsePositiveIntSetting(Object? value) {
+    final parsed = switch (value) {
+      int number => number,
+      String text => int.tryParse(text),
+      _ => null,
+    };
+    return parsed != null && parsed > 0 ? parsed : null;
+  }
+
   /// 获取话题标题最小长度
   Future<int> getMinTopicTitleLength() async {
     await _ensureLoaded();
@@ -296,6 +319,24 @@ class PreloadedDataService {
     final raw = _siteSettings?['signatures_show_in_categories'] as String?;
     if (raw == null || raw.isEmpty) return const [];
     return raw.split('|').map(int.tryParse).whereType<int>().toList();
+  }
+
+  // ---- discourse-assign 插件开关（均为 client:true，preload 可读）----
+
+  /// 指定功能总开关(assign_enabled)。站点未装插件时该键不存在,
+  /// 视为未启用——入口显隐以「assignEnabled && can_assign」为准。
+  bool get assignEnabled => _siteSettings?['assign_enabled'] == true;
+
+  /// 指定状态字段开关(enable_assign_status)。关闭时官方 Web 端弹窗
+  /// 不显示状态下拉。
+  bool get assignStatusEnabled =>
+      _siteSettings?['enable_assign_status'] == true;
+
+  /// 指定状态可选值(assign_statuses,竖线分隔;首项为默认状态)。
+  List<String> get assignStatuses {
+    final raw = _siteSettings?['assign_statuses'] as String?;
+    if (raw == null || raw.isEmpty) return const [];
+    return raw.split('|').where((s) => s.isNotEmpty).toList();
   }
 
   /// 获取可用的回应表情列表
@@ -515,7 +556,10 @@ class PreloadedDataService {
       );
 
       final html = response.data as String;
-      await _parsePreloadedDataFromHtml(html);
+      final parsed = await _parsePreloadedDataFromHtml(html);
+      if (!parsed) {
+        throw const FormatException('首页 HTML 未解析出 data-preloaded 数据');
+      }
       debugPrint('[PreloadedData] 数据加载成功');
       _loaded = true;
       // 预热完成后仅更新站点基础数据和 sitekey。cf_clearance 自动续期

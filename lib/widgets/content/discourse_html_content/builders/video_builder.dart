@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart' as lib;
 
 import '../../../../providers/preferences_provider.dart';
 import '../../../../services/navigation/app_route_observer.dart';
+import '../../../../services/media/playback_position_store.dart';
 import '../../../../utils/layout_lock.dart';
 import '../../../common/layout/anchor_guard_sliver.dart';
 
@@ -81,6 +82,13 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
   ValueListenable<bool>? _scrollIdleNotifier;
   VoidCallback? _scrollIdleListener;
 
+  /// 播放中的位置按时间节流保存,暂停/退场时立即保存。
+  Timer? _playbackSaveTimer;
+
+  /// 初始化/续播 seek 完成前禁止写入,否则 controller 初始化到 0 秒的首个
+  /// tick 会把磁盘里的有效续播位置误判成「回到片头」并删除。
+  bool _playbackPositionReady = false;
+
   /// 上层路由（对话框/BottomSheet）弹出时自动暂停视频，
   /// 避免 BackdropFilter 对视频纹理每帧重做高斯模糊造成卡顿。
   /// 只有在被我们主动暂停时才在路由返回后恢复播放。
@@ -145,6 +153,7 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
     if (vpc != null && vpc.value.isPlaying) {
       vpc.pause();
       _pausedByRouteOverlay = true;
+      unawaited(_persistPlaybackPosition(flush: true));
     }
   }
 
@@ -165,6 +174,12 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
       _scrollIdleListener = null;
       _scrollIdleNotifier = null;
     }
+    _playbackSaveTimer?.cancel();
+    _playbackSaveTimer = null;
+    // 先抓取当前快照再释放 controller,确保 debounce 尚未到期时退出帖子
+    // 仍能留下可续播的位置。
+    unawaited(_persistPlaybackPosition(flush: true));
+    _vpc?.removeListener(_onVideoTick);
     _controller?.removeListener(_onControllerChanged);
     // 释放 LayoutLock（含等待恢复的延迟释放）
     if (_didLockLayout || _pendingLockRelease) {
@@ -228,6 +243,8 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
     if (cached != null) {
       _vpc = cached.vpc;
       final controller = cached.cc;
+      _playbackPositionReady = true;
+      _vpc!.addListener(_onVideoTick);
       controller.addListener(_onControllerChanged);
       _controller = controller;
       // 继承 GlobalKey，同帧收养旧 Chewie 子树（ChewieState/PlayerNotifier
@@ -242,6 +259,7 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
 
     // ignore: deprecated_member_use
     final vpc = _vpc = lib.VideoPlayerController.network(widget.url);
+    vpc.addListener(_onVideoTick);
     Object? vpcError;
     try {
       await vpc.initialize();
@@ -256,26 +274,39 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
       return;
     }
 
-    setState(() {
-      if (vpcError != null) {
-        _error = vpcError;
-        return;
-      }
-
-      final controller = lib.ChewieController(
-        autoPlay: widget.autoplay,
-        looping: widget.loop,
-        placeholder: placeholder,
-        showControls: widget.controls,
-        videoPlayerController: vpc,
-      );
-      // 监听全屏状态变化，控制 LayoutLock
-      controller.addListener(_onControllerChanged);
-      _controller = controller;
-    });
-    if (vpcError == null) {
-      _maybeApplyRealAspectRatio();
+    if (vpcError != null) {
+      setState(() => _error = vpcError);
+      return;
     }
+
+    // 初始化完成后静默 seek 到上次离开的位置,不打断当前封面/自动播放逻辑。
+    try {
+      final resumed = await PlaybackPositionStore.instance.restore(widget.url);
+      if (!mounted) return;
+      if (resumed != null && resumed > Duration.zero) {
+        final maxPosition = vpc.value.duration - PlaybackPositionStore.tailSkip;
+        if (maxPosition > Duration.zero && resumed < maxPosition) {
+          await vpc.seekTo(resumed);
+        }
+      }
+    } catch (error) {
+      // 续播记忆失败不应阻止视频本身加载。
+      debugPrint('[Video] 恢复播放位置失败 url=${widget.url} error=$error');
+    }
+    if (!mounted) return;
+    _playbackPositionReady = true;
+
+    final controller = lib.ChewieController(
+      autoPlay: widget.autoplay,
+      looping: widget.loop,
+      placeholder: placeholder,
+      showControls: widget.controls,
+      videoPlayerController: vpc,
+    );
+    // 监听全屏状态变化，控制 LayoutLock
+    controller.addListener(_onControllerChanged);
+    setState(() => _controller = controller);
+    _maybeApplyRealAspectRatio();
   }
 
   /// 初始化完成后把展示比例安全地展开为实测比例。
@@ -341,6 +372,46 @@ class _DiscourseVideoPlayerState extends State<DiscourseVideoPlayer>
         }
       });
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      unawaited(_persistPlaybackPosition(flush: true));
+    }
+  }
+
+  void _onVideoTick() {
+    if (!_playbackPositionReady) return;
+    final value = _vpc?.value;
+    if (value == null || !value.isInitialized) return;
+    if (!value.isPlaying) {
+      unawaited(_persistPlaybackPosition());
+      return;
+    }
+    if (_playbackSaveTimer != null) return;
+    _playbackSaveTimer = Timer(const Duration(seconds: 2), () {
+      _playbackSaveTimer = null;
+      unawaited(_persistPlaybackPosition());
+    });
+  }
+
+  Future<void> _persistPlaybackPosition({bool flush = false}) async {
+    if (!_playbackPositionReady) return;
+    final value = _vpc?.value;
+    if (value == null ||
+        !value.isInitialized ||
+        value.duration <= Duration.zero) {
+      return;
+    }
+    await PlaybackPositionStore.instance.save(
+      widget.url,
+      value.position,
+      value.duration,
+    );
+    if (flush) await PlaybackPositionStore.instance.flush();
   }
 
   /// 全屏状态变化时 acquire/release LayoutLock，

@@ -22,6 +22,11 @@ enum ProjectionKind {
   lineBreak,
   inlineCode,
 
+  /// 编辑态即时渲染注入的 Markdown 分隔符。
+  ///
+  /// 渲染长度等于标记文本长度，但逻辑投影与内容长度都为 0。
+  markdownMarker,
+
   /// 行内代码两侧注入的 NBSP 粘性内边距(见 kInlineCodePadChar)。
   /// 渲染占 1 字符、逻辑投影恒为空串(不属于内容,复制/引用不带出)。
   codePad,
@@ -37,6 +42,9 @@ enum ProjectionKind {
   /// mentionText 两侧的 NBSP 粘性内边距,语义同 [codePad]。
   mentionPad,
   image,
+
+  /// hashtag 药丸：渲染层是一个 WidgetSpan，编辑层是一个 FFFC 原子。
+  hashtag,
   spoiler,
   footnote,
   localDate,
@@ -160,7 +168,7 @@ class RenderTextProjection {
   //
   // **内容空间** = 编辑文档文本(EditableTextContent.text)的偏移系:
   // - 软换行 ZWSP(kSoftBreakChar,soft_break 注入,渲染/投影都有)宽 0;
-  // - codePad(NBSP 粘性内边距,logicalText '')宽 0;
+  // - codePad(NBSP 粘性内边距,logicalText '')与 markdownMarker 宽 0;
   // - 文本类 entry 其余字符 1:1;
   // - **emoji/mention 原子宽 1**(编辑模型里是一个 U+FFFC 哨兵,M2);
   // - 其余原子类按投影串计长(编辑器 TextBlock 不出现,防御口径)。
@@ -181,7 +189,8 @@ class RenderTextProjection {
         ProjectionKind.emoji ||
         ProjectionKind.mention ||
         ProjectionKind.localDate ||
-        ProjectionKind.image =>
+        ProjectionKind.image ||
+        ProjectionKind.hashtag =>
           1,
         _ when e.isAtomic => e.logicalText.length,
         _ => _contentLenOf(e.logicalText),

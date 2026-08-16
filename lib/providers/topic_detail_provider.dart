@@ -8,6 +8,7 @@ import '../models/pending_post.dart';
 import '../models/user.dart';
 import '../services/preloaded_data_service.dart';
 import '../widgets/common/layout/anchor_guard_sliver.dart';
+import 'bookmark_sync_controller.dart';
 import 'core_providers.dart';
 import 'message_bus/models.dart';
 
@@ -22,11 +23,16 @@ part 'topic_detail/_gap_methods.dart';
 class TopicDetailParams {
   final int topicId;
   final int? postNumber;
+
   /// 唯一实例 ID，确保每次打开页面都创建新的 provider 实例
   /// 默认为空字符串，用于 MessageBus 等不需要精确匹配的场景
   final String instanceId;
 
-  const TopicDetailParams(this.topicId, {this.postNumber, this.instanceId = ''});
+  const TopicDetailParams(
+    this.topicId, {
+    this.postNumber,
+    this.instanceId = '',
+  });
 
   @override
   bool operator ==(Object other) =>
@@ -78,12 +84,20 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
   bool get _isLoadPreviousFailed => loadPreviousFailedListenable.value;
   set _isLoadPreviousFailed(bool v) => loadPreviousFailedListenable.value = v;
 
-  String? _filter;  // 当前过滤模式（如 'summary' 表示热门回复）
-  String? _usernameFilter;  // 当前用户名过滤（如只看题主）
-  bool _filterTopLevelReplies = false;  // 只看顶层回复
+  String? _filter; // 当前过滤模式（如 'summary' 表示热门回复）
+  String? _usernameFilter; // 当前用户名过滤（如只看题主）
+  bool _filterTopLevelReplies = false; // 只看顶层回复
   /// 待加载的新帖子 ID 队列（对齐 Discourse _newPostsInStream）
   final List<int> _pendingNewPostIds = [];
   bool _isLoadingNewPosts = false;
+
+  /// 新帖批量加载的连续失败次数。超过上限后停止自动重试并暴露失败态，
+  /// 避免话题被删/网络长期不可用/权限错误时每 3 秒无限重试。
+  int _newPostLoadFailures = 0;
+  static const int _maxNewPostLoadFailures = 3;
+
+  /// 新帖批量加载是否已因连续失败而停止自动重试（视图层展示重试入口）。
+  bool get newPostLoadFailed => _newPostLoadFailures >= _maxNewPostLoadFailures;
 
   bool get hasMoreAfter => _hasMoreAfter;
   bool get hasMoreBefore => _hasMoreBefore;
@@ -92,9 +106,11 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
   bool get isLoadMoreFailed => _isLoadMoreFailed;
   bool get isLoadPreviousFailed => _isLoadPreviousFailed;
   bool get isSummaryMode => _filter == 'summary';
+  bool get isActivityMode => _filter == 'activity';
   bool get isAuthorOnlyMode => _usernameFilter != null;
   bool get isTopLevelMode => _filterTopLevelReplies;
-  bool get _isFilteredMode => _filter != null || _usernameFilter != null || _filterTopLevelReplies;
+  bool get _isFilteredMode =>
+      _filter != null || _usernameFilter != null || _filterTopLevelReplies;
 
   /// 根据 posts 和 stream 统一计算边界状态
   ///
@@ -114,6 +130,28 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
     final lastPostId = posts.last.id;
     final lastIndex = stream.indexOf(lastPostId);
     _hasMoreAfter = lastIndex != -1 && lastIndex < stream.length - 1;
+  }
+
+  /// 服务端只在帖子流到达末尾时返回推荐数据；局部重载时保留旧值。
+  List<Topic> _cachedSuggestedTopics = const [];
+  List<Topic> _cachedRelatedTopics = const [];
+
+  TopicDetail _withSuggestedCache(TopicDetail detail) {
+    if (detail.suggestedTopics.isNotEmpty) {
+      _cachedSuggestedTopics = detail.suggestedTopics;
+    }
+    if (detail.relatedTopics.isNotEmpty) {
+      _cachedRelatedTopics = detail.relatedTopics;
+    }
+    final needSuggested =
+        detail.suggestedTopics.isEmpty && _cachedSuggestedTopics.isNotEmpty;
+    final needRelated =
+        detail.relatedTopics.isEmpty && _cachedRelatedTopics.isNotEmpty;
+    if (!needSuggested && !needRelated) return detail;
+    return detail.copyWith(
+      suggestedTopics: needSuggested ? _cachedSuggestedTopics : null,
+      relatedTopics: needRelated ? _cachedRelatedTopics : null,
+    );
   }
 
   /// 更新单个帖子的辅助方法
@@ -140,14 +178,22 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
     final newPosts = [...currentPosts];
     newPosts[index] = newPost;
 
-    state = AsyncValue.data(currentDetail.copyWith(
-      postStream: PostStream(posts: newPosts, stream: currentDetail.postStream.stream, gaps: currentDetail.postStream.gaps),
-    ));
+    state = AsyncValue.data(
+      currentDetail.copyWith(
+        postStream: PostStream(
+          posts: newPosts,
+          stream: currentDetail.postStream.stream,
+          gaps: currentDetail.postStream.gaps,
+        ),
+      ),
+    );
   }
 
   @override
   Future<TopicDetail> build() async {
-    debugPrint('[TopicDetailNotifier] build called with topicId=${arg.topicId}, postNumber=${arg.postNumber}');
+    debugPrint(
+      '[TopicDetailNotifier] build called with topicId=${arg.topicId}, postNumber=${arg.postNumber}',
+    );
 
     // 注册活跃实例(见 _activeParams);autoDispose 时反注册。
     // build 重跑(refresh)会重复进入,先去重再追加保持"最近激活在尾"。
@@ -182,21 +228,26 @@ class TopicDetailNotifier extends AsyncNotifier<TopicDetail> {
     _isLoadMoreFailed = false;
     _isLoadPreviousFailed = false;
     final service = ref.read(discourseServiceProvider);
-    final detail = await service.getTopicDetail(arg.topicId, postNumber: arg.postNumber, trackVisit: true);
+    final detail = await service.getTopicDetail(
+      arg.topicId,
+      postNumber: arg.postNumber,
+      trackVisit: true,
+    );
 
     _updateBoundaryState(detail.postStream.posts, detail.postStream.stream);
 
-    return detail;
+    return _withSuggestedCache(detail);
   }
 }
 
-final topicDetailProvider = AsyncNotifierProvider.family.autoDispose<TopicDetailNotifier, TopicDetail, TopicDetailParams>(
-  TopicDetailNotifier.new,
-);
+final topicDetailProvider = AsyncNotifierProvider.family
+    .autoDispose<TopicDetailNotifier, TopicDetail, TopicDetailParams>(
+      TopicDetailNotifier.new,
+    );
 
 /// 话题 AI 摘要 Provider
 final topicSummaryProvider = StreamProvider.autoDispose
     .family<TopicSummary?, int>((ref, topicId) {
-  final service = ref.read(discourseServiceProvider);
-  return service.watchTopicSummary(topicId);
-});
+      final service = ref.read(discourseServiceProvider);
+      return service.watchTopicSummary(topicId);
+    });

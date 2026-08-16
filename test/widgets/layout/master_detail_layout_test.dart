@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fluxdo/utils/nav_chrome_metrics.dart';
 import 'package:fluxdo/widgets/layout/draggable_divider.dart';
 import 'package:fluxdo/widgets/layout/master_detail_layout.dart';
 
@@ -12,15 +13,18 @@ void main() {
 
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: MasterDetailLayout(
-            master: ColoredBox(
-              key: ValueKey('master-content'),
-              color: Colors.blue,
-            ),
-            detail: ColoredBox(
-              key: ValueKey('detail-content'),
-              color: Colors.green,
+        home: NavChromeScope(
+          railWidth: 72,
+          child: Scaffold(
+            body: MasterDetailLayout(
+              master: ColoredBox(
+                key: ValueKey('master-content'),
+                color: Colors.blue,
+              ),
+              detail: ColoredBox(
+                key: ValueKey('detail-content'),
+                color: Colors.green,
+              ),
             ),
           ),
         ),
@@ -71,15 +75,23 @@ void main() {
     expect(find.byKey(const ValueKey('detail-content')), findsNothing);
   });
 
-  testWidgets('user resize sticks across window width changes', (
+  testWidgets('rail reservation prevents false double-pane near breakpoint', (
     tester,
   ) async {
+    await pumpLayout(tester, width: 820);
+
+    final masterSize = tester.getSize(
+      find.byKey(const ValueKey('master-pane')),
+    );
+    expect(masterSize.width, closeTo(820, 0.1));
+    expect(find.byKey(const ValueKey('detail-content')), findsNothing);
+  });
+
+  testWidgets('user resize sticks across window width changes', (tester) async {
     await pumpLayout(tester, width: 1600);
 
     // 初始：1600 * 0.28 = 448
-    var masterSize = tester.getSize(
-      find.byKey(const ValueKey('master-pane')),
-    );
+    var masterSize = tester.getSize(find.byKey(const ValueKey('master-pane')));
     expect(masterSize.width, closeTo(448, 0.1));
 
     // 用户向右拖动 52 像素，master 调整到约 500

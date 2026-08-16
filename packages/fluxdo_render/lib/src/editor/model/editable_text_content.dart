@@ -24,6 +24,7 @@ import 'dart:ui' show Color;
 import 'package:flutter/foundation.dart';
 
 import '../../node/inline_node.dart';
+import '../../parser/paragraph_parser.dart' show ParagraphParser;
 
 /// 原子哨兵字符(U+FFFC OBJECT REPLACEMENT CHARACTER)。
 const String kAtomChar = '\uFFFC';
@@ -41,9 +42,17 @@ enum MarkKind {
   /// decoration 思路的简化版)。
   spoilerInline,
 
-  /// 链接 `[text](href)`(LinkRun)。唯一带 attr(href)的 mark ——
-  /// 见 [MarkSpan.attr]。编辑态蓝色下划线,不可点(编辑器语义)。
+  /// 链接 `[text](href)`(LinkRun)。带 attr(href)的 mark。
   link,
+
+  /// `[color=X]…[/color]`,attr 保留 CSS 原文。
+  textColor,
+
+  /// `[bgcolor=X]…[/bgcolor]`,attr 保留 CSS 原文。
+  bgColor,
+
+  /// `[size=N]…[/size]`,attr 保留百分比原文。
+  size,
 }
 
 /// 一段样式区间 `[start, end)`(扁平文本坐标)。
@@ -69,11 +78,11 @@ class MarkSpan {
   bool get isEmpty => start >= end;
 
   MarkSpan copyWith({int? start, int? end}) => MarkSpan(
-        start: start ?? this.start,
-        end: end ?? this.end,
-        kind: kind,
-        attr: attr,
-      );
+    start: start ?? this.start,
+    end: end ?? this.end,
+    kind: kind,
+    attr: attr,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -100,20 +109,19 @@ class EditableTextContent {
     required this.text,
     List<MarkSpan> marks = const [],
     Map<int, InlineNode> atoms = const {},
-  })  : marks = List.unmodifiable(
-          marks.where((m) => !m.isEmpty).toList()
-            ..sort((a, b) {
-              final c = a.start.compareTo(b.start);
-              return c != 0 ? c : a.end.compareTo(b.end);
-            }),
-        ),
-        atoms = Map.unmodifiable(atoms),
-        assert(
-          atoms.keys.every(
-            (o) => o >= 0 && o < text.length && text[o] == kAtomChar,
-          ),
-          'atoms 的每个 offset 必须指向文本中的 kAtomChar',
-        );
+  }) : marks = List.unmodifiable(
+         marks.where((m) => !m.isEmpty).toList()..sort((a, b) {
+           final c = a.start.compareTo(b.start);
+           return c != 0 ? c : a.end.compareTo(b.end);
+         }),
+       ),
+       atoms = Map.unmodifiable(atoms),
+       assert(
+         atoms.keys.every(
+           (o) => o >= 0 && o < text.length && text[o] == kAtomChar,
+         ),
+         'atoms 的每个 offset 必须指向文本中的 kAtomChar',
+       );
 
   static final EditableTextContent empty = EditableTextContent(text: '');
 
@@ -127,12 +135,80 @@ class EditableTextContent {
   /// (EmojiRun/MentionRun;M2 白名单,其他类型由 doc_converter 拦在岛外)。
   final Map<int, InlineNode> atoms;
 
+  /// 每一行独立判定大表情：忽略空白后只有 1～3 个 emoji 的行放大。
+  late final Set<int> _onlyEmojiOffsets = _collectOnlyEmojiOffsets();
+
+  /// 本段是否至少包含一行大表情，供编辑渲染放开固定行高钳制。
+  bool get hasOnlyEmojiLine => _onlyEmojiOffsets.isNotEmpty;
+
   int get length => text.length;
 
   /// 剥除文本里的裸 FFFC(用户/IME 输入不允许自带哨兵 —— 只能经
   /// [insertAtom]/fromInlines 建立原子)。
   static String sanitizeText(String input) =>
       input.contains(kAtomChar) ? input.replaceAll(kAtomChar, '') : input;
+
+  Set<int> _collectOnlyEmojiOffsets() {
+    const maxOnlyEmoji = 3;
+    final result = <int>{};
+
+    void judgeLine(int start, int end) {
+      final emojiOffsets = <int>[];
+      for (var i = start; i < end; i++) {
+        if (text[i] == kAtomChar) {
+          if (atoms[i] case EmojiRun()) {
+            emojiOffsets.add(i);
+            continue;
+          }
+          return;
+        }
+        if (text.substring(i, i + 1).trim().isNotEmpty) return;
+      }
+      if (emojiOffsets.isNotEmpty && emojiOffsets.length <= maxOnlyEmoji) {
+        result.addAll(emojiOffsets);
+      }
+    }
+
+    var lineStart = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (text[i] != '\n') continue;
+      judgeLine(lineStart, i);
+      lineStart = i + 1;
+    }
+    judgeLine(lineStart, text.length);
+    return Set.unmodifiable(result);
+  }
+
+  static String _hex(Color color) =>
+      '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+
+  static String _pct(double scale) {
+    final value = scale * 100;
+    final rounded = value.round();
+    return (value - rounded).abs() < 1e-6 ? '$rounded' : '$value';
+  }
+
+  static double? parsePct(String? value) {
+    if (value == null) return null;
+    final number = double.tryParse(value.trim());
+    return number == null || number < 0 ? null : number / 100;
+  }
+
+  static Color? parseHex(String? value) {
+    if (value == null) return null;
+    var hex = value.trim();
+    if (!hex.startsWith('#')) return null;
+    hex = hex.substring(1);
+    if (hex.length == 3) {
+      hex = hex.split('').map((digit) => '$digit$digit').join();
+    }
+    if (hex.length != 6) return null;
+    final parsed = int.tryParse(hex, radix: 16);
+    return parsed == null ? null : Color(0xFF000000 | parsed);
+  }
+
+  static const double hiddenSizeThreshold = 0.15;
+  static const double hiddenSizeEditingScale = 0.6;
 
   /// [offset] 处(其后)的字符是否原子。
   bool isAtomAt(int offset) => atoms.containsKey(offset);
@@ -172,23 +248,27 @@ class EditableTextContent {
   ) {
     for (final node in nodes) {
       switch (node) {
-        case TextRun(:final text):
-          _appendText(buf, marks, activeKinds, sanitizeText(text));
+        case TextRun(:final text, :final isMarkdownMarker):
+          if (!isMarkdownMarker) {
+            _appendText(buf, marks, activeKinds, sanitizeText(text));
+          }
         case LineBreakRun():
           _appendText(buf, marks, activeKinds, '\n');
         case EmRun(:final children):
-          _flattenInto(children, buf, marks, atoms,
-              [...activeKinds, (MarkKind.em, null)]);
+          _flattenInto(children, buf, marks, atoms, [
+            ...activeKinds,
+            (MarkKind.em, null),
+          ]);
         case StrongRun(:final children):
-          _flattenInto(children, buf, marks, atoms,
-              [...activeKinds, (MarkKind.strong, null)]);
+          _flattenInto(children, buf, marks, atoms, [
+            ...activeKinds,
+            (MarkKind.strong, null),
+          ]);
         case InlineCodeRun(:final text):
-          _appendText(
-            buf,
-            marks,
-            [...activeKinds, (MarkKind.inlineCode, null)],
-            sanitizeText(text),
-          );
+          _appendText(buf, marks, [
+            ...activeKinds,
+            (MarkKind.inlineCode, null),
+          ], sanitizeText(text));
         case StyledRun(:final kind, :final children):
           final mapped = switch (kind) {
             InlineStyleKind.underline => MarkKind.underline,
@@ -204,18 +284,29 @@ class EditableTextContent {
           );
         // ---- M5 白名单:行内剧透 / 链接(mark 化,内容可编辑) ----
         case SpoilerRun(:final children):
-          _flattenInto(children, buf, marks, atoms,
-              [...activeKinds, (MarkKind.spoilerInline, null)]);
+          _flattenInto(children, buf, marks, atoms, [
+            ...activeKinds,
+            (MarkKind.spoilerInline, null),
+          ]);
+        // hashtag 保持一个行内原子，不能走普通链接 mark 化，否则序列化
+        // 会把 `#ref` 改写成普通链接语法。
+        case LinkRun(:final hashtagRef) when hashtagRef != null:
+          atoms[buf.length] = node;
+          _appendText(buf, marks, activeKinds, kAtomChar);
         case LinkRun(:final href, :final children, :final isOneboxLink):
           if (isOneboxLink) {
             // 裸 URL 的 linkify 链接:编辑器显示 URL 本身(锚文本可能
             // 是 cook 种子取回的页面标题,但 raw 是裸 URL —— 显示 href
             // 才能让序列化的 text==attr 裸 URL 规则保住往返)
-            _appendText(buf, marks,
-                [...activeKinds, (MarkKind.link, href)], sanitizeText(href));
+            _appendText(buf, marks, [
+              ...activeKinds,
+              (MarkKind.link, href),
+            ], sanitizeText(href));
           } else {
-            _flattenInto(children, buf, marks, atoms,
-                [...activeKinds, (MarkKind.link, href)]);
+            _flattenInto(children, buf, marks, atoms, [
+              ...activeKinds,
+              (MarkKind.link, href),
+            ]);
           }
         // ---- 原子(一等公民):哨兵占位 + 身份入表 ----
         case EmojiRun():
@@ -233,9 +324,26 @@ class EditableTextContent {
           // ProseMirror image 是 inline:true 一等行内节点)
           atoms[buf.length] = node;
           _appendText(buf, marks, activeKinds, kAtomChar);
+        case SizedRun(:final scale, :final pctRaw, :final children):
+          _flattenInto(children, buf, marks, atoms, [
+            ...activeKinds,
+            (MarkKind.size, pctRaw ?? _pct(scale)),
+          ]);
+        case ColoredRun(
+          :final color,
+          :final background,
+          :final colorRaw,
+          :final backgroundRaw,
+          :final children,
+        ):
+          _flattenInto(children, buf, marks, atoms, [
+            ...activeKinds,
+            if (background != null || backgroundRaw != null)
+              (MarkKind.bgColor, backgroundRaw ?? _hex(background!)),
+            if (color != null || colorRaw != null)
+              (MarkKind.textColor, colorRaw ?? _hex(color!)),
+          ]);
         // ---- 白名单外(防御降级,正常链路由 doc_converter 拦截岛化) ----
-        case ColoredRun(:final children):
-          _flattenInto(children, buf, marks, atoms, activeKinds);
         case FootnoteRefRun():
         case ClickCountRun():
         case MathInlineRun():
@@ -261,8 +369,9 @@ class EditableTextContent {
     for (final frame in {...activeKinds}) {
       final (kind, attr) = frame;
       // 与紧邻的同 kind 同 attr 区间合并(嵌套展开会产生相邻碎段)。
-      final lastIdx =
-          marks.lastIndexWhere((m) => m.kind == kind && m.attr == attr);
+      final lastIdx = marks.lastIndexWhere(
+        (m) => m.kind == kind && m.attr == attr,
+      );
       if (lastIdx >= 0 && marks[lastIdx].end == start) {
         marks[lastIdx] = marks[lastIdx].copyWith(end: end);
       } else {
@@ -284,9 +393,13 @@ class EditableTextContent {
   /// 后者的 TapGestureRecognizer 会抢编辑器手势),改用纯 TextSpan 视觉
   /// 替代:spoiler=淡灰底纹(内容可见可编辑,对齐官方 rich editor 光标
   /// 内显形语义的简化),link=[editingLinkColor] 字色 + 下划线。
+  ///
+  /// [showMarkdownSyntax]:仅与 [forEditing] 同时为 true 时，在 mark 边界
+  /// 注入零内容 Markdown 分隔符；默认关闭，阅读态与现有调用完全不变。
   List<InlineNode> toInlines({
     bool forEditing = false,
     Color? editingLinkColor,
+    bool showMarkdownSyntax = false,
   }) {
     if (text.isEmpty) return const [];
 
@@ -305,12 +418,18 @@ class EditableTextContent {
     }
     final points = cuts.toList()..sort();
 
-    // 2. 逐片段构建
+    // 2. 逐片段构建。即时渲染只在编辑态生效；每个区间边界
+    // 先关闭旧 mark 再开启新 mark，标记本身是零内容 TextRun。
     final out = <InlineNode>[];
+    final revealSyntax = forEditing && showMarkdownSyntax;
     for (var i = 0; i + 1 < points.length; i++) {
       final s = points[i];
       final e = points[i + 1];
       if (s >= e) continue;
+      if (revealSyntax) {
+        _appendMarkdownMarkers(out, marks, s, closing: true);
+        _appendMarkdownMarkers(out, marks, s, closing: false);
+      }
       final piece = text.substring(s, e);
       if (piece == '\n') {
         out.add(const LineBreakRun());
@@ -320,37 +439,170 @@ class EditableTextContent {
         for (final m in marks)
           if (m.start <= s && m.end >= e) m.kind,
       };
-      // link href:覆盖片段的 link mark 的 attr(同帧唯一)
       String? href;
-      for (final m in marks) {
-        if (m.kind == MarkKind.link && m.start <= s && m.end >= e) {
-          href = m.attr;
-          break;
+      String? foregroundRaw;
+      String? backgroundRaw;
+      String? sizeRaw;
+      var foregroundWidth = -1;
+      var backgroundWidth = -1;
+      var sizeWidth = -1;
+      for (final mark in marks) {
+        if (mark.start > s || mark.end < e) continue;
+        final width = mark.end - mark.start;
+        switch (mark.kind) {
+          case MarkKind.link:
+            href ??= mark.attr;
+          case MarkKind.textColor:
+            if (foregroundWidth < 0 || width < foregroundWidth) {
+              foregroundWidth = width;
+              foregroundRaw = mark.attr;
+            }
+          case MarkKind.bgColor:
+            if (backgroundWidth < 0 || width < backgroundWidth) {
+              backgroundWidth = width;
+              backgroundRaw = mark.attr;
+            }
+          case MarkKind.size:
+            if (sizeWidth < 0 || width < sizeWidth) {
+              sizeWidth = width;
+              sizeRaw = mark.attr;
+            }
+          default:
+            break;
         }
       }
       if (piece == kAtomChar) {
         final atom = atoms[s];
         if (atom != null) {
+          final renderAtom = _withOnlyEmojiFlag(
+            atom,
+            _onlyEmojiOffsets.contains(s),
+          );
           // 原子保留 spoiler/link 包装(基础样式对原子不生效)
-          out.add(_wrapAtom(atom, kinds, href, forEditing: forEditing));
+          out.add(
+            _wrapAtom(
+              renderAtom,
+              kinds,
+              href,
+              foregroundRaw,
+              backgroundRaw,
+              sizeRaw,
+              forEditing: forEditing,
+            ),
+          );
         }
         // 无身份的孤儿哨兵(不变量破坏,构造器断言防):静默丢弃。
         continue;
       }
-      out.add(_wrapPiece(piece, kinds, href,
-          forEditing: forEditing, editingLinkColor: editingLinkColor));
+      out.add(
+        _wrapPiece(
+          piece,
+          kinds,
+          href,
+          foregroundRaw,
+          backgroundRaw,
+          sizeRaw,
+          forEditing: forEditing,
+          editingLinkColor: editingLinkColor,
+        ),
+      );
+    }
+    if (revealSyntax) {
+      _appendMarkdownMarkers(out, marks, text.length, closing: true);
     }
     return out;
   }
 
+  static InlineNode _withOnlyEmojiFlag(InlineNode atom, bool isOnlyEmoji) {
+    if (atom is! EmojiRun || atom.isOnlyEmoji == isOnlyEmoji) return atom;
+    return EmojiRun(
+      name: atom.name,
+      url: atom.url,
+      isOnlyEmoji: isOnlyEmoji,
+    );
+  }
+
+  /// Markdown 分隔符的稳定嵌套顺序（外 → 内）。关闭时反向。
+  /// 与 markdown_serializer.dart 的 _markOrder 保持一致：
+  /// 背景色在外、文字色在内（[bgcolor][color]…[/color][/bgcolor]）。
+  static int _markdownMarkOrder(MarkKind kind) => switch (kind) {
+    MarkKind.spoilerInline => 0,
+    MarkKind.link => 1,
+    MarkKind.bgColor => 2,
+    MarkKind.textColor => 3,
+    MarkKind.size => 4,
+    MarkKind.strong => 5,
+    MarkKind.em => 6,
+    MarkKind.underline => 7,
+    MarkKind.lineThrough => 8,
+    MarkKind.inlineCode => 9,
+  };
+
+  static void _appendMarkdownMarkers(
+    List<InlineNode> out,
+    List<MarkSpan> marks,
+    int offset, {
+    required bool closing,
+  }) {
+    final boundaryMarks =
+        <MarkSpan>[
+          for (final mark in marks)
+            if ((closing ? mark.end : mark.start) == offset) mark,
+        ]..sort((a, b) {
+          final order = _markdownMarkOrder(
+            a.kind,
+          ).compareTo(_markdownMarkOrder(b.kind));
+          return closing ? -order : order;
+        });
+    for (final mark in boundaryMarks) {
+      final marker = closing
+          ? _closingMarkdownMarker(mark)
+          : _openingMarkdownMarker(mark);
+      if (marker.isNotEmpty) {
+        out.add(TextRun(marker, isMarkdownMarker: true));
+      }
+    }
+  }
+
+  static String _openingMarkdownMarker(MarkSpan mark) => switch (mark.kind) {
+    MarkKind.strong => '**',
+    MarkKind.em => '*',
+    MarkKind.inlineCode => '`',
+    MarkKind.underline => '[u]',
+    MarkKind.lineThrough => '~~',
+    MarkKind.spoilerInline => '[spoiler]',
+    MarkKind.link => '[',
+    MarkKind.textColor => '[color=${mark.attr ?? ''}]',
+    MarkKind.bgColor => '[bgcolor=${mark.attr ?? ''}]',
+    MarkKind.size => '[size=${mark.attr ?? ''}]',
+  };
+
+  static String _closingMarkdownMarker(MarkSpan mark) => switch (mark.kind) {
+    MarkKind.strong => '**',
+    MarkKind.em => '*',
+    MarkKind.inlineCode => '`',
+    MarkKind.underline => '[/u]',
+    MarkKind.lineThrough => '~~',
+    MarkKind.spoilerInline => '[/spoiler]',
+    MarkKind.link => '](${mark.attr ?? ''})',
+    MarkKind.textColor => '[/color]',
+    MarkKind.bgColor => '[/bgcolor]',
+    MarkKind.size => '[/size]',
+  };
+
   static InlineNode _wrapAtom(
     InlineNode atom,
     Set<MarkKind> kinds,
-    String? href, {
+    String? href,
+    String? foregroundRaw,
+    String? backgroundRaw,
+    String? sizeRaw, {
     required bool forEditing,
   }) {
-    if (forEditing) return atom; // 编辑态原子裸渲染(遮罩/链接壳都不加)
     InlineNode node = atom;
+    node = _applyColorMarks(node, kinds, foregroundRaw, backgroundRaw);
+    node = _applySizeMark(node, kinds, sizeRaw, forEditing: forEditing);
+    if (forEditing) return node;
     if (kinds.contains(MarkKind.link)) {
       node = LinkRun(href: href ?? '', children: [node]);
     }
@@ -363,7 +615,10 @@ class EditableTextContent {
   static InlineNode _wrapPiece(
     String piece,
     Set<MarkKind> kinds,
-    String? href, {
+    String? href,
+    String? foregroundRaw,
+    String? backgroundRaw,
+    String? sizeRaw, {
     required bool forEditing,
     Color? editingLinkColor,
   }) {
@@ -387,6 +642,8 @@ class EditableTextContent {
         node = StrongRun(children: [node]);
       }
     }
+    node = _applyColorMarks(node, kinds, foregroundRaw, backgroundRaw);
+    node = _applySizeMark(node, kinds, sizeRaw, forEditing: forEditing);
     if (forEditing) {
       // 编辑态视觉替代:link 字色经 ColoredRun(纯 TextSpan,投影透明,
       // 选区/光标/IME 全不受扰)。spoiler 的底纹+虚线框由
@@ -410,6 +667,41 @@ class EditableTextContent {
     return node;
   }
 
+  static InlineNode _applyColorMarks(
+    InlineNode node,
+    Set<MarkKind> kinds,
+    String? foregroundRaw,
+    String? backgroundRaw,
+  ) {
+    final foreground = kinds.contains(MarkKind.textColor)
+        ? foregroundRaw
+        : null;
+    final background = kinds.contains(MarkKind.bgColor) ? backgroundRaw : null;
+    if (foreground == null && background == null) return node;
+    return ColoredRun(
+      color: ParagraphParser.parseCssColor(foreground),
+      background: ParagraphParser.parseCssColor(background),
+      colorRaw: foreground,
+      backgroundRaw: background,
+      children: [node],
+    );
+  }
+
+  static InlineNode _applySizeMark(
+    InlineNode node,
+    Set<MarkKind> kinds,
+    String? sizeRaw, {
+    required bool forEditing,
+  }) {
+    if (!kinds.contains(MarkKind.size)) return node;
+    final scale = parsePct(sizeRaw);
+    if (scale == null) return node;
+    final effective = forEditing && scale < hiddenSizeThreshold
+        ? hiddenSizeEditingScale
+        : scale;
+    return SizedRun(scale: effective, pctRaw: sizeRaw, children: [node]);
+  }
+
   // -----------------------------------------------------------------
   // 编辑原语(全部返回新实例;atoms 表随区间同步平移)
   // -----------------------------------------------------------------
@@ -426,24 +718,50 @@ class EditableTextContent {
     assert(offset >= 0 && offset <= text.length);
     if (inserted.isEmpty) return this;
     final len = inserted.length;
+    final newText = text.replaceRange(offset, offset, inserted);
     final newMarks = <MarkSpan>[];
     for (final m in marks) {
+      final MarkSpan span;
       if (m.end <= offset) {
-        newMarks.add(m);
+        span = m;
       } else if (m.start >= offset) {
-        newMarks.add(m.copyWith(start: m.start + len, end: m.end + len));
+        span = m.copyWith(start: m.start + len, end: m.end + len);
       } else {
-        newMarks.add(m.copyWith(end: m.end + len));
+        span = m.copyWith(end: m.end + len);
       }
+      newMarks.add(_syncSelfLinkedAttr(m, span, newText));
     }
     return EditableTextContent(
-      text: text.replaceRange(offset, offset, inserted),
+      text: newText,
       marks: newMarks,
       atoms: {
         for (final e in atoms.entries)
           (e.key >= offset ? e.key + len : e.key): e.value,
       },
     );
+  }
+
+  /// 「文本即链接」的 link mark:改文字时把 href 一起改掉。
+  ///
+  /// 裸链接的锚文本就是 href。只改可见文字而保留旧 attr，切回源码后
+  /// 会变成 `[新文字](旧地址)`。判据取编辑前是否相等，自定义文案链接
+  /// 不参与同步。
+  MarkSpan _syncSelfLinkedAttr(MarkSpan old, MarkSpan next, String newText) {
+    if (old.kind != MarkKind.link) return next;
+    final oldStart = old.start.clamp(0, text.length);
+    final oldEnd = old.end.clamp(oldStart, text.length);
+    if (old.attr != text.substring(oldStart, oldEnd)) return next;
+    final newStart = next.start.clamp(0, newText.length);
+    final newEnd = next.end.clamp(newStart, newText.length);
+    final href = newText.substring(newStart, newEnd);
+    return href.isEmpty
+        ? next
+        : MarkSpan(
+            start: next.start,
+            end: next.end,
+            kind: next.kind,
+            attr: href,
+          );
   }
 
   /// 在 [offset] 处插入一个原子(哨兵 + 身份)。
@@ -462,6 +780,7 @@ class EditableTextContent {
     assert(start >= 0 && end <= text.length && start <= end);
     if (start == end) return this;
     final len = end - start;
+    final newText = text.replaceRange(start, end, '');
     final newMarks = <MarkSpan>[];
     for (final m in marks) {
       // 区间平移/收缩:与删除区间求差。
@@ -470,10 +789,12 @@ class EditableTextContent {
           : (m.start >= end ? m.start - len : start);
       final ne = m.end <= start ? m.end : (m.end >= end ? m.end - len : start);
       final span = m.copyWith(start: ns, end: ne);
-      if (!span.isEmpty) newMarks.add(span);
+      if (!span.isEmpty) {
+        newMarks.add(_syncSelfLinkedAttr(m, span, newText));
+      }
     }
     return EditableTextContent(
-      text: text.replaceRange(start, end, ''),
+      text: newText,
       marks: newMarks,
       atoms: {
         for (final e in atoms.entries)
@@ -493,8 +814,29 @@ class EditableTextContent {
   }
 
   /// 替换 `[start, end)` 为 [replacement](IME composing 更新的主路径)。
-  EditableTextContent replace(int start, int end, String replacement) =>
-      delete(start, end).insert(start, replacement);
+  EditableTextContent replace(int start, int end, String replacement) {
+    final selfLinked = (start < end && replacement.isNotEmpty)
+        ? [
+            for (final mark in marks)
+              if (mark.kind == MarkKind.link &&
+                  mark.start <= start &&
+                  mark.end >= end &&
+                  mark.attr == text.substring(mark.start, mark.end))
+                mark,
+          ]
+        : const <MarkSpan>[];
+    var result = delete(start, end).insert(start, replacement);
+    for (final mark in selfLinked) {
+      final newEnd = mark.end - (end - start) + replacement.length;
+      result = result.applyMark(
+        mark.start,
+        newEnd,
+        MarkKind.link,
+        attr: result.text.substring(mark.start, newEnd),
+      );
+    }
+    return result;
+  }
 
   /// 在 [offset] 处切成两半(回车分段)。
   (EditableTextContent before, EditableTextContent after) split(int offset) {
@@ -551,8 +893,12 @@ class EditableTextContent {
   /// [attr]:link 的 href。合并只发生在**同 kind 同 attr** 之间 ——
   /// 相邻两个不同 href 的链接不吞并。施加带 attr 的 mark 前先移除
   /// 区间上同 kind 异 attr 的旧区间(改链接 = 覆盖旧链接)。
-  EditableTextContent applyMark(int start, int end, MarkKind kind,
-      {String? attr}) {
+  EditableTextContent applyMark(
+    int start,
+    int end,
+    MarkKind kind, {
+    String? attr,
+  }) {
     assert(start >= 0 && end <= text.length && start <= end);
     if (start == end) return this;
     // 先清区间上同 kind 异 attr 的部分(removeMark 全清后重加同 attr 的)
@@ -612,25 +958,36 @@ class EditableTextContent {
   /// toggle:全覆盖 → 移除;否则 → 补齐(主流编辑器语义)。
   EditableTextContent toggleMarkInRange(int start, int end, MarkKind kind) =>
       isRangeFullyMarked(start, end, kind)
-          ? removeMark(start, end, kind)
-          : applyMark(start, end, kind);
+      ? removeMark(start, end, kind)
+      : applyMark(start, end, kind);
 
   /// 对 `[start, end)` 精确设置 marks 集合(pending style 应用:
   /// 先清区间上全部 kind,再施加 [kinds])。
   ///
-  /// **link 不参与**:pending 机制不带 attr,applyMark(link) 会产
-  /// href=null 的坏链接;链接中间打字的延续由 [insert] 的区间拉伸
-  /// 天然保证,边界打字不延续(主流编辑器语义)。
+  /// **带 attr 的 kind 不参与**(link/textColor/bgColor/size):pending
+  /// 机制不带 attr,applyMark 会产 href=null 的坏链接、`[color=]` 等
+  /// 空值 BBCode;它们的中间打字延续由 [insert] 的区间拉伸天然保证,
+  /// 边界打字不延续(主流编辑器语义)。
   EditableTextContent applyExactMarks(int start, int end, Set<MarkKind> kinds) {
     var c = this;
     for (final kind in MarkKind.values) {
-      if (kind == MarkKind.link) continue;
+      if (!_pendingMarkKind(kind)) continue;
       c = kinds.contains(kind)
           ? c.applyMark(start, end, kind)
           : c.removeMark(start, end, kind);
     }
     return c;
   }
+
+  /// 参与 pending(折叠光标样式)的 kind:带 attr 的 mark 无法经无 attr
+  /// 的 pending 重建(见 [applyExactMarks]),一律排除。
+  static bool _pendingMarkKind(MarkKind kind) => switch (kind) {
+    MarkKind.link ||
+    MarkKind.textColor ||
+    MarkKind.bgColor ||
+    MarkKind.size => false,
+    _ => true,
+  };
 
   /// [offset] 光标处的"当前样式集"(pending 初值/工具栏高亮):
   /// 取光标**前一个字符**上的 marks(行首取后一个);原子字符视为无样式。
@@ -642,7 +999,7 @@ class EditableTextContent {
     if (isAtomAt(probe)) return const {};
     return {
       for (final m in marks)
-        if (m.kind != MarkKind.link && m.start <= probe && probe < m.end)
+        if (_pendingMarkKind(m.kind) && m.start <= probe && probe < m.end)
           m.kind,
     };
   }
@@ -687,12 +1044,13 @@ class EditableTextContent {
 
   @override
   int get hashCode => Object.hash(
-        text,
-        Object.hashAll(marks),
-        Object.hashAll(atoms.entries.map((e) => Object.hash(e.key, e.value))),
-      );
+    text,
+    Object.hashAll(marks),
+    Object.hashAll(atoms.entries.map((e) => Object.hash(e.key, e.value))),
+  );
 
   @override
-  String toString() => 'EditableTextContent(${text.length} chars, '
+  String toString() =>
+      'EditableTextContent(${text.length} chars, '
       '${marks.length} marks, ${atoms.length} atoms)';
 }

@@ -35,4 +35,40 @@ void main() {
       expect(state.hasMore, isTrue);
     });
   });
+
+  group('PaginationHelper.mergeUpdates', () {
+    final helper = PaginationHelpers.forTopics<({int id, String value})>(
+      keyExtractor: (item) => item.id,
+    );
+
+    test('只替换已加载的同 key 条目并保留顺序与长度', () {
+      final current = [
+        (id: 1, value: 'old-1'),
+        (id: 2, value: 'old-2'),
+        (id: 3, value: 'page-2'),
+      ];
+
+      final merged = helper.mergeUpdates(current, [
+        (id: 1, value: 'new-1'),
+        (id: 2, value: 'new-2'),
+      ]);
+
+      expect(merged, [
+        (id: 1, value: 'new-1'),
+        (id: 2, value: 'new-2'),
+        (id: 3, value: 'page-2'),
+      ]);
+    });
+
+    test('忽略尚未加载的新 key，避免静默同步改变列表长度', () {
+      final current = [(id: 1, value: 'old')];
+
+      final merged = helper.mergeUpdates(current, [
+        (id: 1, value: 'new'),
+        (id: 4, value: 'first-page-new-topic'),
+      ]);
+
+      expect(merged, [(id: 1, value: 'new')]);
+    });
+  });
 }

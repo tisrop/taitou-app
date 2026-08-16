@@ -158,6 +158,14 @@
   "image_copyFailed": "複製圖片失敗",
   "image_copyImage": "複製圖片",
   "image_copyLink": "複製鏈接",
+  "image_download": "下載圖片",
   "image_fetchFailed": "獲取圖片失敗",
+  "image_markAd": "標記廣告",
+  "image_moreOptions": "更多選項",
+  "image_pageInfo": "頁面資訊",
+  "image_reverseSearch": "以圖搜圖",
+  "image_scanQr": "掃描二維碼",
+  "image_view": "查看圖片",
+  "image_viewMode": "看圖模式",
   "image_viewFull": "查看大圖"
 }

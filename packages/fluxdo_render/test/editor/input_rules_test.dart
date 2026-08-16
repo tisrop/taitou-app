@@ -14,15 +14,17 @@ import 'package:fluxdo_render/src/node/inline_node.dart';
 InputRuleOutcome type(EditorState s, String text) {
   s.insertText(text);
   final blockId = s.selection!.extent.blockId;
-  return tryApplyInputRules(s, blockId,
-      typedChar: text[text.length - 1]);
+  return tryApplyInputRules(s, blockId, typedChar: text[text.length - 1]);
 }
 
 EditorState empty() {
   final s = EditorState.fromTexts(['']);
   addTearDown(s.dispose);
-  s.updateSelection(EditorSelection.collapsed(
-      EditorPosition(blockId: s.blocks.first.id, offset: 0)));
+  s.updateSelection(
+    EditorSelection.collapsed(
+      EditorPosition(blockId: s.blocks.first.id, offset: 0),
+    ),
+  );
   return s;
 }
 
@@ -111,8 +113,10 @@ void main() {
       expect(type(s, '前**粗体**'), InputRuleOutcome.applied);
       var b = first(s);
       expect(b.content.text, '前粗体');
-      expect(b.content.marks.single,
-          const MarkSpan(start: 1, end: 3, kind: MarkKind.strong));
+      expect(
+        b.content.marks.single,
+        const MarkSpan(start: 1, end: 3, kind: MarkKind.strong),
+      );
       expect(s.selection!.extent.offset, 3, reason: '光标落内容尾');
 
       s = empty();
@@ -139,17 +143,25 @@ void main() {
 
       // 光标在 inlineCode mark 内部:字面量区,不触发。
       // (code 边界之后打 *x* 该触发 —— 新字符不在 code 里。)
-      final s2 = EditorState(blocks: [
-        TextBlock(
-          id: 'e_0',
-          content: EditableTextContent(text: 'a*x*', marks: const [
-            MarkSpan(start: 0, end: 4, kind: MarkKind.inlineCode),
-          ]),
-        ),
-      ]);
+      final s2 = EditorState(
+        blocks: [
+          TextBlock(
+            id: 'e_0',
+            content: EditableTextContent(
+              text: 'a*x*',
+              marks: const [
+                MarkSpan(start: 0, end: 4, kind: MarkKind.inlineCode),
+              ],
+            ),
+          ),
+        ],
+      );
       addTearDown(s2.dispose);
-      s2.updateSelection(const EditorSelection.collapsed(
-          EditorPosition(blockId: 'e_0', offset: 4)));
+      s2.updateSelection(
+        const EditorSelection.collapsed(
+          EditorPosition(blockId: 'e_0', offset: 4),
+        ),
+      );
       expect(
         tryApplyInputRules(s2, 'e_0', typedChar: '*'),
         InputRuleOutcome.none,
@@ -173,6 +185,65 @@ void main() {
         tryApplyInputRules(s, s.blocks.first.id, typedChar: '*'),
         InputRuleOutcome.none,
       );
+    });
+  });
+
+  group('BBCode 属性标记', () {
+    test('[size=150]x[/size] 即时转为 size mark', () {
+      final state = empty();
+      expect(type(state, '前[size=150]大[/size]'), InputRuleOutcome.applied);
+      final block = first(state);
+      expect(block.content.text, '前大');
+      expect(
+        block.content.marks.single,
+        const MarkSpan(start: 1, end: 2, kind: MarkKind.size, attr: '150'),
+      );
+    });
+
+    test('color/bgcolor 保留输入色值', () {
+      var state = empty();
+      expect(type(state, '[color=#F00]红[/color]'), InputRuleOutcome.applied);
+      expect(first(state).content.marks.single.attr, '#F00');
+
+      state = empty();
+      expect(
+        type(state, '[bgcolor=yellow]黄[/bgcolor]'),
+        InputRuleOutcome.applied,
+      );
+      expect(first(state).content.marks.single.kind, MarkKind.bgColor);
+      expect(first(state).content.marks.single.attr, 'yellow');
+    });
+
+    test('先写闭标记再补开标记', () {
+      final state = empty();
+      state.insertText('大[/size]');
+      state.updateSelection(
+        EditorSelection.collapsed(
+          EditorPosition(blockId: first(state).id, offset: 0),
+        ),
+      );
+      expect(type(state, '[size=150]'), InputRuleOutcome.applied);
+      expect(first(state).content.text, '大');
+      expect(first(state).content.marks.single.attr, '150');
+      expect(state.selection!.extent.offset, 0);
+    });
+
+    test('先写空标记对再在中间输入内容', () {
+      final state = empty();
+      state.insertText('[color=red][/color]');
+      state.updateSelection(
+        EditorSelection.collapsed(
+          EditorPosition(blockId: first(state).id, offset: 11),
+        ),
+      );
+      expect(type(state, '红'), InputRuleOutcome.applied);
+      expect(first(state).content.text, '红');
+      expect(first(state).content.marks.single.attr, 'red');
+    });
+
+    test('内容含左方括号时不触发', () {
+      final state = empty();
+      expect(type(state, '[size=150][a][/size]'), InputRuleOutcome.none);
     });
   });
 }

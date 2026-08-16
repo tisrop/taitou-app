@@ -15,6 +15,30 @@ Future<ProviderContainer> _createContainer({
 }
 
 void main() {
+  test('全屏侧滑返回默认关闭', () async {
+    final container = await _createContainer();
+    addTearDown(container.dispose);
+
+    expect(container.read(preferencesProvider).fullscreenSwipeBack, isFalse);
+  });
+
+  test('开启全屏侧滑返回后重建 provider 仍会恢复', () async {
+    final container = await _createContainer();
+    addTearDown(container.dispose);
+
+    await container
+        .read(preferencesProvider.notifier)
+        .setFullscreenSwipeBack(true);
+
+    final prefs = container.read(sharedPreferencesProvider);
+    final reloaded = ProviderContainer(
+      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    );
+    addTearDown(reloaded.dispose);
+
+    expect(reloaded.read(preferencesProvider).fullscreenSwipeBack, isTrue);
+  });
+
   test('书签默认打开方式默认值为 defaultRoute', () async {
     final container = await _createContainer();
     addTearDown(container.dispose);

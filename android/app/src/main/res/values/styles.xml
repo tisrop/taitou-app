@@ -3,6 +3,6 @@
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">?android:colorBackground</item>
+        <item name="android:windowBackground">@color/window_background</item>
     </style>
 </resources>

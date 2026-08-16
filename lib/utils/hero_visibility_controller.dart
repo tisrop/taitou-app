@@ -91,6 +91,19 @@ class HeroVisibilityController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 预测返回手势取消（pop 飞行未完成，viewer 仍在）时复位。
+  ///
+  /// 与 [startPopping] 相对：pop 方向 flight 监听里 completed 调
+  /// [startPopping]，dismissed（取消）必须调本方法把 _isPopping 拉回
+  /// false —— 否则取消后 viewer 还在、源图继续按 hiddenTag 隐藏的
+  /// 状态会被 isPopping=true 破坏，后续任何 pop 复用 placeholder 也
+  /// 会读到残留的 popping 态。
+  void cancelPopping() {
+    if (!_isPopping) return;
+    _isPopping = false;
+    _safeNotify();
+  }
+
   /// 清除所有状态(dispose 时调用)。
   ///
   /// 必须 post-frame 异步通知:

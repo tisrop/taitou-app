@@ -2,6 +2,39 @@ part of '../topic_detail_provider.dart';
 
 // ignore_for_file: invalid_use_of_protected_member, invalid_use_of_visible_for_testing_member
 
+/// 规划实时新回复通知的本地状态更新。
+///
+/// 已加载到底部时，新 ID 不能先进入 stream：否则最后一帖会瞬间不再是
+/// stream 末尾，依赖 `hasMoreAfter == false` 的推荐区等底部 sliver 会先被
+/// 拆掉、待帖子内容返回后再装回，造成视口闪跳。此时只把 ID 记入待加载
+/// 队列（计数也不提前改：由 [_loadPendingNewPosts] 落地后按实际拉回的
+/// 帖子数递增，避免与 `addPost` 的递增叠加成双重计数）。
+@visibleForTesting
+({TopicDetail detail, bool shouldLoadImmediately}) resolveNewPostCreatedUpdate({
+  required TopicDetail currentDetail,
+  required int postId,
+  required bool hasMoreAfter,
+}) {
+  if (!hasMoreAfter) {
+    return (
+      detail: currentDetail,
+      shouldLoadImmediately: true,
+    );
+  }
+
+  return (
+    detail: currentDetail.copyWith(
+      postsCount: currentDetail.postsCount + 1,
+      postStream: PostStream(
+        posts: currentDetail.postStream.posts,
+        stream: [...currentDetail.postStream.stream, postId],
+        gaps: currentDetail.postStream.gaps,
+      ),
+    ),
+    shouldLoadImmediately: false,
+  );
+}
+
 /// 加载相关方法
 extension LoadingMethods on TopicDetailNotifier {
   /// 加载更早的帖子（向上滚动）
@@ -117,6 +150,7 @@ extension LoadingMethods on TopicDetailNotifier {
           arg.topicId,
           postNumber: lastPostNumber,
           asc: true,
+          includeSuggested: currentDetail.suggestedTopics.isEmpty,
         );
 
         final existingIds = currentPosts.map((p) => p.id).toSet();
@@ -133,8 +167,20 @@ extension LoadingMethods on TopicDetailNotifier {
         final newLastIndex = mergedStream.indexOf(newLastId);
         _hasMoreAfter = newLastIndex < mergedStream.length - 1;
 
-        return currentDetail.copyWith(
-          postStream: PostStream(posts: mergedPosts, stream: mergedStream, gaps: currentDetail.postStream.gaps),
+        return _withSuggestedCache(
+          currentDetail.copyWith(
+            postStream: PostStream(
+              posts: mergedPosts,
+              stream: mergedStream,
+              gaps: currentDetail.postStream.gaps,
+            ),
+            suggestedTopics: newPostStream.suggestedTopics.isNotEmpty
+                ? newPostStream.suggestedTopics
+                : null,
+            relatedTopics: newPostStream.relatedTopics.isNotEmpty
+                ? newPostStream.relatedTopics
+                : null,
+          ),
         );
       });
       if (!ref.mounted) return;
@@ -156,7 +202,8 @@ extension LoadingMethods on TopicDetailNotifier {
   }
 
   /// 收到新回复通知（MessageBus created 消息）
-  /// 对齐 Discourse：不在底部时只更新 stream，在底部时批量加载帖子内容
+  /// 对齐 Discourse triggerNewPostsInStream：不在底部时只更新 stream，
+  /// 在底部时批量加载帖子内容
   void onNewPostCreated(int postId) {
     if (state.isLoading) return;
     if (_isFilteredMode) return;
@@ -166,29 +213,26 @@ extension LoadingMethods on TopicDetailNotifier {
 
     final currentStream = currentDetail.postStream.stream;
     if (currentStream.contains(postId)) return; // 已在 stream 中
+    if (_pendingNewPostIds.contains(postId)) return; // 已在待加载队列
 
-    // 对齐 Discourse triggerNewPostsInStream：先基于旧边界判断是否已加载到底部，
-    // 再更新 stream。否则新 postId 先进入 stream 后，_hasMoreAfter 会立即变成 true，
-    // 导致“本来在底部却不自动加载新帖内容”。
-    final wasLoadedAllPosts = !_hasMoreAfter;
+    final update = resolveNewPostCreatedUpdate(
+      currentDetail: currentDetail,
+      postId: postId,
+      hasMoreAfter: _hasMoreAfter,
+    );
+    state = AsyncValue.data(update.detail);
 
-    // 将 post ID 加入 stream 并更新 postsCount（本地即时更新，无需请求）
-    final newStream = [...currentStream, postId];
-    state = AsyncValue.data(currentDetail.copyWith(
-      postsCount: currentDetail.postsCount + 1,
-      postStream: PostStream(
-        posts: currentDetail.postStream.posts,
-        stream: newStream,
-        gaps: currentDetail.postStream.gaps,
-      ),
-    ));
-    _updateBoundaryState(currentDetail.postStream.posts, newStream);
-
-    // 对齐 Discourse loadedAllPosts：收到新帖前已加载到底部时才批量拉取新帖子内容，
-    // 否则只更新 stream（用户滚到底部时通过 loadMore 自然加载）。
-    if (wasLoadedAllPosts) {
+    if (update.shouldLoadImmediately) {
+      // 已加载到底部：新 ID 不先进 stream，只入待加载队列。内容拉到后
+      // 与 posts 同帧落地，避免底部 sliver 因边界状态短暂翻转而被拆装。
       _pendingNewPostIds.add(postId);
       _loadPendingNewPosts();
+    } else {
+      // 未到底部：只把 ID 记入 stream，内容等用户滚到底部时自然加载。
+      _updateBoundaryState(
+        currentDetail.postStream.posts,
+        update.detail.postStream.stream,
+      );
     }
   }
 
@@ -196,6 +240,9 @@ extension LoadingMethods on TopicDetailNotifier {
   Future<void> _loadPendingNewPosts() async {
     if (_isLoadingNewPosts) return;
     if (_pendingNewPostIds.isEmpty) return;
+    if (_newPostLoadFailures >= TopicDetailNotifier._maxNewPostLoadFailures) {
+      return;
+    }
 
     _isLoadingNewPosts = true;
     final postIds = List<int>.from(_pendingNewPostIds);
@@ -235,26 +282,58 @@ extension LoadingMethods on TopicDetailNotifier {
       final mergedPosts = [...updatedCurrentPosts, ...newPosts];
       mergedPosts.sort((a, b) => a.postNumber.compareTo(b.postNumber));
 
-      _updateBoundaryState(mergedPosts, currentDetail.postStream.stream);
+      // 新帖 ID 与内容同帧进入 stream；onNewPostCreated 的底部分支特意
+      // 没有提前插入，避免边界判定出现幽灵窗口。
+      newPosts.sort((a, b) => a.postNumber.compareTo(b.postNumber));
+      final mergedStream = [...currentDetail.postStream.stream];
+      for (final post in newPosts) {
+        if (!mergedStream.contains(post.id)) mergedStream.add(post.id);
+      }
 
+      _updateBoundaryState(mergedPosts, mergedStream);
+
+      // 新帖会在帖子流末尾长出内容。若用户停在推荐区等末尾区块，
+      // 这属于锚点上方高度变化，需要同帧补偿。
+      AnchorGuardSliver.arm();
+
+      // 底部分支在 resolveNewPostCreatedUpdate 不递增 postsCount（避免
+      // 与 addPost 的双重计数），这里按实际落地的全新帖数补上。
+      _newPostLoadFailures = 0;
       state = AsyncValue.data(currentDetail.copyWith(
+        postsCount: currentDetail.postsCount + newPosts.length,
         postStream: PostStream(
           posts: mergedPosts,
-          stream: currentDetail.postStream.stream,
+          stream: mergedStream,
           gaps: currentDetail.postStream.gaps,
         ),
       ));
     } catch (e) {
-      // 失败时将 post IDs 放回队列
-      _pendingNewPostIds.insertAll(0, postIds);
-      debugPrint('[TopicDetail] 加载新回复失败: $e');
+      // 失败时将 post IDs 放回队列，退避后再重试，避免断网时空转。
+      // 若该帖已由 addPost 落地（userPost 或 MessageBus 回声），不再重试，
+      // 避免删除话题/权限错误等场景下无限重试。
+      final stillMissing = postIds
+          .where((id) => !(state.value?.postStream.posts.any((p) => p.id == id) ?? true))
+          .toList();
+      if (stillMissing.isNotEmpty) {
+        _pendingNewPostIds.insertAll(0, stillMissing);
+        _newPostLoadFailures++;
+        debugPrint('[TopicDetail] 加载新回复失败($_newPostLoadFailures/${TopicDetailNotifier._maxNewPostLoadFailures}): $e');
+        await Future.delayed(const Duration(seconds: 3));
+      }
     } finally {
       _isLoadingNewPosts = false;
-      // 如果在加载期间又有新帖子进入队列，继续加载
-      if (_pendingNewPostIds.isNotEmpty) {
+      // 如果在加载期间又有新帖子进入队列，继续加载。
+      if (ref.mounted && _pendingNewPostIds.isNotEmpty) {
         _loadPendingNewPosts();
       }
     }
+  }
+
+  /// 手动重试加载新帖子（新帖加载连续失败后由视图层调用）。
+  void retryLoadPendingNewPosts() {
+    if (_pendingNewPostIds.isEmpty) return;
+    _newPostLoadFailures = 0;
+    _loadPendingNewPosts();
   }
 
   /// 使用新的起始帖子号重新加载数据
@@ -279,7 +358,7 @@ extension LoadingMethods on TopicDetailNotifier {
 
       _updateBoundaryState(detail.postStream.posts, detail.postStream.stream);
 
-      return detail;
+      return _withSuggestedCache(detail);
     });
     if (!ref.mounted) return;
     state = result;
@@ -305,7 +384,7 @@ extension LoadingMethods on TopicDetailNotifier {
 
       _updateBoundaryState(detail.postStream.posts, detail.postStream.stream);
 
-      return detail;
+      return _withSuggestedCache(detail);
     });
     if (!ref.mounted) return;
     state = result;

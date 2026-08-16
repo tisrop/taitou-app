@@ -171,4 +171,5 @@ class NavEntryIds {
   static const String notifications = 'notifications';
   static const String messages = 'messages';
   static const String leaderboard = 'leaderboard';
+  static const String chat = 'chat';
 }

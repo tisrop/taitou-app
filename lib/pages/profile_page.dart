@@ -42,6 +42,8 @@ import '../utils/responsive.dart';
 import '../services/emoji_handler.dart';
 import '../services/log/log_writer.dart';
 import '../widgets/layout/master_detail_layout.dart';
+import '../widgets/user/trust_level_info_sheet.dart';
+import '../widgets/auth/qr_login_sheet.dart';
 
 /// 个人页面
 class ProfilePage extends ConsumerStatefulWidget {
@@ -84,17 +86,22 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
   }
 
-  /// 下拉刷新
-  Future<void> _refreshData() async {
+  /// 刷新页面数据。
+  ///
+  /// 下拉刷新已有独立的圆片指示器，因此仅在没有外部指示器的刷新入口
+  /// 显示 AppBar loading，避免同屏出现两套加载状态。
+  Future<void> _refreshData({bool showAppBarIndicator = true}) async {
     if (!mounted) return;
-    setState(() => _isRefreshing = true);
+    if (showAppBarIndicator) setState(() => _isRefreshing = true);
     try {
       await Future.wait([
         ref.read(currentUserProvider.notifier).refreshSilently(force: true),
         ref.read(userSummaryProvider.notifier).refresh(),
       ]);
     } finally {
-      if (mounted) setState(() => _isRefreshing = false);
+      if (mounted && showAppBarIndicator) {
+        setState(() => _isRefreshing = false);
+      }
     }
   }
 
@@ -165,34 +172,33 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _goToLogin() async {
+    // 提前捕获根 Provider 容器：登录路由弹出或页面重挂载时，本元素可能
+    // 短暂 deactivate（此时 mounted 仍为 true），但祖先查找已经不安全。
+    final container = ProviderScope.containerOf(context, listen: false);
     final result = await Navigator.of(
       context,
     ).push<bool>(MaterialPageRoute(builder: (_) => const LoginPage()));
-    if (result == true && mounted) {
-      final loading = LoadingDialog.show(
-        context,
-        message: context.l10n.profile_loadingData,
-      );
-      try {
-        // 等加载弹框首帧结束后再刷新 provider，避免登录路由恢复时和
-        // Overlay/TickerMode 的构建时机相撞。
-        await WidgetsBinding.instance.endOfFrame;
-        if (!mounted) return;
+    if (result != true) return;
 
-        AppStateRefresher.refreshAll(
-          ProviderScope.containerOf(context, listen: false),
-        );
+    // 先让路由弹出与重挂载稳定，再无条件刷新数据。即使本页面已被替换，
+    // 根 ProviderScope 仍然存活，登录态也必须及时广播给当前界面。
+    await AppStateRefresher.refreshAfterRouteTransition(container);
 
-        await Future.wait([
-          ref.read(currentUserProvider.future),
-          ref.read(userSummaryProvider.future),
-        ]).timeout(const Duration(seconds: 10));
-      } catch (e) {
-        debugPrint('[ProfilePage] 登录后刷新失败/超时: $e');
-        // 超时或错误时继续
-      } finally {
-        loading.hide();
-      }
+    if (!mounted) return;
+    final loading = LoadingDialog.show(
+      context,
+      message: S.current.profile_loadingData,
+    );
+    try {
+      await Future.wait([
+        container.read(currentUserProvider.future),
+        container.read(userSummaryProvider.future),
+      ]).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('[ProfilePage] 登录后刷新失败/超时: $e');
+      // 超时或错误时继续
+    } finally {
+      loading.hide();
     }
   }
 
@@ -401,7 +407,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     return DesktopRefreshIndicator(
       refreshNotifier: masterRefreshNotifier,
       shouldRefresh: () => widget.isActive,
-      onRefresh: _refreshData,
+      onRefresh: () => _refreshData(showAppBarIndicator: false),
       child: ListView(
         controller: _scrollController,
         // 底部让出 extendBody 注入的底栏高度
@@ -516,7 +522,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     return DesktopRefreshIndicator(
       refreshNotifier: masterRefreshNotifier,
       shouldRefresh: () => widget.isActive,
-      onRefresh: _refreshData,
+      onRefresh: () => _refreshData(showAppBarIndicator: false),
       child: ListView(
         controller: _rightScrollController,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -946,7 +952,24 @@ class _ProfileHeader extends ConsumerWidget {
             _ProfileAvatarSection(userId: userId, isLoggedIn: isLoggedIn),
             const SizedBox(width: 20),
             const Expanded(child: _ProfileInfoSection()),
-            if (isLoggedIn)
+            if (isLoggedIn) ...[
+              IconButton(
+                tooltip: context.l10n.login_qrShowCode,
+                onPressed: () => showQrLoginSheet(context, username: username),
+                icon: const Icon(Symbols.qr_code_rounded, size: 18),
+                style: IconButton.styleFrom(
+                  backgroundColor: Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest,
+                  foregroundColor: Theme.of(
+                    context,
+                  ).colorScheme.onSurfaceVariant,
+                  minimumSize: const Size.square(32),
+                  maximumSize: const Size.square(32),
+                  padding: EdgeInsets.zero,
+                ),
+              ),
+              const SizedBox(width: 8),
               CircleAvatar(
                 radius: 16,
                 backgroundColor: Theme.of(
@@ -958,6 +981,7 @@ class _ProfileHeader extends ConsumerWidget {
                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
+            ],
           ],
         ),
       ),
@@ -1017,6 +1041,9 @@ class _ProfileInfoSection extends ConsumerWidget {
     final trustLevel = ref.watch(
       currentUserProvider.select((value) => value.value?.trustLevel),
     );
+    final canChat = ref.watch(
+      currentUserProvider.select((value) => value.value?.canChat),
+    );
     final status = ref.watch(
       currentUserProvider.select((value) => value.value?.status),
     );
@@ -1054,18 +1081,12 @@ class _ProfileInfoSection extends ConsumerWidget {
             runSpacing: 4,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  _getTrustLevelLabel(trustLevel ?? 0),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onSecondaryContainer,
-                    fontWeight: FontWeight.w500,
-                  ),
+              TrustLevelBadge(
+                level: trustLevel ?? 0,
+                onTap: () => TrustLevelInfoSheet.show(
+                  context: context,
+                  currentLevel: trustLevel ?? 0,
+                  canChat: canChat,
                 ),
               ),
               if (status != null) _buildStatusChip(status, theme),
@@ -1165,23 +1186,6 @@ class _ProfileAvatarState extends State<_ProfileAvatar>
     );
 
     return _cachedAvatarWithFlair!;
-  }
-}
-
-String _getTrustLevelLabel(int level) {
-  switch (level) {
-    case 0:
-      return S.current.user_trustLevel0;
-    case 1:
-      return S.current.user_trustLevel1;
-    case 2:
-      return S.current.user_trustLevel2;
-    case 3:
-      return S.current.user_trustLevel3;
-    case 4:
-      return S.current.user_trustLevel4;
-    default:
-      return 'L$level';
   }
 }
 

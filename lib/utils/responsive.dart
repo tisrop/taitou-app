@@ -15,6 +15,21 @@ class Breakpoints {
   static const double maxContentWidth = 800;
 }
 
+/// 用户资料页宽版排版契约。
+///
+/// 断点按页面实际拿到的约束判断，嵌入到较窄面板时会自动退回竖版，
+/// 避免使用整窗宽导致内部布局误判。
+class UserProfileWideLayout {
+  UserProfileWideLayout._();
+
+  static const double minWidth = 760;
+  static const double infoPanelWidth = 360;
+  static const double bannerHeight = 200;
+  static const double avatarRadius = 44;
+
+  static bool shouldUse(double availableWidth) => availableWidth >= minWidth;
+}
+
 /// 设备类型枚举
 enum DeviceType { mobile, tablet, desktop }
 

@@ -91,13 +91,22 @@ class _HeroImageState extends State<HeroImage> {
           opacity: shouldHide ? 0.0 : 1.0,
           child: Hero(
             tag: heroTag,
+            transitionOnUserGestures: true,
             // 飞行动画：返回纯图片，并在 pop 飞行结束时设置 isPopping
             flightShuttleBuilder: (flightContext, animation, direction, fromContext, toContext) {
               if (direction == HeroFlightDirection.pop) {
                 void listener(AnimationStatus status) {
                   if (status == AnimationStatus.completed || status == AnimationStatus.dismissed) {
                     animation.removeStatusListener(listener);
-                    HeroVisibilityController.instance.startPopping();
+                    // completed = pop 真正退出；dismissed = 预测返回被
+                    // 取消（viewer 仍在）。两者都要复位源图显隐，但
+                    // 语义相反：取消时不能把 isPopping 置 true，否则
+                    // 源图状态错乱。
+                    if (status == AnimationStatus.completed) {
+                      HeroVisibilityController.instance.startPopping();
+                    } else {
+                      HeroVisibilityController.instance.cancelPopping();
+                    }
                   }
                 }
                 animation.addStatusListener(listener);

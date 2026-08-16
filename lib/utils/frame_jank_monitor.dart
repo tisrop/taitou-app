@@ -149,6 +149,25 @@ class FrameJankMonitor {
   /// 记录变化版本号,诊断页用它驱动刷新
   static final ValueNotifier<int> revision = ValueNotifier(0);
 
+  /// 递增 [revision]，但避开 build/layout/paint 阶段。
+  ///
+  /// 事件可能在组件构建期间写入；同步通知会让诊断页监听器在 build
+  /// 中再次 markNeedsBuild。该阶段统一推迟到帧末，并合并同帧通知。
+  static bool _revisionBumpScheduled = false;
+  static void _bumpRevision() {
+    final binding = SchedulerBinding.instance;
+    if (binding.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      if (_revisionBumpScheduled) return;
+      _revisionBumpScheduled = true;
+      binding.addPostFrameCallback((_) {
+        _revisionBumpScheduled = false;
+        revision.value++;
+      });
+      return;
+    }
+    revision.value++;
+  }
+
   // 会话累计(诊断页汇总)
   static DateTime? sessionStart;
   static int sessionFrames = 0;
@@ -337,7 +356,7 @@ class FrameJankMonitor {
     if (events.length > _maxEvents) {
       events.removeRange(0, events.length - _maxEvents);
     }
-    revision.value++;
+    _bumpRevision();
   }
 
   /// 兼容旧调用:导航事件
@@ -484,7 +503,7 @@ class FrameJankMonitor {
     sessionJanks = 0;
     sessionWorstBuild = Duration.zero;
     sessionWorstRaster = Duration.zero;
-    revision.value++;
+    _bumpRevision();
   }
 
   static String _ms(Duration d) => (d.inMicroseconds / 1000).toStringAsFixed(1);
@@ -618,7 +637,7 @@ class FrameJankMonitor {
         changed = true;
       }
     }
-    if (changed) revision.value++;
+    if (changed) _bumpRevision();
 
     final now = DateTime.now();
     if (now.difference(_lastSummary) >= _summaryInterval && _frames > 0) {

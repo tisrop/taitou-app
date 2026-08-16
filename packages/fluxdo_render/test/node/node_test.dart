@@ -131,6 +131,7 @@ void main() {
         TextRun('a'),
         EmRun(children: []),
         StrongRun(children: []),
+        SizedRun(scale: 1.5, pctRaw: '150', children: []),
         LineBreakRun(),
         LinkRun(href: 'https://example.com', children: [TextRun('x')]),
         InlineCodeRun('c'),
@@ -147,6 +148,7 @@ void main() {
               StrongRun() => 'strong',
               StyledRun() => 'styled',
               ColoredRun() => 'colored',
+              SizedRun() => 'sized',
               LineBreakRun() => 'br',
               LinkRun() => 'link',
               InlineCodeRun() => 'inlineCode',
@@ -162,7 +164,7 @@ void main() {
           )
           .toList();
       expect(labels, [
-        'text', 'em', 'strong', 'br', 'link', 'inlineCode', 'emoji', 'mention', 'image', 'spoiler',
+        'text', 'em', 'strong', 'sized', 'br', 'link', 'inlineCode', 'emoji', 'mention', 'image', 'spoiler',
       ]);
     });
   });

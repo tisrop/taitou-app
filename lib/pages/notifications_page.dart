@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/notification.dart';
 import '../providers/discourse_providers.dart';
 import '../providers/preferences_provider.dart';
 import '../utils/load_more_coordinator.dart';
@@ -62,12 +63,16 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
     await ref.read(notificationListProvider.notifier).refresh();
   }
 
+  bool _isListFullyBlocked(
+    List<DiscourseNotification> notifications,
+    List<DiscourseNotification> visibleNotifications,
+  ) {
+    return notifications.isNotEmpty && visibleNotifications.isEmpty;
+  }
+
   @override
   Widget build(BuildContext context) {
     final notificationsAsync = ref.watch(notificationListProvider);
-    final systemAvatarTemplate = ref
-        .watch(systemUserAvatarTemplateProvider)
-        .value;
 
     return Scaffold(
       appBar: AppBar(
@@ -100,11 +105,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                 )
                 .toList(growable: false);
             final notifier = ref.read(notificationListProvider.notifier);
-            // 已加载页全部被本地屏蔽时列表不可滚，滚动触发的翻页永远不会
-            // 发生；主动补载下一页（coordinator 自带冷却，不会打转）
-            if (visibleNotifications.isEmpty &&
-                notifications.isNotEmpty &&
-                notifier.hasMore) {
+            final isListFullyBlocked = _isListFullyBlocked(
+              notifications,
+              visibleNotifications,
+            );
+            if (isListFullyBlocked && notifier.hasMore) {
+              // 列表不可滚动时主动补载；coordinator 自带冷却，不会打转。
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted) _loadMore();
               });
@@ -146,9 +152,12 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
                 final notification = visibleNotifications[index];
                 return NotificationItem(
                   notification: notification,
-                  systemAvatarTemplate: systemAvatarTemplate,
-                  onTap: () =>
-                      handleNotificationTap(context, ref, notification),
+                  onTap: () => handleNotificationTap(
+                    context,
+                    ref,
+                    notification,
+                    siblings: visibleNotifications,
+                  ),
                 );
               },
             );

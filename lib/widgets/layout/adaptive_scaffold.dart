@@ -5,6 +5,7 @@ import '../../pages/topics_page.dart';
 import '../../providers/category_provider.dart';
 import '../../providers/preferences_provider.dart';
 import '../../providers/topic_list/tab_state_provider.dart';
+import '../../utils/nav_chrome_metrics.dart';
 import '../../utils/responsive.dart';
 import '../../l10n/s.dart';
 import '../notification/notification_quick_panel.dart';
@@ -55,10 +56,16 @@ class AdaptiveScaffold extends ConsumerWidget {
         : selectedIndex;
 
     final railWidth = extendedRail ? 180.0 : 72.0;
-    final overlayLeftInset = showRail ? railWidth + 1.0 : 0.0;
-
-    return Stack(
-      children: [
+    // 侧栏面板覆盖层与内容区的左起点：Rail 隐藏时为 0。
+    final overlayLeftInset = showRail
+        ? MediaQuery.paddingOf(context).left + railWidth + 1.0
+        : 0.0;
+    // 双栏判定在子树内按实际 Rail 形态宽度扣除（NavChromeScope 只对
+    // scaffold 子树生效，独立 push 路由读不到，按无 Rail 处理）。
+    return NavChromeScope(
+      railWidth: railWidth,
+      child: Stack(
+        children: [
         Scaffold(
           // 底栏隐藏改为整条平移出屏（paint-only），内容延伸到底栏后面;
           // body 高度不再随底栏显隐变化，收放过程零 relayout
@@ -115,10 +122,7 @@ class AdaptiveScaffold extends ConsumerWidget {
                 ),
                 const VerticalDivider(thickness: 1, width: 1),
               ],
-              Expanded(
-                key: const ValueKey('adaptive-body'),
-                child: body,
-              ),
+              Expanded(key: const ValueKey('adaptive-body'), child: body),
             ],
           ),
           floatingActionButton: floatingActionButton,
@@ -152,6 +156,7 @@ class AdaptiveScaffold extends ConsumerWidget {
           },
         ),
       ],
+      ),
     );
   }
 }

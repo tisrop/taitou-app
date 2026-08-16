@@ -282,33 +282,30 @@ class _TopicsPageState extends ConsumerState<TopicsPage>
   }
 
   Future<void> _goToLogin() async {
+    // 提前捕获根 Provider 容器，避免登录路由返回时页面正处于
+    // deactivate/重挂载窗口，mounted 仍为 true 但祖先查找已经失效。
+    final container = ProviderScope.containerOf(context, listen: false);
     final result = await Navigator.of(
       context,
     ).push<bool>(MaterialPageRoute(builder: (_) => const LoginPage()));
-    if (result == true && mounted) {
-      final loading = LoadingDialog.show(
-        context,
-        message: context.l10n.common_loadingData,
-      );
-      try {
-        // 等加载弹框完成首帧构建后再刷新 Riverpod provider，避免在
-        // OverlayEntry build 过程中触发 ProviderScope markNeedsBuild。
-        await WidgetsBinding.instance.endOfFrame;
-        if (!mounted) return;
+    if (result != true) return;
 
-        AppStateRefresher.refreshAll(
-          ProviderScope.containerOf(context, listen: false),
-        );
+    await AppStateRefresher.refreshAfterRouteTransition(container);
 
-        await Future.wait([
-          ref.read(currentUserProvider.future),
-          ref.read(topicListProvider(null).future),
-        ]).timeout(const Duration(seconds: 10));
-      } catch (e) {
-        debugPrint('[TopicsPage] 登录后刷新失败/超时: $e');
-      } finally {
-        loading.hide();
-      }
+    if (!mounted) return;
+    final loading = LoadingDialog.show(
+      context,
+      message: S.current.common_loadingData,
+    );
+    try {
+      await Future.wait([
+        container.read(currentUserProvider.future),
+        container.read(topicListProvider(null).future),
+      ]).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('[TopicsPage] 登录后刷新失败/超时: $e');
+    } finally {
+      loading.hide();
     }
   }
 

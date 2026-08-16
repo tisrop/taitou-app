@@ -24,60 +24,43 @@ class _NotificationItemSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
-    return ListTile(
-      leading: SizedBox(
-        width: 48,
-        height: 48,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // 头像占位
-            Align(
-              alignment: Alignment.center,
-              child: SkeletonCircle(size: 40),
-            ),
-            // 右上角图标占位
-            Positioned(
-              top: -2,
-              right: -2,
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.surface,
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: theme.colorScheme.surface,
-                    width: 1.5,
-                  ),
-                ),
-                child: SkeletonCircle(size: 14),
-              ),
-            ),
-          ],
+    return Container(
+      constraints: const BoxConstraints(minHeight: 72),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.55),
+            width: 0.75,
+          ),
         ),
       ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          SkeletonBox(width: double.infinity, height: 16),
-          const SizedBox(height: 4),
-          SkeletonBox(width: 150, height: 16),
+          const SizedBox(
+            width: 44,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SkeletonCircle(size: 24),
+            ),
+          ),
+          const Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SkeletonBox(width: 96, height: 16),
+                SizedBox(height: 6),
+                SkeletonBox(width: double.infinity, height: 16),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          const SkeletonBox(width: 48, height: 14),
         ],
       ),
-      subtitle: Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: SkeletonBox(width: double.infinity, height: 13),
-            ),
-            const SizedBox(width: 8),
-            SkeletonBox(width: 40, height: 12),
-          ],
-        ),
-      ),
-      trailing: SkeletonCircle(size: 8),
     );
   }
 }

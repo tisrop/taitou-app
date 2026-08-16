@@ -36,10 +36,13 @@ final _pmTabEventProvider =
 
 /// 私信列表页面
 class PrivateMessagesPage extends ConsumerStatefulWidget {
-  const PrivateMessagesPage({super.key, this.isActive = true});
+  const PrivateMessagesPage({super.key, this.isActive = true, this.groupName});
 
   /// 是否为当前活跃的 tab（嵌入底栏时用于决定是否响应 NavActionBus）
   final bool isActive;
+
+  /// 非空时展示指定群组的共享私信收件箱。
+  final String? groupName;
 
   @override
   ConsumerState<PrivateMessagesPage> createState() =>
@@ -50,11 +53,15 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
-  static const _filters = [
+  static const _allFilters = [
     PrivateMessageFilter.inbox,
     PrivateMessageFilter.sent,
     PrivateMessageFilter.archive,
   ];
+
+  List<PrivateMessageFilter> get _filters => widget.groupName == null
+      ? _allFilters
+      : const [PrivateMessageFilter.inbox];
 
   @override
   void initState() {
@@ -102,6 +109,7 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
       if (event == null) return;
       if (event.targetId != NavEntryIds.messages) return;
       if (!widget.isActive) return;
+      if (widget.groupName != null) return;
       final filter = _filters[_tabController.index];
       final nextNonce = ref.read(_pmTabEventNonceProvider) + 1;
       ref.read(_pmTabEventNonceProvider.notifier).state = nextNonce;
@@ -118,31 +126,38 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
       onNotification: _onScrollNotification,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(context.l10n.privateMessages_title),
-          bottom: TabBar(
-            controller: _tabController,
-            tabs: [
-              Tab(text: context.l10n.privateMessages_inbox),
-              Tab(text: context.l10n.privateMessages_sent),
-              Tab(text: context.l10n.privateMessages_archive),
-            ],
-          ),
+          title: Text(widget.groupName ?? context.l10n.privateMessages_title),
+          bottom: widget.groupName == null
+              ? TabBar(
+                  controller: _tabController,
+                  tabs: [
+                    Tab(text: context.l10n.privateMessages_inbox),
+                    Tab(text: context.l10n.privateMessages_sent),
+                    Tab(text: context.l10n.privateMessages_archive),
+                  ],
+                )
+              : null,
         ),
         body: TabBarView(
           controller: _tabController,
           children: [
             for (final filter in _filters)
-              _PrivateMessageTabView(filter: filter),
+              _PrivateMessageTabView(
+                filter: filter,
+                groupName: widget.groupName,
+              ),
           ],
         ),
         // 新建私信：此前只能从某个用户的头像菜单发起，对方没在可见处
         // 发过言就完全没有路径。对齐 Discourse 网页版私信列表的入口。
-        floatingActionButton: FloatingActionButton(
-          heroTag: 'composePm',
-          onPressed: _composeNewMessage,
-          tooltip: context.l10n.pm_newTitle,
-          child: const Icon(Icons.edit_rounded),
-        ),
+        floatingActionButton: widget.groupName == null
+            ? FloatingActionButton(
+                heroTag: 'composePm',
+                onPressed: _composeNewMessage,
+                tooltip: context.l10n.pm_newTitle,
+                child: const Icon(Icons.edit_rounded),
+              )
+            : null,
       ),
     );
   }
@@ -151,8 +166,9 @@ class _PrivateMessagesPageState extends ConsumerState<PrivateMessagesPage>
 /// 单个 Tab 的私信列表视图
 class _PrivateMessageTabView extends ConsumerStatefulWidget {
   final PrivateMessageFilter filter;
+  final String? groupName;
 
-  const _PrivateMessageTabView({required this.filter});
+  const _PrivateMessageTabView({required this.filter, this.groupName});
 
   @override
   ConsumerState<_PrivateMessageTabView> createState() =>
@@ -181,6 +197,13 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
 
   /// 获取当前 tab 对应的数据和 notifier
   (AsyncValue<List<Topic>>, PrivateMessagesNotifier) _watchMessages() {
+    final groupName = widget.groupName;
+    if (groupName != null) {
+      return (
+        ref.watch(groupPmInboxProvider(groupName)),
+        ref.watch(groupPmInboxProvider(groupName).notifier),
+      );
+    }
     return switch (widget.filter) {
       PrivateMessageFilter.inbox => (
         ref.watch(pmInboxProvider),
@@ -198,6 +221,10 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
   }
 
   PrivateMessagesNotifier _readNotifier() {
+    final groupName = widget.groupName;
+    if (groupName != null) {
+      return ref.read(groupPmInboxProvider(groupName).notifier);
+    }
     return switch (widget.filter) {
       PrivateMessageFilter.inbox => ref.read(pmInboxProvider.notifier),
       PrivateMessageFilter.sent => ref.read(pmSentProvider.notifier),
@@ -206,6 +233,10 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
   }
 
   AsyncValue<List<Topic>> _readMessagesAsync() {
+    final groupName = widget.groupName;
+    if (groupName != null) {
+      return ref.read(groupPmInboxProvider(groupName));
+    }
     return switch (widget.filter) {
       PrivateMessageFilter.inbox => ref.read(pmInboxProvider),
       PrivateMessageFilter.sent => ref.read(pmSentProvider),
@@ -291,7 +322,11 @@ class _PrivateMessageTabViewState extends ConsumerState<_PrivateMessageTabView>
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Symbols.mail_rounded, size: 64, color: Colors.grey),
+                  const Icon(
+                    Symbols.mail_rounded,
+                    size: 64,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     context.l10n.privateMessages_empty,

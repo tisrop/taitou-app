@@ -94,6 +94,31 @@ void main() {
       expect(countImageRuns(result), 1);
     });
 
+    test('<p> 内裸 iframe 提升为 IframeNode,内容不丢', () {
+      final result = parser.parse(
+        '<p><iframe src="https://open.spotify.com/embed/track/x" '
+        'height="152" allowfullscreen></iframe></p>',
+      );
+      final iframe = result.whereType<IframeNode>().single;
+      expect(iframe.src, contains('open.spotify.com'));
+    });
+
+    test('iframe 前后的文字仍在,段落拆分不吞内容', () {
+      final result = parser.parse(
+        '<p>听这个 <iframe src="https://open.spotify.com/embed/track/x">'
+        '</iframe> 超好听</p>',
+      );
+      expect(result.whereType<IframeNode>(), hasLength(1));
+      final texts = result
+          .whereType<ParagraphNode>()
+          .expand((paragraph) => paragraph.inlines)
+          .whereType<TextRun>()
+          .map((text) => text.text)
+          .join();
+      expect(texts, contains('听这个'));
+      expect(texts, contains('超好听'));
+    });
+
     test('id 全局唯一(多个 iframe)', () {
       final result = parser.parse(
         '<iframe src="a"></iframe><iframe src="b"></iframe>',

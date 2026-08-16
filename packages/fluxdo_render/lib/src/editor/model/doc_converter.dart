@@ -27,45 +27,46 @@ import 'editor_block.dart';
 ///
 /// M5 扩容:行内 SpoilerRun / **普通** LinkRun 进入白名单(mark 化,
 /// 内容可编辑)。特种链接除外 —— attachment(`[name|attachment](短链)`)、
-/// hashtag(`#ref`)、inline-onebox(裸 URL)的序列化语义都不是
-/// `[text](href)`,mark 化会毁写法,保持岛化。
+/// inline-onebox(裸 URL)的序列化语义不是 `[text](href)`；hashtag
+/// (`#ref`)则作为行内原子进入白名单，避免把整段岛化成只读。
 bool isEditableInline(InlineNode n) => switch (n) {
-      TextRun() || LineBreakRun() || EmojiRun() || MentionRun() => true,
-      // local date chip:行内原子(emoji/mention 同机制),编辑态显示
-      // 服务端预渲染文本,序列化写回 [date=…] BBCode
-      LocalDateRun() => true,
-      // 图片 = 行内原子,无条件(官方 ProseMirror image 就是 inline:true,
-      // 无图片块级概念)。upload 可缩放图/lightbox 大图也原子化 —— 选中
-      // 后的工具条(缩放/删除/alt/加网格)由宿主浮层承载,查看器在
-      // 「已选中再点」时打开。
-      ImageRun() => true,
-      EmRun(:final children) => children.every(isEditableInline),
-      StrongRun(:final children) => children.every(isEditableInline),
-      InlineCodeRun() => true,
-      SpoilerRun(:final children) => children.every(isEditableInline),
-      LinkRun(
-        :final href,
-        :final children,
-        :final isAttachment,
-        :final hashtagRef,
-        :final isOneboxLink,
-      ) =>
-        !isAttachment &&
-            hashtagRef == null &&
+  TextRun() || LineBreakRun() || EmojiRun() || MentionRun() => true,
+  // local date chip:行内原子(emoji/mention 同机制),编辑态显示
+  // 服务端预渲染文本,序列化写回 [date=…] BBCode
+  LocalDateRun() => true,
+  // 图片 = 行内原子,无条件(官方 ProseMirror image 就是 inline:true,
+  // 无图片块级概念)。upload 可缩放图/lightbox 大图也原子化 —— 选中
+  // 后的工具条(缩放/删除/alt/加网格)由宿主浮层承载,查看器在
+  // 「已选中再点」时打开。
+  ImageRun() => true,
+  EmRun(:final children) => children.every(isEditableInline),
+  StrongRun(:final children) => children.every(isEditableInline),
+  ColoredRun(:final children) => children.every(isEditableInline),
+  SizedRun(:final children) => children.every(isEditableInline),
+  InlineCodeRun() => true,
+  SpoilerRun(:final children) => children.every(isEditableInline),
+  LinkRun(
+    :final href,
+    :final children,
+    :final isAttachment,
+    :final hashtagRef,
+    :final isOneboxLink,
+  ) =>
+    !isAttachment &&
+        (hashtagRef != null ||
             // onebox 系链接(裸 URL 的 linkify 产物)可编辑:flatten 时
             // 文本替换为 href(官方 linkify 语义 —— 编辑器里显示 URL
             // 本身),序列化 text==href 走裸 URL 规则,往返无损
             (isOneboxLink
                 ? href.isNotEmpty
-                : children.every(isEditableInline)),
-      StyledRun(:final kind, :final children) => switch (kind) {
-          InlineStyleKind.underline ||
-          InlineStyleKind.lineThrough =>
-            children.every(isEditableInline),
-          _ => false,
-        },
-      _ => false,
-    };
+                : children.every(isEditableInline))),
+  StyledRun(:final kind, :final children) => switch (kind) {
+    InlineStyleKind.underline ||
+    InlineStyleKind.lineThrough => children.every(isEditableInline),
+    _ => false,
+  },
+  _ => false,
+};
 
 bool _allEditable(List<InlineNode> inlines) => inlines.every(isEditableInline);
 
@@ -78,7 +79,8 @@ List<EditorBlock> blockNodesToDoc(
 ) {
   final out = <EditorBlock>[];
 
-  void addIsland(BlockNode node) => out.add(IslandBlock(id: nextId(), node: node));
+  void addIsland(BlockNode node) =>
+      out.add(IslandBlock(id: nextId(), node: node));
 
   void addText(
     EditableTextContent content, {
@@ -89,16 +91,18 @@ List<EditorBlock> blockNodesToDoc(
     int listStart = 1,
     List<ContainerFrame> containers = const [],
   }) {
-    out.add(TextBlock(
-      id: nextId(),
-      content: content,
-      kind: kind,
-      headingLevel: headingLevel,
-      ordered: ordered,
-      depth: depth,
-      listStart: listStart,
-      containers: containers,
-    ));
+    out.add(
+      TextBlock(
+        id: nextId(),
+        content: content,
+        kind: kind,
+        headingLevel: headingLevel,
+        ordered: ordered,
+        depth: depth,
+        listStart: listStart,
+        containers: containers,
+      ),
+    );
   }
 
   /// 列表整树可编辑性:所有(递归)item 无块级子节点且 inlines 全过白名单。
@@ -156,8 +160,10 @@ List<EditorBlock> blockNodesToDoc(
     switch (node) {
       case ParagraphNode(:final inlines):
         if (_allEditable(inlines)) {
-          addText(EditableTextContent.fromInlines(inlines),
-              containers: containers);
+          addText(
+            EditableTextContent.fromInlines(inlines),
+            containers: containers,
+          );
         } else {
           addIsland(node);
         }
@@ -292,6 +298,92 @@ List<EditorBlock> blockNodesToDoc(
   return out;
 }
 
+// ---------------------------------------------------------------------
+// 逃生口空段(escape gaps)
+// ---------------------------------------------------------------------
+//
+// 「困住区」= 容器内块(引用/引用卡/剧透/details/callout)或只读岛:
+// 光标无法在顶层自然地跟在它后面继续输入。若这样的块处在文档**尾部**、
+// 或**紧邻另一个困住区**(上下相邻的引用等),用户就没有落点跳出/夹在
+// 中间输入。这里在这些位置自动补一个**顶层普通空段**当逃生口;发送/
+// 序列化时若空段没被填过再回收掉,避免给帖子留多余空行。
+
+/// 块的「困住区」标识:同一容器实例 / 同一岛 = 同区;非困住块 = null。
+String? _trapRegionId(EditorBlock b) {
+  if (b is IslandBlock) return 'island:${b.id}';
+  if (b is TextBlock && b.containers.isNotEmpty) {
+    return 'ctr:${b.containers.first.groupId}';
+  }
+  return null;
+}
+
+/// 顶层普通空段(可作逃生口 / 被回收的候选)。
+bool _isFreeEmptyParagraph(EditorBlock b) =>
+    b is TextBlock &&
+    b.containers.isEmpty &&
+    b.kind == TextBlockKind.paragraph &&
+    b.content.length == 0;
+
+/// 在**非空**困住区尾部 / 两个相邻困住区之间补顶层空段。**幂等**
+/// (补出的自由空段会打断相邻性,重跑不会重复补)。[nextId] 复用
+/// EditorState 的发号器,避免 id 碰撞。
+///
+/// 「非空」限定:空容器(刚插入的引用/剧透模板,内部只有一个空段)
+/// 本身就可编辑空行,回车即可退出,不需要额外逃生口 —— 只有装了内容的
+/// 引用/岛才会把光标困在末尾。
+List<EditorBlock> insertEscapeGaps(
+  List<EditorBlock> blocks,
+  String Function() nextId,
+) {
+  if (blocks.isEmpty) return blocks;
+  final out = <EditorBlock>[];
+  var i = 0;
+  while (i < blocks.length) {
+    final region = _trapRegionId(blocks[i]);
+    if (region == null) {
+      out.add(blocks[i]);
+      i++;
+      continue;
+    }
+    var nonEmpty = false;
+    while (i < blocks.length && _trapRegionId(blocks[i]) == region) {
+      final b = blocks[i];
+      out.add(b);
+      if (b is IslandBlock || (b is TextBlock && b.content.length > 0)) {
+        nonEmpty = true;
+      }
+      i++;
+    }
+    final nextRegion = i < blocks.length ? _trapRegionId(blocks[i]) : null;
+    final atEndOrBeforeTrap = i >= blocks.length || nextRegion != null;
+    if (nonEmpty && atEndOrBeforeTrap) {
+      out.add(TextBlock(id: nextId(), content: EditableTextContent.empty));
+    }
+  }
+  return out;
+}
+
+/// 回收未被填过的逃生空段:紧跟困住区、且处在尾部或另一困住区之前的
+/// 顶层空段 —— 用户没在里面输入就撤掉,避免序列化出多余空行。
+List<EditorBlock> stripUnusedEscapeGaps(List<EditorBlock> blocks) {
+  if (blocks.isEmpty) return blocks;
+  final out = <EditorBlock>[];
+  for (var i = 0; i < blocks.length; i++) {
+    final b = blocks[i];
+    if (_isFreeEmptyParagraph(b)) {
+      final prev = out.isNotEmpty ? out.last : null;
+      final next = i + 1 < blocks.length ? blocks[i + 1] : null;
+      final prevTrap = prev != null && _trapRegionId(prev) != null;
+      final nextTrap = next != null && _trapRegionId(next) != null;
+      if (prevTrap && (next == null || nextTrap)) {
+        continue;
+      }
+    }
+    out.add(b);
+  }
+  return out;
+}
+
 /// 编辑文档 → 阅读端节点树(给阅读端渲染/markdown 序列化)。
 List<BlockNode> docToBlockNodes(List<EditorBlock> doc) {
   var idCounter = 0;
@@ -345,9 +437,7 @@ List<BlockNode> _buildLevel(
       final run = <TextBlock>[];
       while (i < doc.length) {
         final b = doc[i];
-        if (b is TextBlock &&
-            b.isListItem &&
-            b.containers.length <= level) {
+        if (b is TextBlock && b.isListItem && b.containers.length <= level) {
           run.add(b);
           i++;
         } else {
@@ -369,42 +459,41 @@ BlockNode _wrapInFrame(
   ContainerFrame frame,
   List<BlockNode> children,
   String Function() nextId,
-) =>
-    switch (frame) {
-      QuoteFrame() => BlockquoteNode(id: nextId(), children: children),
-      QuoteCardFrame(
-        :final username,
-        :final displayName,
-        :final postNumber,
-        :final topicId,
-        :final full,
-      ) =>
-        QuoteCardNode(
-          id: nextId(),
-          username: username,
-          displayName: displayName,
-          postNumber: postNumber,
-          topicId: topicId,
-          full: full,
-          children: children,
-        ),
-      SpoilerFrame() => SpoilerBlockNode(id: nextId(), children: children),
-      DetailsFrame(:final summary, :final open) => DetailsNode(
-          id: nextId(),
-          summary: summary,
-          children: children,
-          initiallyOpen: open,
-        ),
-      CalloutFrame(:final kind, :final typeRaw, :final title, :final foldable) =>
-        CalloutNode(
-          id: nextId(),
-          kind: kind,
-          typeRaw: typeRaw,
-          title: title,
-          foldable: foldable,
-          children: children,
-        ),
-    };
+) => switch (frame) {
+  QuoteFrame() => BlockquoteNode(id: nextId(), children: children),
+  QuoteCardFrame(
+    :final username,
+    :final displayName,
+    :final postNumber,
+    :final topicId,
+    :final full,
+  ) =>
+    QuoteCardNode(
+      id: nextId(),
+      username: username,
+      displayName: displayName,
+      postNumber: postNumber,
+      topicId: topicId,
+      full: full,
+      children: children,
+    ),
+  SpoilerFrame() => SpoilerBlockNode(id: nextId(), children: children),
+  DetailsFrame(:final summary, :final open) => DetailsNode(
+    id: nextId(),
+    summary: summary,
+    children: children,
+    initiallyOpen: open,
+  ),
+  CalloutFrame(:final kind, :final typeRaw, :final title, :final foldable) =>
+    CalloutNode(
+      id: nextId(),
+      kind: kind,
+      typeRaw: typeRaw,
+      title: title,
+      foldable: foldable,
+      children: children,
+    ),
+};
 
 /// 单个非列表文本块 → 节点。
 BlockNode _textBlockToNode(TextBlock block, String Function() nextId) {
@@ -421,18 +510,8 @@ BlockNode _textBlockToNode(TextBlock block, String Function() nextId) {
   return ParagraphNode(id: nextId(), inlines: _exportInlines(block));
 }
 
-/// toInlines + only-emoji 还原:整块恰一个 emoji 原子(无其他内容)时
-/// 标记 isOnlyEmoji(Discourse 大表情语义)。
-List<InlineNode> _exportInlines(TextBlock block) {
-  final inlines = block.content.toInlines();
-  if (inlines.length == 1 && inlines.first is EmojiRun) {
-    final e = inlines.first as EmojiRun;
-    if (!e.isOnlyEmoji) {
-      return [EmojiRun(name: e.name, url: e.url, isOnlyEmoji: true)];
-    }
-  }
-  return inlines;
-}
+/// 大表情判定由 EditableTextContent.toInlines 统一完成，编辑与导出同源。
+List<InlineNode> _exportInlines(TextBlock block) => block.content.toInlines();
 
 /// 连续 listItem run(同容器层)→ ListNode 树(深度栈重建)。
 ///
@@ -462,12 +541,14 @@ List<ListNode> _buildLists(
           deeper.add(run[i]);
           i++;
         }
-        items.add(ListItem(
-          inlines: b.content.toInlines(),
-          children: deeper.isEmpty
-              ? null
-              : _buildLists(deeper, baseDepth + 1, nextId),
-        ));
+        items.add(
+          ListItem(
+            inlines: b.content.toInlines(),
+            children: deeper.isEmpty
+                ? null
+                : _buildLists(deeper, baseDepth + 1, nextId),
+          ),
+        );
       } else {
         // run 以更深层开头(缩进悬空):按提升到本层处理
         final deeper = <TextBlock>[];
@@ -480,13 +561,15 @@ List<ListNode> _buildLists(
       }
     }
 
-    out.add(ListNode(
-      id: nextId(),
-      ordered: ordered,
-      items: items,
-      depth: baseDepth,
-      start: start,
-    ));
+    out.add(
+      ListNode(
+        id: nextId(),
+        ordered: ordered,
+        items: items,
+        depth: baseDepth,
+        start: start,
+      ),
+    );
   }
   return out;
 }

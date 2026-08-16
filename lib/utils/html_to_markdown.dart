@@ -42,6 +42,26 @@ class HtmlToMarkdown {
     }
   }
 
+  /// 从 URL 提取扩展名，供图片引用等外部场景复用。
+  static String? extensionFromUrl(String? url) => _extensionFromUrl(url);
+
+  /// 构建与 cooked → Markdown 转换一致的图片 Markdown。
+  static String buildImageMarkdown({
+    required String src,
+    String? alt,
+    String? width,
+    String? height,
+    String? title,
+  }) {
+    return _buildImageMarkdown(
+      src: src,
+      alt: alt,
+      width: width,
+      height: height,
+      title: title,
+    );
+  }
+
   /// 预处理：移除 body 标签、&nbsp; 等
   static String _trimUnwanted(String html) {
     final body = RegExp(r'<body[^>]*>([\s\S]*?)<\/body>').firstMatch(html);
@@ -325,6 +345,11 @@ class _LinkTag extends _Tag {
               _extensionFromUrl(attr['href']) ??
               _extensionFromUrl(attr['data-download-href']);
           if (ext != null) href += '.$ext';
+        } else {
+          final origSrc = img.attributes['data-orig-src'];
+          if (origSrc != null && origSrc.startsWith('upload://')) {
+            href = origSrc;
+          }
         }
 
         final width = img.attributes['width'];
@@ -372,6 +397,11 @@ class _ImageTag extends _Tag {
       final ext = _extensionFromUrl(attr['src'] ?? pAttr['src']) ??
           _extensionFromUrl(attr['data-orig-src']);
       if (ext != null) src = '$src.$ext';
+    } else {
+      final origSrc = attr['data-orig-src'] ?? pAttr['data-orig-src'];
+      if (origSrc != null && origSrc.startsWith('upload://')) {
+        src = origSrc;
+      }
     }
 
     // emoji
@@ -444,9 +474,15 @@ class _AsideTag extends _BlockTag {
     final username = element!.attributes['data-username'];
     final post = element!.attributes['data-post'];
     final topic = element!.attributes['data-topic'];
+    final displayName = element!.attributes['data-display-name'];
+    final hasDisplayName = displayName != null &&
+        displayName.isNotEmpty &&
+        displayName != username;
 
     final quotePrefix = (username != null && post != null && topic != null)
-        ? '[quote="$username, post:$post, topic:$topic"]'
+        ? (hasDisplayName
+            ? '[quote="$displayName, post:$post, topic:$topic, username:$username"]'
+            : '[quote="$username, post:$post, topic:$topic"]')
         : '[quote]';
 
     return '\n$quotePrefix\n$text\n[/quote]\n';

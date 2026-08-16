@@ -647,6 +647,9 @@ class _EditTopicPageState extends ConsumerState<EditTopicPage> {
                                     metaBar: buildMetaBar(),
                                     controller: _contentController,
                                     focusNode: _contentFocusNode,
+                                    instantRendering: ref
+                                        .watch(preferencesProvider)
+                                        .instantRendering,
                                     hintText:
                                         context.l10n.createTopic_contentHint,
                                     emojiPanelHeight: 350,

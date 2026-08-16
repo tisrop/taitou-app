@@ -1,5 +1,6 @@
 import 'dart:async' show unawaited;
 import 'dart:math' as math;
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:app_icons/app_icons.dart';
@@ -202,21 +203,32 @@ class _ImageCarouselState extends State<_ImageCarousel> {
                   ),
                 ),
                 // PageView
-                PageView.builder(
-                  controller: _pageController,
-                  itemCount: widget.images.length,
-                  onPageChanged: _onPageChanged,
-                  itemBuilder: (context, index) {
-                    return _CarouselSlide(
-                      index: index,
-                      resolvedUrl: _resolvedUrls[index],
-                      imageData: widget.images[index],
-                      galleryInfo: widget.galleryInfo,
-                      carouselHeight: _carouselHeight,
-                      theme: widget.theme,
-                      onTap: _openViewer,
-                    );
-                  },
+                ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(
+                    scrollbars: false,
+                    dragDevices: {
+                      PointerDeviceKind.touch,
+                      PointerDeviceKind.mouse,
+                      PointerDeviceKind.trackpad,
+                      PointerDeviceKind.stylus,
+                    },
+                  ),
+                  child: PageView.builder(
+                    controller: _pageController,
+                    itemCount: widget.images.length,
+                    onPageChanged: _onPageChanged,
+                    itemBuilder: (context, index) {
+                      return _CarouselSlide(
+                        index: index,
+                        resolvedUrl: _resolvedUrls[index],
+                        imageData: widget.images[index],
+                        galleryInfo: widget.galleryInfo,
+                        carouselHeight: _carouselHeight,
+                        theme: widget.theme,
+                        onTap: _openViewer,
+                      );
+                    },
+                  ),
                 ),
                 // 导航按钮（仅多张图片时显示）
                 if (!_isSingle) ...[
@@ -339,6 +351,7 @@ class _CarouselSlideState extends State<_CarouselSlide>
       onTap: () => widget.onTap(context, widget.index, url),
       child: Hero(
         tag: heroTag,
+        transitionOnUserGestures: true,
         child: Image(
           image: ResizeImage(
             discourseImageProvider(url),

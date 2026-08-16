@@ -119,29 +119,51 @@ class RenderAnchorGuardSliver extends RenderSliver {
   set structureSignature(int value) {
     if (_structureSignature == value) return;
     _structureSignature = value;
-    // 结构变了:旧锚的 RenderBox 可能被 index 复用换了内容,基线作废。
-    // updateRenderObject 在 build 期执行,先于本帧布局,时序正确。
-    _invalidateBaseline();
+    // 结构变了:多盒列表(SliverList)的 child 按 index 复用,同一 RenderBox
+    // 可能已换内容,基线作废。单盒 sliver 的 RenderBox 与列表签名无关，
+    // 跨 rebuild 身份稳定；保留它才能补偿推荐区上方的新帖插入。
+    final anchor = _anchorBox;
+    if (anchor == null ||
+        !anchor.attached ||
+        anchor.parentData is SliverMultiBoxAdaptorParentData) {
+      _invalidateBaseline();
+    }
   }
 
   // —— 基线:上一趟布局结束时的锚元素与环境快照 ——
-  // 锚元素 = 同半场里含视口上沿的帖子(退而求其次:上沿下方最近的
-  // 帖子)。持有 RenderBox 引用:数据更新只换 Post 内容,Element/
-  // RenderObject 按 index 复用不变;被回收(detach/keptAlive)则基线
-  // 自动作废。
+  // 锚元素 = 同半场里含视口上沿的 box(退而求其次:上沿下方最近者),
+  // 候选含帖子列表项与单盒 sliver 的 child(推荐区/header 等)。持有
+  // RenderBox 引用:数据更新只换内容,Element/RenderObject 按 index
+  // 复用不变;被回收(detach/keptAlive)则基线自动作废。
   RenderBox? _anchorBox;
   double _anchorTop = 0.0;
   double _basePixels = 0.0;
   double _baseViewportAnchor = 0.0;
   Size _baseViewportSize = Size.zero;
 
-  /// 连续修正保险丝:修正后 pixels 必然偏离基线、下一趟只能重建基线,
-  /// 理论上不存在连环修正;万一有布局怪癖打破该假设,到 3 次直接放弃,
-  /// 宁可跳一下也不逼近 viewport 的布局循环上限。
+  /// 连续修正保险丝:同帧内最多修正 3 次，跨帧的连续动画正常放行。
   int _correctionStreak = 0;
+  Duration _streakFrame = Duration.zero;
 
   /// 位移小于该值不修正:吸收文本重排的亚像素噪音,避免无意义的重排趟数
   static const _minCorrection = 0.5;
+
+  // 零尺寸哨兵的约束可能在 viewport 重排后保持不变，导致布局缓存继续
+  // 暴露旧 correction。记录发出时的 pixels；修正落地后把旧几何视为已消费。
+  ScrollPosition? _correctionOffset;
+  double _correctionEmitPixels = 0;
+
+  @override
+  SliverGeometry? get geometry {
+    final current = super.geometry;
+    final offset = _correctionOffset;
+    if (current?.scrollOffsetCorrection != null &&
+        offset != null &&
+        (!offset.hasPixels || offset.pixels != _correctionEmitPixels)) {
+      return SliverGeometry.zero;
+    }
+    return current;
+  }
 
   void _invalidateBaseline() {
     _anchorBox = null;
@@ -180,6 +202,8 @@ class RenderAnchorGuardSliver extends RenderSliver {
           ? -1.0
           : 1.0;
       geometry = SliverGeometry(scrollOffsetCorrection: sign * correction!);
+      _correctionOffset = offset;
+      _correctionEmitPixels = offset.pixels;
     }
   }
 
@@ -204,6 +228,12 @@ class RenderAnchorGuardSliver extends RenderSliver {
         viewport.anchor == _baseViewportAnchor &&
         viewport.size == _baseViewportSize;
 
+    final frameNow = SchedulerBinding.instance.currentFrameTimeStamp;
+    if (frameNow != _streakFrame) {
+      _streakFrame = frameNow;
+      _correctionStreak = 0;
+    }
+
     if (canCompare && _correctionStreak < 3) {
       final top = _boxTopInViewport(anchor, viewport);
       final delta = top - _anchorTop;
@@ -211,6 +241,9 @@ class RenderAnchorGuardSliver extends RenderSliver {
         // 锚往下移 Δ(上方内容变高)→ pixels 需同增 Δ 把它拉回原位;
         // 变矮同理(Δ 为负)
         _correctionStreak++;
+        // correctBy 后 pixels 会同步增加 delta，提前推进基线，避免逐帧动画
+        // 的下一帧因 pixels 不匹配而漏掉一次锚定。
+        _basePixels += delta;
         _pendingLogDelta += delta;
         _scheduleLog();
         return delta;
@@ -225,12 +258,14 @@ class RenderAnchorGuardSliver extends RenderSliver {
   /// 锚元素仍可参与比较:还挂在树上、有尺寸、没被挪进 keepAlive 桶
   /// (桶里的 child 仍 attached 但 layoutOffset 是陈旧值),且确实在本
   /// viewport 之下(getTransformTo 对非祖先会 assert)。
+  ///
+  /// 单盒 sliver 的 child 没有 multi-box parentData，也不会进入
+  /// keepAlive 桶，因此只需通用的挂载、尺寸与祖先校验。
   bool _anchorStillValid(RenderBox anchor, RenderViewport viewport) {
     if (!anchor.attached || !anchor.hasSize) return false;
     final parentData = anchor.parentData;
-    if (parentData is! SliverMultiBoxAdaptorParentData ||
-        parentData.keptAlive ||
-        parentData.layoutOffset == null) {
+    if (parentData is SliverMultiBoxAdaptorParentData &&
+        (parentData.keptAlive || parentData.layoutOffset == null)) {
       return false;
     }
     RenderObject? node = anchor.parent;
@@ -249,9 +284,10 @@ class RenderAnchorGuardSliver extends RenderSliver {
     ).dy;
   }
 
-  /// 重建基线:只遍历**与自己同增长方向**的兄弟 sliver 里的帖子列表
-  /// (RenderSliverMultiBoxAdaptor;header/typing/分页指示器都是单 box
-  /// 适配器,自动排除),选含视口上沿的 child 为锚。
+  /// 重建基线:只遍历**与自己同增长方向**的兄弟 sliver,选含视口上沿
+  /// 的 box 为锚。候选包括多盒列表项和单盒 sliver 的 child（推荐区、
+  /// header、typing 等）。否则视口停在推荐区时没有候选，新帖从其上方
+  /// 落地会让哨兵失明。
   ///
   /// 限定同半场的原因:viewport 每趟先布局 reverse 区再布局 forward 区,
   /// reverse 哨兵布局时 forward 兄弟可能尚未重排,跨半场读到的是陈旧
@@ -263,6 +299,21 @@ class RenderAnchorGuardSliver extends RenderSliver {
     RenderBox? below;
     double belowTop = double.infinity;
 
+    void consider(RenderBox child) {
+      final top = _boxTopInViewport(child, viewport);
+      final bottom = top + child.size.height;
+      if (top <= 0 && bottom > 0) {
+        // 多个候选(理论上仅重叠边界)取顶边最贴近上沿的。
+        if (containing == null || top > containingTop) {
+          containing = child;
+          containingTop = top;
+        }
+      } else if (top > 0 && top < belowTop) {
+        below = child;
+        belowTop = top;
+      }
+    }
+
     void visit(RenderObject node) {
       if (node is RenderSliverMultiBoxAdaptor) {
         RenderBox? child = node.firstChild;
@@ -271,21 +322,13 @@ class RenderAnchorGuardSliver extends RenderSliver {
           if (parentData is SliverMultiBoxAdaptorParentData &&
               parentData.layoutOffset != null &&
               child.hasSize) {
-            final top = _boxTopInViewport(child, viewport);
-            final bottom = top + child.size.height;
-            if (top <= 0 && bottom > 0) {
-              // 多个候选(理论上仅重叠边界)取顶边最贴近上沿的
-              if (containing == null || top > containingTop) {
-                containing = child;
-                containingTop = top;
-              }
-            } else if (top > 0 && top < belowTop) {
-              below = child;
-              belowTop = top;
-            }
+            consider(child);
           }
           child = node.childAfter(child);
         }
+      } else if (node is RenderSliverSingleBoxAdapter) {
+        final child = node.child;
+        if (child != null && child.hasSize) consider(child);
       } else if (node is RenderSliver) {
         node.visitChildren(visit);
       }
@@ -326,6 +369,7 @@ class RenderAnchorGuardSliver extends RenderSliver {
   @override
   void detach() {
     _invalidateBaseline();
+    _correctionOffset = null;
     super.detach();
   }
 

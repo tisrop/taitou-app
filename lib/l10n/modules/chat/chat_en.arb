@@ -1,0 +1,242 @@
+{
+  "@@locale": "en",
+  "chat_title": "Chat",
+  "chat_nav": "Chat",
+  "chat_empty": "No channels available",
+  "chat_channels": "Channels",
+  "chat_directMessages": "Direct Messages",
+  "chat_channelMessagesEmpty": "No messages yet — start the conversation",
+  "chat_messageInputHint": "Type a message…",
+  "chat_directMessageFirstUser": "You're the first one in #{name}",
+  "@chat_directMessageFirstUser": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_directMessageStart": "Start the conversation by sending a message.",
+  "chat_directMessageUsersHere": "People here: {count}",
+  "@chat_directMessageUsersHere": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_directMessageInputHint": "Chat with @{username}",
+  "@chat_directMessageInputHint": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_send": "Send",
+  "chat_loadMoreError": "Failed to load more, please retry",
+  "chat_sendFailed": "Failed to send, please retry",
+  "chat_loadMore": "Load older messages",
+  "chat_retry": "Retry",
+  "chat_muted": "Muted",
+  "chat_unreadCount": "{count} unread",
+  "@chat_unreadCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_moreActions": "More actions",
+  "chat_insertEmoji": "Insert emoji",
+  "chat_attachFile": "Attach file",
+  "chat_insertGif": "Insert GIF",
+  "chat_summarize": "Summarize messages",
+  "chat_uploading": "Uploading…",
+  "chat_uploadFailed": "Upload failed, please retry",
+  "chat_summarizeRangeTitle": "Summarize messages from",
+  "chat_summarizeRangeHours": "Past {hours}h",
+  "@chat_summarizeRangeHours": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_summarizeTitle": "Summary",
+  "chat_summarizeEmpty": "No messages in this time range",
+  "chat_summarizeNoModel": "No AI model configured. Set one up in Settings first.",
+  "chat_summarizeFailed": "Summarizing failed, please retry",
+  "chat_summarizeCollecting": "Collecting messages…",
+  "chat_summarizeTruncated": "Too many messages — only the most recent {count} were summarized",
+  "@chat_summarizeTruncated": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_summarizeCopy": "Copy",
+  "chat_summarizeCopied": "Copied",
+  "chat_gifSearchHint": "Search GIFs",
+  "chat_gifCategories": "Browse by category",
+  "chat_gifNoResults": "No GIFs found",
+  "chat_gifLoadFailed": "Failed to load GIFs, please retry",
+  "chat_directMessagesEmpty": "You haven't joined any direct messages yet",
+  "chat_startConversation": "Start a conversation",
+  "chat_newDirectMessage": "New direct message",
+  "chat_deleteDirectMessage": "Delete conversation",
+  "chat_deleteDirectMessageConfirm": "Delete \"{name}\" from your direct messages?",
+  "@chat_deleteDirectMessageConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_deleteDirectMessageFailed": "Couldn't delete the direct message. Please try again.",
+  "chat_searchUsersHint": "Search users",
+  "chat_searchUsersPrompt": "Search for someone to start a conversation",
+  "chat_noUsersFound": "No users found",
+  "chat_createDirectMessageFailed": "Unable to start the conversation. Please try again.",
+  "chat_filterChannels": "Filter",
+  "chat_createGroupChat": "New group chat",
+  "chat_groupNameOptional": "Group chat name (optional)",
+  "chat_addMoreMembers": "Add more members",
+  "chat_memberCount": "{count}/{max} members",
+  "chat_groupNeedsMembers": "Select at least 2 members",
+  "chat_groupMemberLimit": "You can select up to 20 members",
+  "chat_createGroupFailed": "Unable to create the group chat. Please try again.",
+  "chat_noChannelsFound": "No channels found",
+  "@chat_memberCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_searchTitle": "Search chat",
+  "chat_searchMessagesHint": "Search messages",
+  "chat_searchSortRelevance": "Relevance",
+  "chat_searchSortLatest": "Latest",
+  "chat_searchNoResults": "No messages found",
+  "chat_searchPrompt": "Enter keywords to search chat messages",
+  "chat_searchFailed": "Search failed. Please try again.",
+  "chat_starChannel": "Favorite channel",
+  "chat_unstarChannel": "Remove from favorites",
+  "chat_starChannelFailed": "Could not update favorite. Please try again.",
+  "chat_threadsTitle": "Threads",
+  "chat_threadsEmpty": "No threads in this channel yet",
+  "chat_threadsFailed": "Could not load threads. Please try again.",
+  "chat_threadReplies": "{count} replies",
+  "@chat_threadReplies": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_threadMessagesEmpty": "No messages in this thread",
+  "chat_messageNoText": "Message",
+  "chat_messageCopyLink": "Copy link",
+  "chat_messageCopyText": "Copy text",
+  "chat_messageSelect": "Select",
+  "chat_messagePin": "Pin message",
+  "chat_messageUnpin": "Unpin message",
+  "chat_messageReport": "Report",
+  "chat_messageDelete": "Delete",
+  "chat_messageRebake": "Rebuild HTML",
+  "chat_messageBookmark": "Bookmark",
+  "chat_messageRemoveBookmark": "Remove bookmark",
+  "chat_messageReply": "Reply",
+  "chat_messageMoreReactions": "More reactions",
+  "chat_messageCopied": "Message copied",
+  "chat_messageLinkCopied": "Link copied",
+  "chat_messageActionFailed": "Could not complete this action. Please try again.",
+  "chat_messageDeleteConfirm": "Delete this message?",
+  "chat_messageBookmarked": "Message bookmarked",
+  "chat_messageBookmarkRemoved": "Bookmark removed",
+  "chat_messagePinned": "Message pinned",
+  "chat_messageUnpinned": "Message unpinned",
+  "chat_messageRebaked": "Message HTML rebuilt",
+  "chat_messageReported": "Report submitted",
+  "chat_messageReportNote": "Additional details (optional)",
+  "chat_messageReplyingTo": "Replying to {username}",
+  "@chat_messageReplyingTo": {
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_messageSelectedCount": "{count} selected",
+  "@chat_messageSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_browseChannels": "Browse channels",
+  "chat_channelStatusAll": "All",
+  "chat_channelStatusOpen": "Open",
+  "chat_channelStatusClosed": "Closed",
+  "chat_channelJoinedAll": "All channels",
+  "chat_channelJoined": "Joined",
+  "chat_channelNotJoined": "Not joined",
+  "chat_searchChannelsHint": "Search channels by name",
+  "chat_createChannel": "Create channel",
+  "chat_newChannel": "New channel",
+  "chat_channelName": "Channel name",
+  "chat_channelSlug": "Channel slug (optional)",
+  "chat_channelDescription": "Description (optional)",
+  "chat_selectCategory": "Select a category",
+  "chat_selectCategoryHint": "Choose one…",
+  "chat_categoryPermissionsHint": "Category security settings control who can access this channel.",
+  "chat_channelEmoji": "Channel emoji (optional)",
+  "chat_chooseEmoji": "Choose emoji",
+  "chat_resetEmoji": "Reset emoji",
+  "chat_autoJoinUsers": "Automatically add users",
+  "chat_autoJoinUsersDescription": "Every hour, add users who were active in the past 3 months and can access the selected category.",
+  "chat_enableThreads": "Enable threads",
+  "chat_enableThreadsDescription": "Replies to chat messages create a separate conversation alongside the main channel.",
+  "chat_createChannelFailed": "Could not create the channel. Please try again.",
+  "chat_joinChannelFailed": "Could not join the channel. Please try again.",
+  "chat_closedChannelUnavailable": "This closed channel cannot be joined.",
+  "chat_channelNameRequired": "Enter a channel name",
+  "chat_categoryRequired": "Select a category",
+  "chat_joinChannel": "Join",
+  "chat_channelMembers": "{count} members",
+  "@chat_channelMembers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chat_channelTitleSection": "Title",
+  "chat_channelSettingsSection": "Settings",
+  "chat_channelInfoSection": "Channel information",
+  "chat_membersTitle": "Members",
+  "chat_membersEmpty": "No members to show",
+  "chat_channelMute": "Mute channel",
+  "chat_pushNotifications": "Push notifications",
+  "chat_notificationNever": "Never",
+  "chat_notificationMentions": "Mentions only",
+  "chat_notificationAll": "All activity",
+  "chat_channelHistory": "History",
+  "chat_channelHistoryForever": "Forever",
+  "chat_leaveChannel": "Leave channel",
+  "chat_leaveChannelConfirm": "Leave “{name}”?",
+  "@chat_leaveChannelConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chat_leaveChannelFailed": "Couldn't leave the channel. Please try again.",
+  "chat_channelSettingsUpdateFailed": "Couldn't update the channel settings. Please try again."
+}
